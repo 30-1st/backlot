@@ -75,3 +75,7 @@ export async function blobKeys(): Promise<string[]> {
   const keys = await run<IDBValidKey[]>('media', 'readonly', (s) => s.getAllKeys());
   return keys.map(String);
 }
+
+export async function kvDelete(key: string): Promise<void> {
+  await run('kv', 'readwrite', (s) => s.delete(key));
+}

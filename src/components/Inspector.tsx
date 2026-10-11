@@ -11,7 +11,7 @@ const STATUS_COLOR: Record<PostStatus, string> = {
   draft: 'var(--draft)',
 };
 
-export function Inspector({ onNewSandbox }: { onNewSandbox: () => void }) {
+export function Inspector() {
   const { sandbox, selection, select } = useStage();
   const post = selection?.type === 'post' ? sandbox.posts.find((p) => p.id === selection.id) : undefined;
   const highlight =
@@ -28,7 +28,7 @@ export function Inspector({ onNewSandbox }: { onNewSandbox: () => void }) {
         ) : highlight ? (
           <HighlightPanel key={highlight.id} highlight={highlight} />
         ) : (
-          <ProfilePanel onNewSandbox={onNewSandbox} />
+          <ProfilePanel />
         )}
       </div>
     </aside>
@@ -37,7 +37,7 @@ export function Inspector({ onNewSandbox }: { onNewSandbox: () => void }) {
 
 /* ---------- Profile ---------- */
 
-function ProfilePanel({ onNewSandbox }: { onNewSandbox: () => void }) {
+function ProfilePanel() {
   const { sandbox, dispatch, asOf } = useStage();
   const { profile, media, settings, posts } = sandbox;
   const set = (patch: Partial<typeof profile>) => dispatch({ type: 'profile', patch });
@@ -151,12 +151,6 @@ function ProfilePanel({ onNewSandbox }: { onNewSandbox: () => void }) {
           onChange={(tile) => dispatch({ type: 'settings', patch: { tile } })}
         />
       </div>
-
-      <hr />
-
-      <button type="button" className="btn" onClick={onNewSandbox}>
-        <Icon name="flag" /> {sandbox.isExample ? 'Bring in your profile' : 'Start a new sandbox'}
-      </button>
     </>
   );
 }

@@ -8,7 +8,16 @@ import { FileButton, Icon, Modal, NumberInput, cx } from './ui';
  * How a creator's own profile gets onto the set: they type the basics and hand
  * over their own photos and videos. Nothing is fetched from any other service.
  */
-export function Intake({ onBuild, onClose }: { onBuild: (sandbox: Sandbox, count: number) => void; onClose: () => void }) {
+export function Intake({
+  onBuild,
+  onClose,
+  onExample,
+}: {
+  onBuild: (sandbox: Sandbox, count: number) => void;
+  onClose: () => void;
+  /** When given, offers the example profile as a quicker way in. */
+  onExample?: () => void;
+}) {
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -185,6 +194,11 @@ export function Intake({ onBuild, onClose }: { onBuild: (sandbox: Sandbox, count
         </div>
 
         <footer className="intake-foot">
+          {onExample && (
+            <button type="button" className="btn quiet intake-alt" onClick={onExample}>
+              Use the example profile instead
+            </button>
+          )}
           <button type="button" className="btn quiet" onClick={onClose}>
             Cancel
           </button>

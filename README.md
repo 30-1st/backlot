@@ -6,7 +6,9 @@ This is the profile-only build. There is no feed, no forecasting, and no connect
 
 ## What it does
 
-- **A homescreen to pick your platform.** Backlot opens on its logo and name with the supported platforms in a row underneath. Instagram is live. TikTok and X are shown as coming soon. Each platform keeps its own profile and its own save point.
+- **A homescreen to pick your platform.** Backlot opens on its logo and name with the supported platforms in a row underneath. Instagram is live. TikTok and X are shown as coming soon.
+- **As many accounts as you want.** Choosing a platform shows every account you have made there, with a plus to add another.
+- **Narrations.** Each account can hold several narrations: full copies of the same profile that you brand differently and compare. Each narration has its own save point. Switch between them from the top bar of the studio.
 - **Your profile, editable.** Photo, username, name, category, bio, link, follower and following counts, and post count.
 - **A grid you control.** Add as many posts as you like. Swap the media, build carousels, edit captions, locations, likes and comments.
 - **Dates decide the order.** The grid is always newest first, the way a real profile is. Change a post's date and it moves. Drag a post to a new spot and its date changes to fit.
@@ -35,25 +37,27 @@ npm run build:single   # one self-contained file in dist-single/index.html
 
 Everything is saved in the browser the creator is using, in IndexedDB: the sandbox and its save point as JSON, and uploaded photos and videos as files. There are no accounts and no server yet. Clearing site data clears the sandbox.
 
-`src/lib/slots.ts` is the one place that knows where each platform's profile is stored, and `src/lib/db.ts` is the only file that touches IndexedDB. Moving to hosted accounts later means changing those two files and `src/lib/media.ts`.
+`src/lib/library.ts` is the one place that knows where accounts and narrations are stored, and `src/lib/db.ts` is the only file that touches IndexedDB. Moving to hosted accounts later means changing those two files and `src/lib/media.ts`.
 
 ## Layout of the code
 
 ```
 src/
-  App.tsx                  switches between the homescreen and a platform's studio
-  Studio.tsx               top bar, saving, save point, view switching
+  App.tsx                  switches between the homescreen, a platform's accounts, and a studio
+  Studio.tsx               one narration's working screen: top bar, saving, save point, views
   platforms.ts             the supported platforms and which ones are ready
   state.ts                 the sandbox reducer and the rules for order, status and dates
   types.ts                 data shapes
   sample.ts                the example profile and its drawn pictures
   styles.css               all styling
   lib/db.ts                IndexedDB wrapper
-  lib/slots.ts             one saved profile and save point per platform
+  lib/library.ts           accounts and their narrations, and where they are saved
   lib/media.ts             uploaded files and the URLs to show them
   lib/format.ts            counts and dates
   components/
     Home.tsx               the homescreen
+    Accounts.tsx           the accounts of one platform, with their narrations
+    NarrationMenu.tsx      the narration switcher in the studio's top bar
     ProfileSet.tsx         the profile: header, highlights, tabs, grid, drag to move
     Inspector.tsx          the property panel for the profile, a post, or a highlight
     PostViewer.tsx         the opened post

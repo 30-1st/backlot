@@ -35,6 +35,10 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   close: 'M6 6l12 12M18 6 6 18',
   left: 'M15 5l-7 7 7 7',
+  down: 'M5 9l7 7 7-7',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  copy: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1ZM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
+  people: 'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.500 10a3.500 3.500 0 1 0 0-7 3.500 3.500 0 0 0 0 7ZM21 19v-1a4 4 0 0 0-3-3.870M15.500 3.130a3.500 3.500 0 0 1 0 6.740',
   right: 'M9 5l7 7-7 7',
   pin: 'M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6ZM12 14v7',
   layers: 'M8 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-3M5 8h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z',
@@ -196,12 +200,15 @@ export function ConfirmButton({
   onConfirm,
   className,
   icon,
+  ariaLabel,
 }: {
   label: string;
   confirmLabel: string;
   onConfirm: () => void;
   className?: string;
   icon?: IconName;
+  /** Needed when the button shows only an icon. */
+  ariaLabel?: string;
 }) {
   const [armed, setArmed] = useState(false);
 
@@ -215,6 +222,7 @@ export function ConfirmButton({
     <button
       type="button"
       className={cx('btn', className, armed && 'armed')}
+      aria-label={armed ? undefined : ariaLabel}
       onClick={() => {
         if (armed) {
           setArmed(false);

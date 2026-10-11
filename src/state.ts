@@ -66,6 +66,19 @@ export function reducer(s: Sandbox, a: Action): Sandbox {
   }
 }
 
+/** A blank profile, used as a placeholder while a narration loads. */
+export function emptySandbox(): Sandbox {
+  return {
+    version: 1,
+    isExample: false,
+    profile: { username: '', name: '', category: '', bio: '', link: '', avatar: null, followers: 0, following: 0, postCount: null },
+    highlights: [],
+    posts: [],
+    media: {},
+    settings: { lighting: 'light', tile: 'portrait' },
+  };
+}
+
 export function newPost(mediaIds: string[], patch: Partial<Post> = {}): Post {
   return {
     id: uid('p'),

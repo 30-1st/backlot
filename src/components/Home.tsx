@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PLATFORMS, type Platform } from '../platforms';
-import { summarize, type SlotSummary } from '../lib/slots';
+import { listAccounts } from '../lib/library';
+import { plural } from '../lib/format';
 import { Logo, PlatformMark } from './ui';
 
 /** A stage flat in outline, the same shape as the logo, drawn large and faint in the wings. */
@@ -18,15 +19,18 @@ function Flat({ className }: { className: string }) {
 }
 
 export function Home({ onChoose }: { onChoose: (platform: Platform) => void }) {
-  const [slots, setSlots] = useState<Partial<Record<Platform, SlotSummary | null>>>({});
+  const [counts, setCounts] = useState<Partial<Record<Platform, number>>>({});
 
   useEffect(() => {
     let alive = true;
     for (const p of PLATFORMS) {
       if (!p.ready) continue;
-      void summarize(p.id).then((summary) => {
-        if (alive) setSlots((prev) => ({ ...prev, [p.id]: summary }));
-      });
+      void listAccounts(p.id).then(
+        (accounts) => {
+          if (alive) setCounts((prev) => ({ ...prev, [p.id]: accounts.length }));
+        },
+        () => undefined,
+      );
     }
     return () => {
       alive = false;
@@ -57,7 +61,7 @@ export function Home({ onChoose }: { onChoose: (platform: Platform) => void }) {
           <i className="mark br" />
           <ul className="platforms">
           {PLATFORMS.map((p) => {
-            const slot = slots[p.id];
+            const count = counts[p.id] ?? 0;
             const body = (
               <>
                 <span className="platform-mark">
@@ -65,7 +69,7 @@ export function Home({ onChoose }: { onChoose: (platform: Platform) => void }) {
                 </span>
                 <b>{p.name}</b>
                 <span className="platform-state">
-                  {!p.ready ? 'Coming soon' : slot?.own ? `@${slot.username}` : 'Start'}
+                  {!p.ready ? 'Coming soon' : count > 0 ? `${count} ${plural(count, 'account')}` : 'Start'}
                 </span>
               </>
             );
