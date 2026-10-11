@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:single": "tsc --noEmit && vite build --mode single",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync": "git checkout -- package-lock.json && git pull && npm ci"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

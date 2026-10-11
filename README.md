@@ -23,11 +23,23 @@ This is the profile-only build. There is no feed, no forecasting, and no connect
 ## Run it
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Open the address it prints (usually http://localhost:5173).
+
+## Get the latest
+
+Stop the dev server first, then:
+
+```bash
+npm run sync
+```
+
+That one command pulls the newest code from GitHub and installs exactly the package versions the repo names.
+
+Use `npm ci`, not `npm install`, for everyday installs. `npm ci` installs what `package-lock.json` says and never edits that file. `npm install` can rewrite it in small ways that differ from one computer to the next, and git then treats the file as changed and refuses to pull. `npm run sync` puts the file back before pulling, so it works either way. Keep `npm install <name>` for the times you are adding a new package on purpose.
 
 ```bash
 npm run build          # the hosted site, in dist/
