@@ -61,6 +61,7 @@ const paths = {
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.500 9.500h.01',
   link: 'M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1',
   pencil: 'M4 20h4L19 9l-4-4L4 16v4ZM13.500 6.500l4 4',
+  more: 'M5 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0ZM11 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0ZM17 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z',
 } as const;
 
 export type IconName = keyof typeof paths;

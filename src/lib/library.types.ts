@@ -28,11 +28,37 @@ export interface Account {
   narrations: NarrationMeta[];
 }
 
+/** Someone with a Backlot login. */
+export interface Person {
+  id: string;
+  username: string;
+}
+
+/** What an author lets someone do with a narration. */
+export type ShareRole = 'view' | 'edit';
+
 export interface OpenNarration {
   account: Account;
   meta: NarrationMeta;
   sandbox: Sandbox;
   savePoint?: SavePoint;
+  /** Goes up each time the page changes, so two people saving at once is noticed. */
+  revision: number;
+  /** Set when the narration belongs to someone else, who shared it. */
+  shared?: { owner: Person; role: ShareRole };
+}
+
+/** Where a narration stands right now: how many times it changed, and what the caller may do with it. */
+export interface NarrationState {
+  revision: number;
+  role: 'owner' | ShareRole;
+}
+
+/** Thrown when a save finds the page was changed by someone else first, or is no longer open to the caller. */
+export class SaveConflict extends Error {
+  constructor() {
+    super('The narration changed since it was opened');
+  }
 }
 
 /** What any place that stores the library must be able to do. */
@@ -47,7 +73,14 @@ export interface Library {
   renameNarration(id: string, name: string): Promise<void>;
   /** Removes one narration. An account always keeps at least one, so the last one stays. */
   deleteNarration(id: string): Promise<void>;
-  saveSandbox(id: string, sandbox: Sandbox): Promise<void>;
+  /**
+   * Save the page and answer with its new revision. When the revision the
+   * caller last saw is given and the page has moved on, nothing is written and
+   * a SaveConflict is thrown.
+   */
+  saveSandbox(id: string, sandbox: Sandbox, revision?: number): Promise<number>;
+  /** A quick look at a narration without loading it. Null when it is gone or no longer shared. */
+  peekNarration(id: string): Promise<NarrationState | null>;
   saveSavePoint(id: string, point: SavePoint): Promise<void>;
   /** Every photo and video some narration or save point still uses, optionally leaving one narration out. */
   mediaInUse(exceptNarrationId?: string): Promise<Set<string>>;

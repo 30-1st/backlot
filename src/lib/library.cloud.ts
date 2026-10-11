@@ -1,11 +1,22 @@
 import type { MediaItem, Sandbox, SavePoint } from '../types';
 import type { Platform } from '../platforms';
 import { referencedMedia } from '../state';
-import { supabase } from './supabase';
-import { describe, isSandbox, isSavePoint, type Account, type NarrationMeta, type OpenNarration } from './library.types';
+import { currentUserId, supabase } from './supabase';
+import {
+  SaveConflict,
+  describe,
+  isSandbox,
+  isSavePoint,
+  type Account,
+  type NarrationMeta,
+  type NarrationState,
+  type OpenNarration,
+  type ShareRole,
+} from './library.types';
 
-// The library kept in Supabase. Each signed-in creator can reach only their
-// own rows; the database enforces that, not this file.
+// The library kept in Supabase. Each signed-in creator can reach their own
+// rows, plus the narrations other people shared with them. The database
+// enforces that, not this file.
 
 const META = 'id, name, created_at, updated_at, username, avatar, posts, is_example';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -63,8 +74,19 @@ function metaColumns(sandbox: Sandbox) {
   return { username: d.username, avatar: d.avatar, posts: d.posts, is_example: d.isExample };
 }
 
+/** The signed-in creator's id. Lists of "my" things filter on it, because shared narrations are readable too. */
+async function myId(): Promise<string> {
+  const id = await currentUserId();
+  if (!id) throw new Error('Signed out');
+  return id;
+}
+
 export async function listAccounts(platform?: Platform): Promise<Account[]> {
-  let query = db().from('accounts').select(`id, platform, created_at, narrations(${META})`).order('created_at');
+  let query = db()
+    .from('accounts')
+    .select(`id, platform, created_at, narrations(${META})`)
+    .eq('user_id', await myId())
+    .order('created_at');
   if (platform) query = query.eq('platform', platform);
   const { data, error } = await query;
   if (error) throw error;
@@ -73,19 +95,72 @@ export async function listAccounts(platform?: Platform): Promise<Account[]> {
 
 export async function openNarration(id: string): Promise<OpenNarration | null> {
   if (!UUID.test(id)) return null;
+  const me = await myId();
   const { data, error } = await db()
     .from('narrations')
-    .select(`id, sandbox, save_point, account:accounts(id, platform, created_at, narrations(${META}))`)
+    .select(
+      `id, user_id, revision, sandbox, save_point, account:accounts(id, platform, created_at, narrations(${META}))`,
+    )
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const row = data as unknown as { sandbox: unknown; save_point: unknown; account: AccountRow | null };
+  const row = data as unknown as {
+    user_id: string;
+    revision: number;
+    sandbox: unknown;
+    save_point: unknown;
+    account: AccountRow | null;
+  };
   if (!row.account || !isSandbox(row.sandbox)) return null;
   const account = toAccount(row.account);
   const meta = account.narrations.find((n) => n.id === id);
   if (!meta) return null;
-  return { account, meta, sandbox: row.sandbox, savePoint: isSavePoint(row.save_point) ? row.save_point : undefined };
+  const open: OpenNarration = {
+    account,
+    meta,
+    sandbox: row.sandbox,
+    savePoint: isSavePoint(row.save_point) ? row.save_point : undefined,
+    revision: row.revision,
+  };
+  if (row.user_id === me) return open;
+
+  // Someone else's narration, shared with the caller. Its sibling narrations are not part of the share.
+  const [owner, share] = await Promise.all([
+    db().from('members').select('id, username').eq('id', row.user_id).maybeSingle(),
+    db().from('narration_shares').select('role').eq('narration_id', id).eq('user_id', me).maybeSingle(),
+  ]);
+  if (owner.error) throw owner.error;
+  if (share.error) throw share.error;
+  if (!share.data) return null;
+  return {
+    ...open,
+    account: { ...account, narrations: [meta] },
+    shared: {
+      owner: { id: row.user_id, username: (owner.data as { username: string } | null)?.username ?? '' },
+      role: (share.data as { role: ShareRole }).role,
+    },
+  };
+}
+
+export async function peekNarration(id: string): Promise<NarrationState | null> {
+  if (!UUID.test(id)) return null;
+  const me = await myId();
+  const { data, error } = await db()
+    .from('narrations')
+    .select('revision, user_id, narration_shares(role, user_id)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as unknown as {
+    revision: number;
+    user_id: string;
+    narration_shares: Array<{ role: ShareRole; user_id: string }> | null;
+  };
+  if (row.user_id === me) return { revision: row.revision, role: 'owner' };
+  const mine = (row.narration_shares ?? []).find((s) => s.user_id === me);
+  return mine ? { revision: row.revision, role: mine.role } : null;
 }
 
 export async function createAccount(platform: Platform, sandbox: Sandbox, name = 'Original'): Promise<NarrationMeta> {
@@ -159,12 +234,19 @@ export async function deleteNarration(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function saveSandbox(id: string, sandbox: Sandbox): Promise<void> {
-  const { error } = await db()
+export async function saveSandbox(id: string, sandbox: Sandbox, revision?: number): Promise<number> {
+  let query = db()
     .from('narrations')
     .update({ sandbox, ...metaColumns(sandbox) })
     .eq('id', id);
+  // Only write over the version this screen last saw. If someone else saved
+  // in between, no row matches and nothing is overwritten.
+  if (revision !== undefined) query = query.eq('revision', revision);
+  const { data, error } = await query.select('revision');
   if (error) throw error;
+  const row = (data as Array<{ revision: number }> | null)?.[0];
+  if (!row) throw new SaveConflict();
+  return row.revision;
 }
 
 export async function saveSavePoint(id: string, point: SavePoint): Promise<void> {
@@ -173,7 +255,7 @@ export async function saveSavePoint(id: string, point: SavePoint): Promise<void>
 }
 
 export async function mediaInUse(exceptNarrationId?: string): Promise<Set<string>> {
-  const { data, error } = await db().from('narrations').select('id, sandbox, save_point');
+  const { data, error } = await db().from('narrations').select('id, sandbox, save_point').eq('user_id', await myId());
   if (error) throw error;
   const keep = new Set<string>();
   for (const row of data ?? []) {

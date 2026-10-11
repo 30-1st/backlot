@@ -1828,6 +1828,628 @@ dialog::backdrop {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- People, chats and sharing ---------- */
+
+/* Layout: two columns under the top bar. Left, a narrow list of chats or contacts. Right, the open chat, its messages scrolling above a composer that stays at the bottom. On phones, one column at a time. */
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--brass);
+  color: var(--brass-ink);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.face {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--brass) 45%, var(--rule));
+  border-radius: 50%;
+  background: var(--stage-3);
+  color: var(--brass);
+  font-size: 15px;
+  font-weight: 600;
+}
+.face.is-group {
+  color: var(--ink-2);
+  border-color: var(--rule);
+}
+
+.app.people {
+  height: 100dvh;
+}
+.people-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+.people-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px 40px;
+  border-right: 1px solid var(--rule);
+}
+.people-list > * {
+  flex-shrink: 0;
+}
+.people-new {
+  align-self: flex-start;
+}
+.people-empty {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.chat-list,
+.people-group ul,
+.pick-list,
+.share-list,
+.msgs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline: -8px;
+}
+.chat-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+.chat-row:hover {
+  background: var(--stage-2);
+}
+.chat-row.is-open {
+  background: var(--stage-3);
+}
+.chat-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.chat-text b,
+.chat-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-text b {
+  font-weight: 600;
+}
+.chat-text span {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.chat-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.unread {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--brass);
+}
+
+.contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.add-person {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.add-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.add-row .btn {
+  height: auto;
+}
+.add-row input {
+  flex: 1;
+}
+.add-note {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.people-group h2 {
+  margin: 0 0 4px;
+  color: var(--ink-3);
+  font: 600 12px/1.2 var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.person > b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.person-more {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.person-more span {
+  flex: 1 1 180px;
+}
+
+.people-thread {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(900px 420px at 50% -120px, rgba(201, 164, 90, 0.08), transparent 70%);
+}
+.thread-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.thread-empty p {
+  max-width: 34ch;
+}
+.thread-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.thread-back {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+}
+.thread-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.thread-who b,
+.thread-who span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thread-who b {
+  font-size: 16px;
+  font-weight: 600;
+}
+.thread-who span {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.thread-menu {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--stage-2);
+}
+.thread-menu .narr-rename {
+  flex: 1;
+}
+.thread-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 18px 10px;
+}
+.thread-start {
+  margin: 28px auto;
+  max-width: 36ch;
+  color: var(--ink-3);
+  text-align: center;
+}
+.msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.msg-day {
+  align-self: center;
+  margin: 14px 0 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.msg {
+  align-self: flex-start;
+  max-width: min(78%, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 12px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 16px 16px 16px 5px;
+  background: var(--stage-2);
+}
+.msg.is-mine {
+  align-self: flex-end;
+  border-color: color-mix(in srgb, var(--brass) 38%, var(--rule));
+  border-radius: 16px 16px 5px 16px;
+  background: color-mix(in srgb, var(--brass) 13%, var(--stage-2));
+}
+.msg-who {
+  color: var(--brass);
+  font-size: 12px;
+  font-weight: 600;
+}
+.msg-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.42;
+}
+.msg-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 18px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.msg .btn.msg-undo {
+  height: 20px;
+  min-height: 0;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.thread-problem {
+  flex: none;
+  margin: 0 14px 8px;
+}
+.composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--rule);
+  background: var(--stage);
+}
+.composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 140px;
+  padding: 9px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  background: var(--stage-2);
+  color: var(--ink);
+  line-height: 1.38;
+  resize: none;
+  field-sizing: content;
+}
+.composer textarea:focus-visible {
+  outline-offset: 0;
+  border-color: var(--brass);
+}
+.composer .btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+.composer-closed {
+  flex: none;
+  padding: 14px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--rule);
+  color: var(--ink-3);
+  text-align: center;
+}
+
+/* A narration inside a message, or in a list to pick from. */
+.ncard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-width: min(240px, 60vw);
+  padding: 9px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--stage);
+  color: var(--ink);
+  text-align: left;
+}
+button.ncard:hover {
+  border-color: var(--brass);
+}
+.ncard.is-closed {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.ncard-avatar {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--stage-3);
+}
+.ncard-avatar img,
+.ncard-avatar video,
+.ncard-avatar .media-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ncard-text,
+.pick-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ncard-text b,
+.ncard-text span,
+.pick-text b,
+.pick-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ncard-text span,
+.pick-text span {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.ncard-text .ncard-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+/* Sheets that end in buttons: new group, add people, share in chat. */
+.sheet-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sheet-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--rule);
+}
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+.pick input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--brass);
+}
+.pick > b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Sharing a narration. */
+.share-what {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.share-what b {
+  font-size: 17px;
+  font-weight: 600;
+}
+.share-what p,
+.share-none p {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.share-none {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.share-row b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.share-row .seg {
+  flex: none;
+}
+.share-row .seg button {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+.btn.narr-share {
+  gap: 4px;
+}
+.btn.narr-share.is-shared {
+  color: var(--brass);
+}
+.narr-share span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.shared {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 40px;
+}
+.shared h2 {
+  margin: 0;
+  font: italic 500 30px/1.1 var(--display);
+}
+.shared .acct-grid {
+  margin-top: 8px;
+}
+.shared-from {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.shared-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+.people-btn {
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .people-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .people-main.has-open .people-list,
+  .people-main:not(.has-open) .people-thread {
+    display: none;
+  }
+  .people-list {
+    border-right: 0;
+    padding: 14px 14px 40px;
+  }
+  .thread-back {
+    display: grid;
+  }
+  .thread-head {
+    padding: 8px 12px;
+  }
+  .thread-body {
+    padding: 12px 12px 8px;
+  }
+  .msg {
+    max-width: 86%;
+  }
+  .composer {
+    padding-inline: 10px;
+  }
+  /* The top bar holds one line on a phone, so the long labels step aside. */
+  .who-inline > span,
+  .people-btn > span {
+    display: none;
+  }
+  .who-inline .btn.quiet {
+    padding-inline: 6px;
+  }
+  .studio .tools .tools-share {
+    position: relative;
+  }
+  .studio .tools .tools-share .badge {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 6px);
+  }
+  .shared {
+    margin-top: 30px;
+  }
+}
+
 /* ---------- Narrower screens ---------- */
 
 .only-wide {

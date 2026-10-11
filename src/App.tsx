@@ -3,6 +3,7 @@ import { isReadyPlatform, type Platform } from './platforms';
 import { Home } from './components/Home';
 import { Accounts } from './components/Accounts';
 import { SignIn } from './components/SignIn';
+import { People } from './components/People';
 import { Studio } from './Studio';
 import { signOut, useLogin } from './lib/auth';
 
@@ -10,9 +11,12 @@ import { signOut, useLogin } from './lib/auth';
 //   the homescreen            #home
 //   a platform's accounts     #instagram
 //   one narration's studio    #instagram.<narration id>
+// and, in the hosted build, the people a creator works with:
+//   contacts and chats        #people
+//   one chat                  #people.<chat id>
 // The address keeps track, so Back and reload land where you expect.
 //
-// In the hosted build all three sit behind the sign-in screen.
+// In the hosted build all of them sit behind the sign-in screen.
 
 interface Route {
   platform: Platform;
@@ -65,25 +69,45 @@ export default function App() {
   // In the hosted build, show who is signed in and let them leave.
   // Keying each screen by the login makes sure nothing carries over between people.
   const who = login.status === 'in' ? login.userId : 'offline';
-  const account =
-    login.status === 'in'
-      ? {
-          username: login.username,
-          onSignOut: () => {
-            go('');
-            void signOut();
-          },
-        }
-      : {};
+  const onSignOut = () => {
+    go('');
+    void signOut();
+  };
+  // People, chats and sharing need a login, so they only exist in the hosted build.
+  const account = login.status === 'in' ? { username: login.username, onSignOut, onPeople: () => go('people') } : {};
+
+  if (login.status === 'in' && (path === 'people' || path.startsWith('people.'))) {
+    return (
+      <People
+        key={who}
+        me={{ id: login.userId, username: login.username }}
+        chatId={path.slice('people.'.length) || undefined}
+        onHome={() => go('')}
+        onChat={(id) => go(id ? `people.${id}` : 'people')}
+        onOpenNarration={(platform, id) => go(`${platform}.${id}`)}
+        onSignOut={onSignOut}
+      />
+    );
+  }
 
   const route = parse(path);
   if (!route) return <Home key={who} onChoose={(platform) => go(platform)} {...account} />;
 
   const { platform, narrationId } = route;
   const open = (id: string, message?: string) => go(`${platform}.${id}`, message);
+  const note = flash?.path === path ? flash.text : undefined;
 
   if (!narrationId) {
-    return <Accounts key={`${who}:${platform}`} platform={platform} onHome={() => go('')} onOpen={open} {...account} />;
+    return (
+      <Accounts
+        key={`${who}:${platform}`}
+        platform={platform}
+        flash={note}
+        onHome={() => go('')}
+        onOpen={open}
+        {...account}
+      />
+    );
   }
 
   return (
@@ -91,10 +115,11 @@ export default function App() {
       key={`${who}:${narrationId}`}
       platform={platform}
       narrationId={narrationId}
-      flash={flash?.path === path ? flash.text : undefined}
+      flash={note}
       onHome={() => go('')}
-      onAccounts={() => go(platform)}
+      onAccounts={(message) => go(platform, message)}
       onOpen={open}
+      onPeople={login.status === 'in' ? () => go('people') : undefined}
     />
   );
 }

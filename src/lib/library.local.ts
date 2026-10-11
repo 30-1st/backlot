@@ -3,7 +3,15 @@ import { PLATFORMS, type Platform } from '../platforms';
 import { referencedMedia } from '../state';
 import { uid } from './media';
 import { kvDelete, kvGet, kvSet } from './db';
-import { describe, isSandbox, isSavePoint, type Account, type NarrationMeta, type OpenNarration } from './library.types';
+import {
+  describe,
+  isSandbox,
+  isSavePoint,
+  type Account,
+  type NarrationMeta,
+  type NarrationState,
+  type OpenNarration,
+} from './library.types';
 
 // The library kept in this browser (IndexedDB). Used by the offline build,
 // where there is no sign-in and nothing leaves the device.
@@ -79,7 +87,7 @@ export function openNarration(id: string): Promise<OpenNarration | null> {
     const sandbox = await kvGet<unknown>(sandboxKey(id));
     if (!isSandbox(sandbox)) return null;
     const point = await kvGet<unknown>(savePointKey(id));
-    return { ...hit, sandbox, savePoint: isSavePoint(point) ? point : undefined };
+    return { ...hit, sandbox, savePoint: isSavePoint(point) ? point : undefined, revision: 0 };
   });
 }
 
@@ -157,15 +165,22 @@ export function deleteNarration(id: string): Promise<void> {
   });
 }
 
-export function saveSandbox(id: string, sandbox: Sandbox): Promise<void> {
+export function saveSandbox(id: string, sandbox: Sandbox): Promise<number> {
   return inTurn(async () => {
     const index = await readIndex();
     const hit = find(index, id);
-    if (!hit) return; // Deleted while open. Nothing to save into.
+    if (!hit) return 0; // Deleted while open. Nothing to save into.
     await kvSet(sandboxKey(id), sandbox);
     Object.assign(hit.meta, describe(sandbox), { updatedAt: Date.now() });
     await kvSet(INDEX_KEY, index);
+    // One browser, one creator: nobody else can change the page, so revisions stay at zero.
+    return 0;
   });
+}
+
+export async function peekNarration(id: string): Promise<NarrationState | null> {
+  const hit = find(await readIndex(), id);
+  return hit ? { revision: 0, role: 'owner' } : null;
 }
 
 export function saveSavePoint(id: string, point: SavePoint): Promise<void> {

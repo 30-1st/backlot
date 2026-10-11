@@ -3,6 +3,7 @@ import { PLATFORMS, type Platform } from '../platforms';
 import { listAccounts } from '../lib/library';
 import { plural } from '../lib/format';
 import { Logo, PlatformMark } from './ui';
+import { PeopleButton } from './PeopleButton';
 
 /** A stage flat in outline, the same shape as the logo, drawn large and faint in the wings. */
 function Flat({ className }: { className: string }) {
@@ -35,11 +36,13 @@ export function Home({
   onChoose,
   username,
   onSignOut,
+  onPeople,
 }: {
   onChoose: (platform: Platform) => void;
   /** Set in the hosted build, where a creator is signed in. */
   username?: string;
   onSignOut?: () => void;
+  onPeople?: () => void;
 }) {
   const [counts, setCounts] = useState<Partial<Record<Platform, number>>>({});
 
@@ -65,6 +68,7 @@ export function Home({
 
       {onSignOut && (
         <div className="who">
+          {onPeople && <PeopleButton onClick={onPeople} />}
           <span>@{username}</span>
           <button type="button" className="btn quiet sm" onClick={onSignOut}>
             Sign out

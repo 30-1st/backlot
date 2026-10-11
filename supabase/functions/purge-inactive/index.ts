@@ -1,5 +1,6 @@
 // Removes logins that have not opened Backlot for 60 days, along with their
-// accounts, narrations and media. Runs once a day from pg_cron.
+// accounts, narrations and media, and clears out chats nobody is in any more.
+// Runs once a day from pg_cron.
 //
 // The caller must present the cleanup token kept in public.internal_config,
 // which only server-side code can read. The platform's JWT check is off
@@ -81,5 +82,21 @@ Deno.serve(async (req: Request) => {
   // The sign-up log only needs the last hour. Keep a day and drop the rest.
   await db.from('signup_log').delete().lt('created_at', new Date(Date.now() - 86_400_000).toISOString());
 
-  return reply(200, { ok: true, logins, files, failed: failed.length });
+  // A chat everyone has left (or whose members were all removed above) is of
+  // no use to anyone. Its messages go with it.
+  let chats = 0;
+  const { data: empty, error: emptyError } = await db
+    .from('conversations')
+    .select('id, conversation_members!left(user_id)')
+    .is('conversation_members', null)
+    .limit(500);
+  if (emptyError) {
+    console.error('finding empty chats failed', emptyError.message);
+  } else if (empty && empty.length > 0) {
+    const { error } = await db.from('conversations').delete().in('id', empty.map((c) => c.id));
+    if (error) console.error('removing empty chats failed', error.message);
+    else chats = empty.length;
+  }
+
+  return reply(200, { ok: true, logins, files, chats, failed: failed.length });
 });

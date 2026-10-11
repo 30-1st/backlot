@@ -17,8 +17,9 @@ export const duplicateNarration = library.duplicateNarration;
 export const renameNarration = library.renameNarration;
 export const deleteNarration = library.deleteNarration;
 export const saveSandbox = library.saveSandbox;
+export const peekNarration = library.peekNarration;
 export const saveSavePoint = library.saveSavePoint;
 export const mediaInUse = library.mediaInUse;
 
-export { nextNarrationName } from './library.types';
-export type { Account, NarrationMeta, OpenNarration } from './library.types';
+export { SaveConflict, nextNarrationName } from './library.types';
+export type { Account, NarrationMeta, NarrationState, OpenNarration, Person, ShareRole } from './library.types';

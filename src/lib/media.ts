@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { MediaItem } from '../types';
 import { blobDelete, blobGet, blobKeys, blobPut } from './db';
 import { currentUserId, hosted, supabase } from './supabase';
@@ -17,11 +17,36 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  *  file added on another device a moment ago is never mistaken for unused. */
 const SERVER_CLEANUP_AGE_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Whose folder the media on screen lives in. Null means the signed-in
+ * creator's own. A narration someone shared keeps its files in the author's
+ * folder, so anything drawn from it is wrapped in this with the author's id.
+ */
+export const MediaOwner = createContext<string | null>(null);
+
+// New files go to the signed-in creator's folder, unless a shared narration is
+// open for editing. Then they go next to the rest of that narration.
+let uploadFolder: string | null = null;
+export function setUploadFolder(owner: string | null): void {
+  uploadFolder = owner;
+}
+
 const urls = new Map<string, string>();
+// Files from someone else's folder that this visit has shown or added. They
+// are not in the creator's own library, so tidying must leave them alone
+// while they may still be on screen.
+const borrowed = new Set<string>();
 const pending = new Map<string, Promise<string | undefined>>();
 
 export function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** A name for a stored file that cannot be guessed. */
+function fileId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `m_${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 export function isMediaFile(file: File): boolean {
@@ -51,16 +76,17 @@ export class MediaError extends Error {
  * a file that only exists in this browser would vanish everywhere else.
  */
 export async function storeFile(file: File): Promise<MediaItem> {
-  const id = uid('m');
+  const id = fileId();
   if (supabase) {
     if (file.size > MAX_UPLOAD_BYTES) throw new MediaError('too_large', file.name);
-    const owner = await currentUserId();
+    const owner = uploadFolder ?? (await currentUserId());
     if (!owner) throw new MediaError('upload', file.name);
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(`${owner}/${id}`, file, { contentType: file.type, cacheControl: '31536000' });
     if (error) throw new MediaError('upload', file.name);
   }
+  if (uploadFolder) borrowed.add(id);
   urls.set(id, URL.createObjectURL(file));
   try {
     await blobPut(id, file);
@@ -85,10 +111,10 @@ export async function storeFiles(files: File[]): Promise<{ items: MediaItem[]; p
   return { items, problems };
 }
 
-async function fetchBlob(id: string): Promise<Blob | undefined> {
+async function fetchBlob(id: string, folder: string | null): Promise<Blob | undefined> {
   const cached = await blobGet(id).catch(() => undefined);
   if (cached || !supabase) return cached;
-  const owner = await currentUserId();
+  const owner = folder ?? (await currentUserId());
   if (!owner) return undefined;
   const { data } = await supabase.storage.from(BUCKET).download(`${owner}/${id}`);
   if (!data) return undefined;
@@ -96,10 +122,11 @@ async function fetchBlob(id: string): Promise<Blob | undefined> {
   return data;
 }
 
-function load(id: string): Promise<string | undefined> {
+function load(id: string, folder: string | null): Promise<string | undefined> {
   let job = pending.get(id);
   if (!job) {
-    job = fetchBlob(id)
+    if (folder) borrowed.add(id);
+    job = fetchBlob(id, folder)
       .then((blob) => {
         if (!blob) return undefined;
         const url = URL.createObjectURL(blob);
@@ -116,19 +143,20 @@ function load(id: string): Promise<string | undefined> {
 /** A URL the browser can show for this media item, or undefined while it loads or if it is gone. */
 export function useMediaUrl(item: MediaItem | undefined): string | undefined {
   const [, bump] = useState(0);
+  const folder = useContext(MediaOwner);
   const id = item?.id;
   const inline = item?.src;
 
   useEffect(() => {
     if (!id || inline || urls.has(id)) return;
     let alive = true;
-    void load(id).then((url) => {
+    void load(id, folder).then((url) => {
       if (alive && url) bump((n) => n + 1);
     });
     return () => {
       alive = false;
     };
-  }, [id, inline]);
+  }, [id, inline, folder]);
 
   if (!item) return undefined;
   return item.src ?? urls.get(item.id);
@@ -146,7 +174,7 @@ function forget(id: string) {
 export async function pruneMedia(keep: Set<string>): Promise<void> {
   try {
     for (const key of await blobKeys()) {
-      if (keep.has(key)) continue;
+      if (keep.has(key) || borrowed.has(key)) continue;
       await blobDelete(key);
       forget(key);
     }
@@ -181,6 +209,8 @@ async function pruneServerMedia(keep: Set<string>): Promise<void> {
 /** Empty this browser's copy of the media. Used on sign-out so the next person starts clean. */
 export async function clearMediaCache(): Promise<void> {
   try {
+    borrowed.clear();
+    uploadFolder = null;
     for (const key of await blobKeys()) {
       await blobDelete(key);
       forget(key);

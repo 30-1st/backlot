@@ -12,19 +12,25 @@ import {
 } from './state';
 import type { Platform } from './platforms';
 import {
+  SaveConflict,
   duplicateNarration,
   mediaInUse,
   nextNarrationName,
   openNarration,
+  peekNarration,
   renameNarration,
   saveSandbox,
   saveSavePoint,
   type Account,
+  type NarrationState,
+  type OpenNarration,
 } from './lib/library';
-import { pruneMedia, storeFiles, uid } from './lib/media';
+import { MediaOwner, pruneMedia, setUploadFolder, storeFiles, uid } from './lib/media';
+import { listShares } from './lib/people';
 import { hosted } from './lib/supabase';
 import { dateTime, fromInput, plural, toInput } from './lib/format';
-import { ConfirmButton, FileButton, Icon, Logo, Segmented, useMedia } from './components/ui';
+import { ConfirmButton, FileButton, Icon, Logo, PlatformMark, Segmented, useMedia } from './components/ui';
+import { ShareDialog } from './components/ShareDialog';
 import { NarrationMenu } from './components/NarrationMenu';
 import { ProfileSet } from './components/ProfileSet';
 import { EditSheet, Inspector } from './components/Inspector';
@@ -39,20 +45,30 @@ export function Studio({
   onHome,
   onAccounts,
   onOpen,
+  onPeople,
 }: {
   platform: Platform;
   narrationId: string;
   /** A message to show once on arrival, for example after making a copy. */
   flash?: string;
   onHome: () => void;
-  onAccounts: () => void;
+  /** Back to the list of accounts, optionally with a message to show there. */
+  onAccounts: (message?: string) => void;
   onOpen: (narrationId: string, flash?: string) => void;
+  /** Set in the hosted build, where narrations can be shared with other people. */
+  onPeople?: () => void;
 }) {
   const [sandbox, dispatch] = useReducer(reducer, undefined, emptySandbox);
   const [account, setAccount] = useState<Account | null>(null);
   const [savePoint, setSavePoint] = useState<SavePoint | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(true);
+  // Set when this narration belongs to someone else, who shared it.
+  const [shared, setShared] = useState<OpenNarration['shared']>(undefined);
+  const [canEdit, setCanEdit] = useState(true);
+  // How many people the creator shared this narration with, and whether the share screen is open.
+  const [shareCount, setShareCount] = useState(0);
+  const [sharing, setSharing] = useState(false);
 
   const [view, setView] = useState<View>('creator');
   const [seenOn, setSeenOn] = useState<number | null>(null);
@@ -100,6 +116,28 @@ export function Studio({
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Saving, and keeping up with other people who can change this narration.
+  const latest = useRef(sandbox);
+  latest.current = sandbox;
+  const unsaved = useRef(false);
+  const retry = useRef<number | undefined>(undefined);
+  /** The revision this screen last saw. A save only lands on top of that one. */
+  const revision = useRef(0);
+  /** The page as the server last handed it over. Showing it is not a change to save. */
+  const fromServer = useRef<Sandbox | null>(null);
+  const mayEdit = useRef(true);
+  const lent = useRef(false);
+  const gone = useRef(false);
+  /** Saves and catch-ups wait their turn here, so they never overlap. */
+  const line = useRef<Promise<void>>(Promise.resolve());
+  const flushLater = useRef<() => void>(() => undefined);
+
+  const inLine = useCallback((work: () => Promise<void>) => {
+    const run = line.current.then(work, work);
+    line.current = run.catch(() => undefined);
+    return line.current;
+  }, []);
+
   // Open the narration and pick up where the creator left off.
   useEffect(() => {
     let alive = true;
@@ -109,55 +147,136 @@ export function Studio({
         if (!alive) return;
         if (!open || open.account.platform !== platform) return onAccounts();
         let point = open.savePoint;
-        if (!point) {
+        if (!point && !open.shared) {
           point = { sandbox: open.sandbox, savedAt: Date.now() };
           await saveSavePoint(narrationId, point);
         }
         // Tidy up unused files in the background. Never let it block opening.
         void mediaInUse().then(pruneMedia, () => undefined);
         if (!alive) return;
+        const may = !open.shared || open.shared.role === 'edit';
+        revision.current = open.revision;
+        fromServer.current = open.sandbox;
+        mayEdit.current = may;
+        lent.current = !!open.shared;
+        // An editor's new photos and videos belong next to the rest of the author's narration.
+        setUploadFolder(open.shared ? open.shared.owner.id : null);
         dispatch({ type: 'load', sandbox: open.sandbox });
         setAccount(open.account);
-        setSavePoint(point);
+        setSavePoint(point ?? null);
+        setShared(open.shared);
+        setCanEdit(may);
         setLoaded(true);
+        if (hosted && !open.shared) void listShares(narrationId).then((list) => alive && setShareCount(list.length), () => undefined);
       } catch {
         if (alive) onAccounts();
       }
     })();
     return () => {
       alive = false;
+      setUploadFolder(null);
     };
     // onAccounts is stable enough for this one-time load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [narrationId, platform]);
 
+  /** Keep the change and try again shortly, for example once the connection is back. */
+  const keepTrying = useCallback(() => {
+    if (gone.current) return;
+    unsaved.current = true;
+    setSaving(false);
+    window.clearTimeout(retry.current);
+    retry.current = window.setTimeout(() => flushLater.current(), 4000);
+  }, []);
+
+  // Bring this screen up to date with the server: what the caller may do now,
+  // and the page itself if someone else changed it. `afterClash` means a save
+  // was just turned away because the page had moved on.
+  const catchUp = useCallback(
+    async (afterClash: boolean) => {
+      let state: NarrationState | null;
+      try {
+        state = await peekNarration(narrationId);
+      } catch {
+        if (afterClash) keepTrying();
+        return;
+      }
+      if (gone.current) return;
+      const closed = () => {
+        unsaved.current = false;
+        onAccounts(lent.current ? 'That narration is no longer shared with you.' : 'That narration was deleted.');
+      };
+      if (!state) return closed();
+
+      const may = state.role !== 'view';
+      if (may !== mayEdit.current) {
+        mayEdit.current = may;
+        setCanEdit(may);
+        setSelection(null);
+        say(
+          may
+            ? 'The author now lets you edit this narration.'
+            : 'The author changed your access. You can look, but not edit.',
+        );
+      }
+      if (state.revision === revision.current && !afterClash) return;
+      if (state.revision === revision.current && may) return keepTrying();
+
+      let fresh: OpenNarration | null;
+      try {
+        fresh = await openNarration(narrationId);
+      } catch {
+        if (afterClash) keepTrying();
+        return;
+      }
+      if (gone.current) return;
+      if (!fresh) return closed();
+      revision.current = fresh.revision;
+      fromServer.current = fresh.sandbox;
+      dispatch({ type: 'load', sandbox: fresh.sandbox });
+      if (fresh.savePoint) setSavePoint(fresh.savePoint);
+      setSaving(true);
+      if (afterClash && may) {
+        say('Someone else changed this narration at the same moment. You are on their version now, so make your last change again.');
+      } else if (!afterClash) {
+        say('Updated with the latest changes.');
+      }
+    },
+    // onAccounts is stable enough here too.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [narrationId, keepTrying, say],
+  );
+
   // Save every change shortly after it happens, and never lose the last one:
   // leaving the screen or hiding the tab writes whatever is still waiting.
-  const latest = useRef(sandbox);
-  latest.current = sandbox;
-  const unsaved = useRef(false);
-
-  const retry = useRef<number | undefined>(undefined);
-
-  const flush = useCallback(async () => {
-    if (!unsaved.current) return;
-    unsaved.current = false;
-    window.clearTimeout(retry.current);
-    try {
-      await saveSandbox(narrationId, latest.current);
-      setSaving(true);
-    } catch {
-      // Keep the change and try again shortly, for example once the connection is back.
-      unsaved.current = true;
-      setSaving(false);
-      retry.current = window.setTimeout(() => void flush(), 4000);
-    }
-  }, [narrationId]);
+  const flush = useCallback(
+    () =>
+      inLine(async () => {
+        if (!unsaved.current) return;
+        unsaved.current = false;
+        window.clearTimeout(retry.current);
+        if (!mayEdit.current) return;
+        try {
+          revision.current = await saveSandbox(narrationId, latest.current, revision.current);
+          setSaving(true);
+        } catch (err) {
+          if (err instanceof SaveConflict) {
+            if (!gone.current) await catchUp(true);
+          } else {
+            keepTrying();
+          }
+        }
+      }),
+    [narrationId, inLine, catchUp, keepTrying],
+  );
+  flushLater.current = () => void flush();
 
   useEffect(() => () => window.clearTimeout(retry.current), []);
 
   useEffect(() => {
     if (!loaded) return;
+    // What the server just handed over is already saved.
+    if (fromServer.current === sandbox) return;
     unsaved.current = true;
     // Saving to the server is a network call, so wait a little longer between them.
     const t = setTimeout(() => void flush(), hosted ? 700 : 250);
@@ -165,6 +284,7 @@ export function Studio({
   }, [sandbox, loaded, flush]);
 
   useEffect(() => {
+    gone.current = false;
     const onHide = () => {
       if (document.visibilityState === 'hidden') void flush();
     };
@@ -173,12 +293,20 @@ export function Studio({
     return () => {
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onHide);
-      if (unsaved.current) {
-        unsaved.current = false;
-        void saveSandbox(narrationId, latest.current).catch(() => undefined);
-      }
+      gone.current = true;
+      void flush();
     };
-  }, [flush, narrationId]);
+  }, [flush]);
+
+  // While other people can reach this narration, look for their changes now and then.
+  const watching = hosted && loaded && (!!shared || shareCount > 0);
+  useEffect(() => {
+    if (!watching) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible' && !unsaved.current) void inLine(() => catchUp(false));
+    }, 8000);
+    return () => clearInterval(t);
+  }, [watching, inLine, catchUp]);
 
   const setPoint = useCallback(
     (next: Sandbox, quiet = false) => {
@@ -224,7 +352,7 @@ export function Studio({
     dispatch({ type: 'load', sandbox: savePoint.sandbox });
     setSelection(null);
     setOpenId(null);
-    say(`Reverted to your save point from ${dateTime(savePoint.savedAt)}.`);
+    say(`Reverted to ${shared ? 'the author\u2019s' : 'your'} save point from ${dateTime(savePoint.savedAt)}.`);
   }
 
   async function addPosts(files: File[]) {
@@ -236,8 +364,9 @@ export function Studio({
     dispatch({ type: 'addPosts', posts });
     setSelection({ type: 'post', id: posts[0].id });
     const them = posts.length === 1 ? 'it' : 'them';
+    const hiddenFrom = shared || shareCount > 0 ? 'Visitors cannot' : 'Only you can';
     say(
-      [`Added ${posts.length} ${plural(posts.length, 'draft')}. Only you can see ${them} until you set ${them} live.`, ...problems].join(' '),
+      [`Added ${posts.length} ${plural(posts.length, 'draft')}. ${hiddenFrom} see ${them} until you set ${them} live.`, ...problems].join(' '),
     );
   }
 
@@ -278,10 +407,10 @@ export function Studio({
         setOpenId(id);
       },
       say,
-      canEdit: true,
+      canEdit,
       native,
     }),
-    [sandbox, view, now, asOf, selection, say, native],
+    [sandbox, view, now, asOf, selection, say, canEdit, native],
   );
 
   const tally = useMemo(() => {
@@ -294,11 +423,14 @@ export function Studio({
 
   const creator = view === 'creator';
   const hidden = tally.scheduled + tally.draft;
-  const panel = creator && !native;
+  const tools = creator && canEdit;
+  const panel = tools && !native;
 
   return (
+    // A shared narration keeps its photos and videos in its author's folder.
+    <MediaOwner.Provider value={shared ? shared.owner.id : null}>
     <StageContext.Provider value={stage}>
-      <div className={creator ? 'app studio has-tools' : 'app studio'}>
+      <div className={tools ? 'app studio has-tools' : 'app studio'}>
         <header className="bar">
           <a
             className="brand"
@@ -312,7 +444,7 @@ export function Studio({
             <Logo />
             <b>Backlot</b>
           </a>
-          {account && meta && (
+          {account && meta && !shared && (
             <NarrationMenu
               platform={platform}
               account={account}
@@ -321,8 +453,23 @@ export function Studio({
               onOpen={(id) => void leave(() => onOpen(id))}
               onCopy={() => void copyNarration()}
               onRename={rename}
-              onAccounts={() => void leave(onAccounts)}
+              onAccounts={() => void leave(() => onAccounts())}
             />
+          )}
+          {meta && shared && (
+            <div className="nmenu">
+              <button
+                type="button"
+                className="nmenu-btn"
+                aria-label={`${meta.name}, shared by ${shared.owner.username}. Back to your accounts`}
+                title="Back to your accounts"
+                onClick={() => void leave(() => onAccounts())}
+              >
+                <PlatformMark platform={platform} size={14} />
+                <span className="nmenu-who">@{sandbox.profile.username || 'username'}</span>
+                <span className="nmenu-name">{meta.name}</span>
+              </button>
+            </div>
           )}
 
           <Segmented
@@ -339,13 +486,28 @@ export function Studio({
             }}
           />
 
-          {creator && (
+          {tools && (
             <div className="tools">
               <FileButton label="Add posts" icon="plus" className="btn primary" multiple onFiles={addPosts} />
-              <button type="button" className="btn" onClick={() => setPoint(sandbox)}>
-                <Icon name="flag" /> <span>Save point</span>
-              </button>
-              <ConfirmButton className="quiet" icon="undo" label="Revert" confirmLabel="Undo all?" onConfirm={revert} />
+              {!shared && (
+                <button type="button" className="btn" onClick={() => setPoint(sandbox)}>
+                  <Icon name="flag" /> <span>Save point</span>
+                </button>
+              )}
+              {savePoint && (
+                <ConfirmButton className="quiet" icon="undo" label="Revert" confirmLabel="Undo all?" onConfirm={revert} />
+              )}
+              {!shared && onPeople && (
+                <button
+                  type="button"
+                  className="btn tools-share"
+                  aria-label={shareCount > 0 ? `Share. Shared with ${shareCount}` : 'Share'}
+                  onClick={() => setSharing(true)}
+                >
+                  <Icon name="share" /> <span>Share</span>
+                  {shareCount > 0 && <i className="badge">{shareCount}</i>}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn only-wide"
@@ -362,7 +524,17 @@ export function Studio({
         <main id="top" className={panel ? 'stage with-panel' : 'stage'}>
           <div className="floor">
             <div className="floor-in">
-              {sandbox.isExample && (
+              {shared && (
+                <div className="notice" role="status">
+                  <div>
+                    <strong>Shared by @{shared.owner.username || 'someone'}.</strong>{' '}
+                    {canEdit
+                      ? 'You can change the page. Only they can rename it, set its save point or share it.'
+                      : 'You can look around, but not change anything.'}
+                  </div>
+                </div>
+              )}
+              {sandbox.isExample && !shared && (
                 <div className="notice">
                   <div>
                     <strong>This is an example profile.</strong> Change anything to see how the sandbox works, then
@@ -399,9 +571,13 @@ export function Studio({
                       <i className="dot" style={{ background: 'var(--draft)' }} />
                       {tally.draft} {plural(tally.draft, 'draft')}
                     </span>
-                    <span className="tally-hint">
-                      {small ? 'Hold a post, then drag it onto another to swap them.' : 'Drag one post onto another to swap them.'}
-                    </span>
+                    {canEdit && (
+                      <span className="tally-hint">
+                        {small
+                          ? 'Hold a post, then drag it onto another to swap them.'
+                          : 'Drag one post onto another to swap them.'}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
@@ -441,8 +617,17 @@ export function Studio({
         </main>
 
         {openId && <PostsFeed startId={openId} onClose={() => setOpenId(null)} />}
-        {creator && selection && (native || openId !== null) && <EditSheet />}
+        {tools && selection && (native || openId !== null) && <EditSheet />}
         {intake && <Intake onBuild={build} onClose={() => setIntake(false)} />}
+        {sharing && meta && onPeople && (
+          <ShareDialog
+            narrationId={narrationId}
+            name={meta.name}
+            onClose={() => setSharing(false)}
+            onChanged={setShareCount}
+            onPeople={() => void leave(onPeople)}
+          />
+        )}
 
         <div className="toast-zone" aria-live="polite">
           {toast && (
@@ -453,5 +638,6 @@ export function Studio({
         </div>
       </div>
     </StageContext.Provider>
+    </MediaOwner.Provider>
   );
 }
