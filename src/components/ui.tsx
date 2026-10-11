@@ -35,6 +35,12 @@ const paths = {
   plus: 'M12 5v14M5 12h14',
   close: 'M6 6l12 12M18 6 6 18',
   left: 'M15 5l-7 7 7 7',
+  send: 'M21 3 10.500 13.500M21 3l-6.500 18-4-7.500L3 9.500 21 3Z',
+  bookmark: 'M6 4h12v17l-6-4.500L6 21V4Z',
+  panel: 'M4 5h16v14H4zM14.500 5v14',
+  chat: 'M4 5h16v11H9l-5 4V5Z',
+  share: 'M12 15V4M8 8l4-4 4 4M5 12v7h14v-7',
+  lock: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v9H5z',
   down: 'M5 9l7 7 7-7',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   copy: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1ZM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
@@ -282,6 +288,77 @@ export function FileButton({
   );
 }
 
+/** True while the screen matches a CSS media query, for example a phone-sized width. */
+export function useMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() => {
+    try {
+      return window.matchMedia(query).matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    let list: MediaQueryList;
+    try {
+      list = window.matchMedia(query);
+    } catch {
+      return;
+    }
+    const onChange = () => setMatches(list.matches);
+    onChange();
+    list.addEventListener('change', onChange);
+    return () => list.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
+// Open overlays, newest last. On a phone the Back button (or swipe) should
+// close the top overlay instead of leaving the screen behind it, so every
+// overlay adds one step to the browser history and removes it when it closes.
+const overlays: string[] = [];
+let ownBackSteps = 0;
+
+function useBackToClose(onClose: () => void) {
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  useEffect(() => {
+    const id = `${Date.now()}-${Math.random()}`;
+    overlays.push(id);
+    try {
+      window.history.pushState({ ...(window.history.state ?? {}), backlotOverlay: id }, '');
+    } catch {
+      // Some embedded views lock the history. Overlays still close with their own buttons.
+    }
+
+    const onPop = () => {
+      if (ownBackSteps > 0) {
+        ownBackSteps -= 1; // our own tidy-up step, not the person pressing Back
+        return;
+      }
+      if (overlays[overlays.length - 1] !== id) return;
+      overlays.pop();
+      close.current();
+    };
+    window.addEventListener('popstate', onPop);
+
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      const at = overlays.indexOf(id);
+      if (at < 0) return; // already closed by the Back button
+      overlays.splice(at, 1);
+      try {
+        if (window.history.state?.backlotOverlay === id) {
+          ownBackSteps += 1;
+          window.history.back();
+        }
+      } catch {
+        // Nothing to tidy.
+      }
+    };
+  }, []);
+}
+
 /** A native modal dialog that opens when mounted and reports when it is dismissed. */
 export function Modal({
   label,
@@ -295,6 +372,7 @@ export function Modal({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  useBackToClose(onClose);
 
   useEffect(() => {
     const dialog = ref.current;

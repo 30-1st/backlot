@@ -9,20 +9,23 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
+import { SortableContext, rectSwappingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Post } from '../types';
-import { dateBetween, isPublic, orderPosts, statusOf, useStage } from '../state';
-import { compact, dateTime, plural, shortDate } from '../lib/format';
+import { isPublic, orderPosts, statusOf, useStage } from '../state';
+import { compact, plural, shortDate } from '../lib/format';
 import { Icon, MediaView, cx } from './ui';
 
 type Tab = 'posts' | 'reels';
 
 export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
-  const { sandbox, view, asOf, selection, select } = useStage();
+  const { sandbox, view, asOf, selection, select, canEdit, native } = useStage();
   const { profile, highlights, posts, media, settings } = sandbox;
   const [tab, setTab] = useState<Tab>('posts');
+  // Creator view shows scheduled posts and drafts in place. Editing is a separate
+  // question: someone looking at a narration shared as view only sees them too.
   const creator = view === 'creator';
+  const editing = creator && canEdit;
 
   const shown = useMemo(() => {
     const base = creator ? posts : posts.filter((p) => isPublic(p, asOf));
@@ -40,8 +43,8 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
 
   return (
     <div className="set lit" data-lighting={settings.lighting}>
-      <header className={cx('pf-head', creator && selection?.type === 'profile' && 'is-selected')}>
-        {creator ? (
+      <header className={cx('pf-head', editing && !native && selection?.type === 'profile' && 'is-selected')}>
+        {editing ? (
           <button type="button" className="pf-avatar" onClick={() => select({ type: 'profile' })} aria-label="Edit profile photo">
             <MediaView item={profile.avatar ? media[profile.avatar] : undefined} />
           </button>
@@ -54,11 +57,11 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
         <div className="pf-top">
           <h1 className="pf-username">{profile.username || 'username'}</h1>
           <div className="pf-actions">
-            {creator ? (
+            {editing ? (
               <button type="button" className="app-btn" onClick={() => select({ type: 'profile' })}>
                 Edit profile
               </button>
-            ) : (
+            ) : creator ? null : (
               <>
                 <span className="app-btn solid">Follow</span>
                 <span className="app-btn">Message</span>
@@ -88,7 +91,7 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
         </div>
       </header>
 
-      {(highlights.length > 0 || creator) && (
+      {(highlights.length > 0 || editing) && (
         <div className="hl-row">
           {highlights.map((h) => {
             const body = (
@@ -99,11 +102,11 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
                 <span className="hl-title">{h.title || 'Untitled'}</span>
               </>
             );
-            return creator ? (
+            return editing ? (
               <button
                 key={h.id}
                 type="button"
-                className={cx('hl', selection?.type === 'highlight' && selection.id === h.id && 'is-selected')}
+                className={cx('hl', !native && selection?.type === 'highlight' && selection.id === h.id && 'is-selected')}
                 onClick={() => select({ type: 'highlight', id: h.id })}
               >
                 {body}
@@ -114,7 +117,7 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
               </div>
             );
           })}
-          {creator && (
+          {editing && (
             <button type="button" className="hl hl-new" onClick={onAddHighlight}>
               <span className="hl-ring">
                 <Icon name="plus" size={26} />
@@ -134,13 +137,13 @@ export function ProfileSet({ onAddHighlight }: { onAddHighlight: () => void }) {
         </button>
       </div>
 
-      <Grid posts={shown} sortable={creator && tab === 'posts'} tab={tab} />
+      <Grid posts={shown} sortable={editing && tab === 'posts'} tab={tab} />
     </div>
   );
 }
 
 function Grid({ posts, sortable, tab }: { posts: Post[]; sortable: boolean; tab: Tab }) {
-  const { sandbox, dispatch, view, now, say } = useStage();
+  const { sandbox, dispatch, view, canEdit, say } = useStage();
   const { pinned, rest } = useMemo(() => orderPosts(posts), [posts]);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -152,24 +155,17 @@ function Grid({ posts, sortable, tab }: { posts: Post[]; sortable: boolean; tab:
     }),
   );
 
+  // Dropping one post on another swaps them: each takes the other's date,
+  // so the two trade places and nothing else on the page moves.
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const from = rest.findIndex((p) => p.id === active.id);
-    const to = rest.findIndex((p) => p.id === over.id);
-    if (from < 0 || to < 0) return;
-    const moved = arrayMove(rest, from, to);
-    const post = moved[to];
-    const date = dateBetween(moved[to - 1], moved[to + 1], post.date);
-    dispatch({ type: 'post', id: post.id, patch: { date } });
-    const status = statusOf({ ...post, date }, now);
-    say(
-      status === 'draft'
-        ? `Moved. This draft now sits at ${dateTime(date, now)}.`
-        : status === 'scheduled'
-          ? `Moved. Now scheduled for ${dateTime(date, now)}.`
-          : `Moved. Post date is now ${dateTime(date, now)}.`,
-    );
+    const a = rest.find((p) => p.id === active.id);
+    const b = rest.find((p) => p.id === over.id);
+    if (!a || !b) return;
+    dispatch({ type: 'post', id: a.id, patch: { date: b.date } });
+    dispatch({ type: 'post', id: b.id, patch: { date: a.date } });
+    say('Swapped. Each post took the other\u2019s date.');
   }
 
   if (posts.length === 0) {
@@ -177,7 +173,7 @@ function Grid({ posts, sortable, tab }: { posts: Post[]; sortable: boolean; tab:
       <div className="grid-empty">
         <Icon name={tab === 'reels' ? 'play' : 'image'} size={30} />
         <strong>{tab === 'reels' ? 'No reels yet' : 'No posts yet'}</strong>
-        {view === 'creator' && (
+        {view === 'creator' && canEdit && (
           <span>{tab === 'reels' ? 'Posts that open with a video show up here.' : 'Add posts to start building this profile.'}</span>
         )}
       </div>
@@ -196,7 +192,7 @@ function Grid({ posts, sortable, tab }: { posts: Post[]; sortable: boolean; tab:
   if (!sortable) return tiles;
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <SortableContext items={rest.map((p) => p.id)} strategy={rectSortingStrategy}>
+      <SortableContext items={rest.map((p) => p.id)} strategy={rectSwappingStrategy}>
         {tiles}
       </SortableContext>
     </DndContext>
@@ -228,13 +224,16 @@ function Tile({
   dragging?: boolean;
   sortableProps?: object;
 }) {
-  const { sandbox, view, now, selection, select, openPost } = useStage();
+  const { sandbox, view, now, selection, select, openPost, canEdit, native } = useStage();
   const creator = view === 'creator';
+  // With the side editor open, a click picks the post for editing there.
+  // Otherwise it opens the scrolling list of posts, as the real app does.
+  const picks = creator && canEdit && !native;
   const cover = sandbox.media[post.media[0]];
   const status = statusOf(post, now);
-  const selected = creator && selection?.type === 'post' && selection.id === post.id;
+  const selected = picks && selection?.type === 'post' && selection.id === post.id;
 
-  const label = creator
+  const label = picks
     ? `Edit post${post.caption ? `: ${post.caption.slice(0, 60)}` : ''}`
     : `Open post${post.caption ? `: ${post.caption.slice(0, 60)}` : ''}`;
 
@@ -244,8 +243,8 @@ function Tile({
       {...sortableProps}
       className={cx('tile', selected && 'is-selected', dragging && 'is-dragging', creator && `is-${status}`)}
       aria-label={label}
-      onClick={() => (creator ? select({ type: 'post', id: post.id }) : openPost(post.id))}
-      onDoubleClick={() => creator && openPost(post.id)}
+      onClick={() => (picks ? select({ type: 'post', id: post.id }) : openPost(post.id))}
+      onDoubleClick={() => picks && openPost(post.id)}
     >
       <MediaView item={cover} />
       <span className="tile-marks">

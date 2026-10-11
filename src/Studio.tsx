@@ -24,11 +24,11 @@ import {
 import { pruneMedia, storeFiles, uid } from './lib/media';
 import { hosted } from './lib/supabase';
 import { dateTime, fromInput, plural, toInput } from './lib/format';
-import { ConfirmButton, FileButton, Icon, Logo, Segmented } from './components/ui';
+import { ConfirmButton, FileButton, Icon, Logo, Segmented, useMedia } from './components/ui';
 import { NarrationMenu } from './components/NarrationMenu';
 import { ProfileSet } from './components/ProfileSet';
-import { Inspector } from './components/Inspector';
-import { PostViewer } from './components/PostViewer';
+import { EditSheet, Inspector } from './components/Inspector';
+import { PostsFeed } from './components/PostsFeed';
 import { Intake } from './components/Intake';
 
 /** The working screen for one narration of one account: the set, its tools, and saving. */
@@ -63,6 +63,29 @@ export function Studio({
     flash ? { id: Date.now(), text: flash } : null,
   );
   const [now, setNow] = useState(() => Date.now());
+
+  // The side editor is a wide-screen tool. Turning it off shows the page bare,
+  // the way the real app looks, and phones always work that way.
+  const small = useMedia('(max-width: 980px)');
+  const [editorOn, setEditorOn] = useState(() => {
+    try {
+      return window.localStorage.getItem('backlot.editor') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const native = small || !editorOn;
+
+  function toggleEditor() {
+    const next = !editorOn;
+    setEditorOn(next);
+    setSelection(null);
+    try {
+      window.localStorage.setItem('backlot.editor', next ? 'on' : 'off');
+    } catch {
+      // The choice just will not be remembered.
+    }
+  }
 
   // Scheduled posts turn live on their own, so the clock has to keep moving.
   useEffect(() => {
@@ -238,11 +261,27 @@ export function Studio({
   }
 
   const asOf = view === 'visitor' && seenOn !== null ? seenOn : now;
-  const openPost = openId ? sandbox.posts.find((p) => p.id === openId) : undefined;
 
   const stage = useMemo<Stage>(
-    () => ({ sandbox, dispatch, view, now, asOf, selection, select: setSelection, openPost: setOpenId, say }),
-    [sandbox, view, now, asOf, selection, say],
+    () => ({
+      sandbox,
+      dispatch,
+      view,
+      now,
+      asOf,
+      selection,
+      select: setSelection,
+      // Opening the posts view lets go of whatever the side editor had picked,
+      // so anything chosen from inside that view opens as a sheet on top of it.
+      openPost: (id: string) => {
+        setSelection(null);
+        setOpenId(id);
+      },
+      say,
+      canEdit: true,
+      native,
+    }),
+    [sandbox, view, now, asOf, selection, say, native],
   );
 
   const tally = useMemo(() => {
@@ -255,10 +294,11 @@ export function Studio({
 
   const creator = view === 'creator';
   const hidden = tally.scheduled + tally.draft;
+  const panel = creator && !native;
 
   return (
     <StageContext.Provider value={stage}>
-      <div className="app">
+      <div className={creator ? 'app studio has-tools' : 'app studio'}>
         <header className="bar">
           <a
             className="brand"
@@ -289,51 +329,37 @@ export function Studio({
             label="View"
             value={view}
             options={[
-              { value: 'creator', label: 'Creator view' },
-              { value: 'visitor', label: 'Visitor view' },
+              { value: 'creator', label: 'Creator' },
+              { value: 'visitor', label: 'Visitor' },
             ]}
             onChange={(v) => {
               setView(v);
               setOpenId(null);
-              if (v === 'visitor') setSelection(null);
+              setSelection(null);
             }}
           />
 
-          <div className="bar-tools">
-            {creator ? (
-              <>
-                <FileButton label="Add posts" icon="plus" className="btn primary" multiple onFiles={addPosts} />
-                <button type="button" className="btn" onClick={() => setPoint(sandbox)}>
-                  <Icon name="flag" /> Set save point
-                </button>
-                <ConfirmButton
-                  className="quiet"
-                  icon="undo"
-                  label="Revert"
-                  confirmLabel="Undo all changes?"
-                  onConfirm={revert}
-                />
-              </>
-            ) : (
-              <label className="seen">
-                <span>Seen on</span>
-                <input
-                  id="seen-on"
-                  type="datetime-local"
-                  value={toInput(asOf)}
-                  onChange={(e) => setSeenOn(fromInput(e.target.value))}
-                />
-                {seenOn !== null && (
-                  <button type="button" className="btn quiet sm" onClick={() => setSeenOn(null)}>
-                    Back to now
-                  </button>
-                )}
-              </label>
-            )}
-          </div>
+          {creator && (
+            <div className="tools">
+              <FileButton label="Add posts" icon="plus" className="btn primary" multiple onFiles={addPosts} />
+              <button type="button" className="btn" onClick={() => setPoint(sandbox)}>
+                <Icon name="flag" /> <span>Save point</span>
+              </button>
+              <ConfirmButton className="quiet" icon="undo" label="Revert" confirmLabel="Undo all?" onConfirm={revert} />
+              <button
+                type="button"
+                className="btn only-wide"
+                aria-pressed={editorOn}
+                title={editorOn ? 'Hide the editor and show the page bare' : 'Show the editor beside the page'}
+                onClick={toggleEditor}
+              >
+                <Icon name="panel" /> <span>Editor</span>
+              </button>
+            </div>
+          )}
         </header>
 
-        <main id="top" className={creator ? 'stage with-panel' : 'stage'}>
+        <main id="top" className={panel ? 'stage with-panel' : 'stage'}>
           <div className="floor">
             <div className="floor-in">
               {sandbox.isExample && (
@@ -373,14 +399,31 @@ export function Studio({
                       <i className="dot" style={{ background: 'var(--draft)' }} />
                       {tally.draft} {plural(tally.draft, 'draft')}
                     </span>
-                    <span className="tally-hint">Drag a post to move it. Its date changes to fit the new spot.</span>
+                    <span className="tally-hint">
+                      {small ? 'Hold a post, then drag it onto another to swap them.' : 'Drag one post onto another to swap them.'}
+                    </span>
                   </>
                 ) : (
-                  <span>
-                    <Icon name="eye" /> What a visitor sees
-                    {seenOn !== null ? ` on ${dateTime(seenOn, now)}` : ' right now'}.
-                    {seenOn === null && hidden > 0 && ` ${hidden} scheduled or draft ${plural(hidden, 'post')} hidden.`}
-                  </span>
+                  <>
+                    <span>
+                      <Icon name="eye" /> What a visitor sees
+                      {seenOn === null && hidden > 0 && `. ${hidden} scheduled or draft ${plural(hidden, 'post')} hidden`}
+                    </span>
+                    <label className="seen">
+                      <span>on</span>
+                      <input
+                        id="seen-on"
+                        type="datetime-local"
+                        value={toInput(asOf)}
+                        onChange={(e) => setSeenOn(fromInput(e.target.value))}
+                      />
+                      {seenOn !== null && (
+                        <button type="button" className="btn quiet sm" onClick={() => setSeenOn(null)}>
+                          Back to now
+                        </button>
+                      )}
+                    </label>
+                  </>
                 )}
               </div>
 
@@ -394,10 +437,11 @@ export function Studio({
             </div>
           </div>
 
-          {creator && <Inspector />}
+          {panel && <Inspector />}
         </main>
 
-        {openPost && <PostViewer key={openPost.id} post={openPost} onClose={() => setOpenId(null)} />}
+        {openId && <PostsFeed startId={openId} onClose={() => setOpenId(null)} />}
+        {creator && selection && (native || openId !== null) && <EditSheet />}
         {intake && <Intake onBuild={build} onClose={() => setIntake(false)} />}
 
         <div className="toast-zone" aria-live="polite">

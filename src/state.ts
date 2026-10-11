@@ -115,16 +115,6 @@ export function orderPosts(posts: Post[]): { pinned: Post[]; rest: Post[] } {
   return { pinned, rest };
 }
 
-/**
- * The grid is always in date order, so moving a post means giving it a date
- * that fits its new slot. `newer` and `older` are its neighbours there.
- */
-export function dateBetween(newer: Post | undefined, older: Post | undefined, fallback: number): number {
-  if (newer && older) return Math.round((newer.date + older.date) / 2);
-  if (older) return older.date + HOUR;
-  if (newer) return newer.date - DAY;
-  return fallback;
-}
 
 /** The date a post takes when its status is switched by hand. */
 export function patchForStatus(post: Post, status: PostStatus, now: number): Partial<Post> {
@@ -161,6 +151,14 @@ export interface Stage {
   select: (selection: Selection) => void;
   openPost: (id: string) => void;
   say: (message: string) => void;
+  /** False when someone is only looking, for example a narration shared as view only. */
+  canEdit: boolean;
+  /**
+   * True when the page is shown bare, the way the real app looks: no side
+   * editor. Editing then happens in sheets, and tapping a post opens the
+   * scrolling list of posts. Always true on phone-sized screens.
+   */
+  native: boolean;
 }
 
 export const StageContext = createContext<Stage | null>(null);

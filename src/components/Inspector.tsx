@@ -3,7 +3,7 @@ import type { Highlight, Post, PostStatus } from '../types';
 import { MAX_CAROUSEL, MAX_PINNED, patchForStatus, statusOf, useStage } from '../state';
 import { storeFiles } from '../lib/media';
 import { dateTime, fromInput, toInput } from '../lib/format';
-import { ConfirmButton, Field, FileButton, Icon, MediaView, NumberInput, Segmented, cx } from './ui';
+import { ConfirmButton, Field, FileButton, Icon, MediaView, Modal, NumberInput, Segmented, cx } from './ui';
 
 const STATUS_COLOR: Record<PostStatus, string> = {
   live: 'var(--live)',
@@ -11,33 +11,71 @@ const STATUS_COLOR: Record<PostStatus, string> = {
   draft: 'var(--draft)',
 };
 
+/** The side panel on wide screens: edits whatever is selected, or the profile when nothing is. */
 export function Inspector() {
-  const { sandbox, selection, select } = useStage();
+  const { sandbox, selection } = useStage();
   const post = selection?.type === 'post' ? sandbox.posts.find((p) => p.id === selection.id) : undefined;
   const highlight =
     selection?.type === 'highlight' ? sandbox.highlights.find((h) => h.id === selection.id) : undefined;
 
   return (
-    <aside className="panel" data-open={selection !== null} aria-label="Properties">
+    <aside className="panel" aria-label="Editor">
       <div className="panel-in">
-        <button type="button" className="panel-close btn quiet sm" onClick={() => select(null)}>
-          <Icon name="close" /> Close
-        </button>
         {post ? (
-          <PostPanel key={post.id} post={post} />
+          <PostEditor key={post.id} post={post} />
         ) : highlight ? (
-          <HighlightPanel key={highlight.id} highlight={highlight} />
+          <HighlightEditor key={highlight.id} highlight={highlight} />
         ) : (
-          <ProfilePanel />
+          <ProfileEditor />
         )}
       </div>
     </aside>
   );
 }
 
+/**
+ * The same editors as a sheet that slides over the page. Used when the page is
+ * shown bare (no side editor) and on phones, where it fills the screen the way
+ * the real app's edit screens do.
+ */
+export function EditSheet() {
+  const { sandbox, selection, select } = useStage();
+  if (!selection) return null;
+  const post = selection.type === 'post' ? sandbox.posts.find((p) => p.id === selection.id) : undefined;
+  const highlight =
+    selection.type === 'highlight' ? sandbox.highlights.find((h) => h.id === selection.id) : undefined;
+  if ((selection.type === 'post' && !post) || (selection.type === 'highlight' && !highlight)) return null;
+
+  const title = post ? 'Edit post' : highlight ? 'Edit highlight' : 'Edit profile';
+  const close = () => select(null);
+
+  return (
+    <Modal label={title} className="sheet" onClose={close}>
+      <header className="sheet-head">
+        <button type="button" className="sheet-x" aria-label="Close" onClick={close}>
+          <Icon name="close" size={20} />
+        </button>
+        <strong>{title}</strong>
+        <button type="button" className="sheet-done" onClick={close}>
+          Done
+        </button>
+      </header>
+      <div className="sheet-body">
+        {post ? (
+          <PostEditor key={post.id} post={post} />
+        ) : highlight ? (
+          <HighlightEditor key={highlight.id} highlight={highlight} />
+        ) : (
+          <ProfileEditor />
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Profile ---------- */
 
-function ProfilePanel() {
+function ProfileEditor() {
   const { sandbox, dispatch, asOf, say } = useStage();
   const { profile, media, settings, posts } = sandbox;
   const set = (patch: Partial<typeof profile>) => dispatch({ type: 'profile', patch });
@@ -158,7 +196,7 @@ function ProfilePanel() {
 
 /* ---------- Post ---------- */
 
-function PostPanel({ post }: { post: Post }) {
+function PostEditor({ post }: { post: Post }) {
   const { sandbox, dispatch, now, select, openPost, say } = useStage();
   const [shot, setShot] = useState(0);
   const set = (patch: Partial<Post>) => dispatch({ type: 'post', id: post.id, patch });
@@ -333,7 +371,7 @@ function PostPanel({ post }: { post: Post }) {
 
 /* ---------- Highlight ---------- */
 
-function HighlightPanel({ highlight }: { highlight: Highlight }) {
+function HighlightEditor({ highlight }: { highlight: Highlight }) {
   const { sandbox, dispatch, select, say } = useStage();
   const i = sandbox.highlights.findIndex((h) => h.id === highlight.id);
   const set = (patch: Partial<Highlight>) => dispatch({ type: 'highlight', id: highlight.id, patch });

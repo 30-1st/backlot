@@ -12,8 +12,10 @@ This is the profile-only build. There is no feed, no forecasting, and no connect
 - **Narrations.** Each account can hold several narrations: full copies of the same profile that you brand differently and compare. Each narration has its own save point. Switch between them from the top bar of the studio.
 - **Your profile, editable.** Photo, username, name, category, bio, link, follower and following counts, and post count.
 - **A grid you control.** Add as many posts as you like. Swap the media, build carousels, edit captions, locations, likes and comments.
-- **Dates decide the order.** The grid is always newest first, the way a real profile is. Change a post's date and it moves. Drag a post to a new spot and its date changes to fit.
+- **Dates decide the order.** The grid is always newest first, the way a real profile is. Change a post's date and it moves. Drag one post onto another and the two swap: each takes the other's date.
 - **Live, scheduled, draft.** Scheduled posts and drafts sit in the grid where they will land. Only you see them.
+- **The page, bare.** Turn the side editor off and the page is shown the way the real app shows it. Editing then works the way people already know: Edit profile opens an edit screen, and tapping a post opens the scrolling list of posts, where every post has an Edit button.
+- **Built for phones.** On a phone the page runs edge to edge, edit screens fill the display, the tools sit in a bar under the thumb, and the Back button closes whatever is open on top.
 - **Visitor view.** See the profile the way a visitor does, right now or on any date you pick.
 - **Highlights and pins.** Add, rename, reorder and re-cover highlights. Pin up to three posts.
 - **Save point and revert.** Set a save point when the profile looks right. Revert brings back exactly that.
@@ -94,8 +96,8 @@ src/
     Accounts.tsx           the accounts of one platform, with their narrations
     NarrationMenu.tsx      the narration switcher in the studio's top bar
     ProfileSet.tsx         the profile: header, highlights, tabs, grid, drag to move
-    Inspector.tsx          the property panel for the profile, a post, or a highlight
-    PostViewer.tsx         the opened post
+    Inspector.tsx          the editors for the profile, a post, or a highlight, as a side panel or a sheet
+    PostsFeed.tsx          the scrolling list of posts that opens when one is tapped
     Intake.tsx             "Bring in your profile"
     ui.tsx                 buttons, fields, icons, logo
 ```
