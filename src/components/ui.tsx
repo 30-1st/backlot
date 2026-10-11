@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { MediaItem } from '../types';
 import { isMediaFile, useMediaUrl } from '../lib/media';
+import { PLATFORM, type Platform } from '../platforms';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -15,6 +16,15 @@ export function Logo({ size = 26 }: { size?: number }) {
       <path d="M17 8.5 25 23.5H17" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" opacity=".7" />
       <rect x="3.5" y="4.5" width="13.5" height="19" stroke="currentColor" strokeWidth="1.8" />
       <rect x="7.6" y="9" width="5.3" height="6.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** The mark of a platform Backlot can stage, drawn in whatever colour the text around it has. */
+export function PlatformMark({ platform, size = 24 }: { platform: Platform; size?: number }) {
+  return (
+    <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d={PLATFORM[platform].glyph} />
     </svg>
   );
 }

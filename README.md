@@ -6,6 +6,7 @@ This is the profile-only build. There is no feed, no forecasting, and no connect
 
 ## What it does
 
+- **A homescreen to pick your platform.** Backlot opens on its logo and name with the supported platforms in a row underneath. Instagram is live. TikTok and X are shown as coming soon. Each platform keeps its own profile and its own save point.
 - **Your profile, editable.** Photo, username, name, category, bio, link, follower and following counts, and post count.
 - **A grid you control.** Add as many posts as you like. Swap the media, build carousels, edit captions, locations, likes and comments.
 - **Dates decide the order.** The grid is always newest first, the way a real profile is. Change a post's date and it moves. Drag a post to a new spot and its date changes to fit.
@@ -34,21 +35,25 @@ npm run build:single   # one self-contained file in dist-single/index.html
 
 Everything is saved in the browser the creator is using, in IndexedDB: the sandbox and its save point as JSON, and uploaded photos and videos as files. There are no accounts and no server yet. Clearing site data clears the sandbox.
 
-`src/lib/db.ts` is the only file that touches storage, so moving to hosted accounts later means replacing that one file.
+`src/lib/slots.ts` is the one place that knows where each platform's profile is stored, and `src/lib/db.ts` is the only file that touches IndexedDB. Moving to hosted accounts later means changing those two files and `src/lib/media.ts`.
 
 ## Layout of the code
 
 ```
 src/
-  App.tsx                  top bar, saving, save point, view switching
+  App.tsx                  switches between the homescreen and a platform's studio
+  Studio.tsx               top bar, saving, save point, view switching
+  platforms.ts             the supported platforms and which ones are ready
   state.ts                 the sandbox reducer and the rules for order, status and dates
   types.ts                 data shapes
   sample.ts                the example profile and its drawn pictures
   styles.css               all styling
   lib/db.ts                IndexedDB wrapper
+  lib/slots.ts             one saved profile and save point per platform
   lib/media.ts             uploaded files and the URLs to show them
   lib/format.ts            counts and dates
   components/
+    Home.tsx               the homescreen
     ProfileSet.tsx         the profile: header, highlights, tabs, grid, drag to move
     Inspector.tsx          the property panel for the profile, a post, or a highlight
     PostViewer.tsx         the opened post

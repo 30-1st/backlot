@@ -305,6 +305,167 @@ hr {
   padding-block: 7px;
 }
 
+.on-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- Homescreen ---------- */
+
+/* Layout: one centred column (logo, name, platform row) under a soft overhead light, with stage flats drawn faintly in the wings. */
+.home {
+  position: relative;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding-block: 56px;
+  padding-inline: 20px;
+  background:
+    radial-gradient(62% 58% at 50% 0%, rgba(201, 164, 90, 0.17), transparent 72%),
+    var(--stage);
+}
+.home-backdrop {
+  position: absolute;
+  inset: 0;
+  color: var(--brass);
+  pointer-events: none;
+}
+.wing {
+  position: absolute;
+  height: auto;
+}
+.wing-l1,
+.wing-r1 {
+  bottom: -5%;
+  width: clamp(230px, 31vw, 480px);
+  opacity: 0.2;
+}
+.wing-l2,
+.wing-r2 {
+  bottom: 9%;
+  width: clamp(110px, 14vw, 220px);
+  opacity: 0.1;
+}
+.wing-l1 {
+  left: -8%;
+}
+.wing-l2 {
+  left: 15%;
+}
+.wing-r1 {
+  right: -8%;
+  transform: scaleX(-1);
+}
+.wing-r2 {
+  right: 15%;
+  transform: scaleX(-1);
+}
+.home-pool {
+  position: absolute;
+  left: 50%;
+  bottom: -22%;
+  width: min(1200px, 150vw);
+  height: 56%;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(201, 164, 90, 0.1), transparent);
+}
+.home-in {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+}
+.home-logo {
+  color: var(--brass);
+  filter: drop-shadow(0 0 42px rgba(201, 164, 90, 0.28));
+}
+.home h1 {
+  margin: 14px 0 0;
+  font: italic 600 clamp(64px, 11vw, 108px) / 0.95 var(--display);
+  letter-spacing: -0.02em;
+}
+.home-line {
+  margin-top: 18px;
+  color: var(--ink-2);
+  font-size: 16px;
+}
+.home-marks {
+  position: relative;
+  width: min(100%, 540px);
+  margin-top: 46px;
+  padding: 30px 26px 26px;
+}
+.platforms {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.platform {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--ink);
+}
+.platform-mark {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--stage-3), var(--stage-2));
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+.platform b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.platform-state {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+button.platform .platform-state {
+  color: var(--brass);
+}
+button.platform:hover .platform-mark,
+button.platform:focus-visible .platform-mark {
+  border-color: var(--brass);
+  color: var(--brass);
+  transform: translateY(-2px);
+}
+.platform.is-soon {
+  opacity: 0.45;
+}
+
 /* ---------- Stage ---------- */
 
 .stage {
@@ -1269,6 +1430,22 @@ dialog::backdrop {
   }
   .brand b {
     font-size: 22px;
+  }
+  .wing-l2,
+  .wing-r2 {
+    display: none;
+  }
+  .home-marks {
+    margin-top: 36px;
+    padding: 24px 12px 20px;
+  }
+  .platform-mark {
+    width: 72px;
+    height: 72px;
+  }
+  .platform-mark .icon {
+    width: 28px;
+    height: 28px;
   }
 }
 
