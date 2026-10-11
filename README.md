@@ -2,10 +2,11 @@
 
 A creative-mode sandbox for your social profile. Backlot rebuilds your profile page in a space you fully control, so you can plan the grid, move posts around, and see scheduled and unposted work in place before any of it goes live.
 
-This is the profile-only build. There is no feed, no forecasting, and no connection to any social platform. Nothing is pulled from or sent to anyone else's servers.
+This is the profile-only build. There is no feed, no forecasting, and no connection to any social platform. Nothing is pulled from or sent to any social network.
 
 ## What it does
 
+- **A login with a username and a password.** No email. There is no password reset, and a login that is not opened for 60 days is deleted with everything in it.
 - **A homescreen to pick your platform.** Backlot opens on its logo and name with the supported platforms in a row underneath. Instagram is live. TikTok and X are shown as coming soon.
 - **As many accounts as you want.** Choosing a platform shows every account you have made there, with a plus to add another.
 - **Narrations.** Each account can hold several narrations: full copies of the same profile that you brand differently and compare. Each narration has its own save point. Switch between them from the top bar of the studio.
@@ -29,15 +30,31 @@ npm run dev
 Open the address it prints (usually http://localhost:5173).
 
 ```bash
-npm run build          # production site in dist/
-npm run build:single   # one self-contained file in dist-single/index.html
+npm run build          # the hosted site, in dist/
+npm run build:single   # the offline version as one file, in dist-single/index.html
 ```
 
-## Where things are saved
+## Two ways it runs
 
-Everything is saved in the browser the creator is using, in IndexedDB: the sandbox and its save point as JSON, and uploaded photos and videos as files. There are no accounts and no server yet. Clearing site data clears the sandbox.
+**Hosted** (the default). The site talks to the Backlot Supabase project named in `.env`. Creators sign in, and their accounts, narrations, photos and videos are kept on the server, so they are there on any device.
 
-`src/lib/library.ts` is the one place that knows where accounts and narrations are stored, and `src/lib/db.ts` is the only file that touches IndexedDB. Moving to hosted accounts later means changing those two files and `src/lib/media.ts`.
+**Offline** (`npm run build:single`). No sign-in. Everything is saved in the browser that is being used, and nothing leaves the device. This is the version used for quick previews.
+
+The two values in `.env` are public by design: they are built into the site every visitor downloads. What protects the data is the database's own row rules, not those values. Never put a secret key or a database password in the repo.
+
+## What is on Supabase
+
+Everything needed to rebuild the project is in `supabase/`.
+
+- `migrations/` creates the tables, the row rules, the private `media` bucket, and the daily cleanup job.
+  - `members`: one row per login, with the username and the last time it was opened.
+  - `accounts`: one social profile on one platform.
+  - `narrations`: one telling of an account, holding the whole profile and its save point.
+  - Every table has row level security on. A signed-in creator can reach only their own rows and their own media folder. Signed-out visitors can reach nothing.
+- `functions/signup` creates a login. Supabase needs an address for every user, so each username gets an internal one on a domain that can never receive mail. Nobody sees it and nothing is sent to it.
+- `functions/purge-inactive` runs once a day and removes logins idle for 60 days, with their accounts, narrations and media.
+
+A single photo or video can be up to 50 MB.
 
 ## Layout of the code
 
@@ -50,11 +67,17 @@ src/
   types.ts                 data shapes
   sample.ts                the example profile and its drawn pictures
   styles.css               all styling
+  lib/supabase.ts          the Supabase connection, and whether this build is hosted or offline
+  lib/auth.ts              sign in, create a login, sign out
+  lib/library.ts           accounts and narrations: picks the server or the browser as their home
+  lib/library.cloud.ts     ... kept in Supabase
+  lib/library.local.ts     ... kept in the browser
+  lib/library.types.ts     ... the shapes both share
   lib/db.ts                IndexedDB wrapper
-  lib/library.ts           accounts and their narrations, and where they are saved
-  lib/media.ts             uploaded files and the URLs to show them
+  lib/media.ts             photos and videos: upload, show, and clean up
   lib/format.ts            counts and dates
   components/
+    SignIn.tsx             sign in or create a login
     Home.tsx               the homescreen
     Accounts.tsx           the accounts of one platform, with their narrations
     NarrationMenu.tsx      the narration switcher in the studio's top bar
@@ -65,4 +88,4 @@ src/
     ui.tsx                 buttons, fields, icons, logo
 ```
 
-Built with React, TypeScript, Vite and dnd-kit.
+Built with React, TypeScript, Vite, dnd-kit and Supabase.

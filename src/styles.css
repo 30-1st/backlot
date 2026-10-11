@@ -760,6 +760,44 @@ button.platform:focus-visible .platform-mark {
   opacity: 0.45;
 }
 
+/* Sign-in, and the "who is signed in" corner. */
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(100%, 360px);
+  margin-top: 34px;
+  padding: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--stage-2) 92%, transparent);
+  text-align: left;
+}
+.login-note {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.login-go {
+  height: 42px;
+  margin-top: 2px;
+}
+.who {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.who-inline {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
 /* ---------- Stage ---------- */
 
 .stage {

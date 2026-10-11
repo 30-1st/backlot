@@ -21,7 +21,8 @@ import {
   saveSavePoint,
   type Account,
 } from './lib/library';
-import { pruneMedia, storeFile, uid } from './lib/media';
+import { pruneMedia, storeFiles, uid } from './lib/media';
+import { hosted } from './lib/supabase';
 import { dateTime, fromInput, plural, toInput } from './lib/format';
 import { ConfirmButton, FileButton, Icon, Logo, Segmented } from './components/ui';
 import { NarrationMenu } from './components/NarrationMenu';
@@ -89,8 +90,8 @@ export function Studio({
           point = { sandbox: open.sandbox, savedAt: Date.now() };
           await saveSavePoint(narrationId, point);
         }
-        const keep = await mediaInUse();
-        void pruneMedia(keep);
+        // Tidy up unused files in the background. Never let it block opening.
+        void mediaInUse().then(pruneMedia, () => undefined);
         if (!alive) return;
         dispatch({ type: 'load', sandbox: open.sandbox });
         setAccount(open.account);
@@ -113,19 +114,30 @@ export function Studio({
   latest.current = sandbox;
   const unsaved = useRef(false);
 
+  const retry = useRef<number | undefined>(undefined);
+
   const flush = useCallback(async () => {
     if (!unsaved.current) return;
     unsaved.current = false;
-    await saveSandbox(narrationId, latest.current).then(
-      () => setSaving(true),
-      () => setSaving(false),
-    );
+    window.clearTimeout(retry.current);
+    try {
+      await saveSandbox(narrationId, latest.current);
+      setSaving(true);
+    } catch {
+      // Keep the change and try again shortly, for example once the connection is back.
+      unsaved.current = true;
+      setSaving(false);
+      retry.current = window.setTimeout(() => void flush(), 4000);
+    }
   }, [narrationId]);
+
+  useEffect(() => () => window.clearTimeout(retry.current), []);
 
   useEffect(() => {
     if (!loaded) return;
     unsaved.current = true;
-    const t = setTimeout(() => void flush(), 250);
+    // Saving to the server is a network call, so wait a little longer between them.
+    const t = setTimeout(() => void flush(), hosted ? 700 : 250);
     return () => clearTimeout(t);
   }, [sandbox, loaded, flush]);
 
@@ -193,14 +205,16 @@ export function Studio({
   }
 
   async function addPosts(files: File[]) {
-    const items = await Promise.all(files.map(storeFile));
+    const { items, problems } = await storeFiles(files);
+    if (items.length === 0) return say(problems.join(' '));
     const stamp = Date.now();
     const posts = items.map((item, i) => newPost([item.id], { draft: true, date: stamp - i }));
     dispatch({ type: 'media', items });
     dispatch({ type: 'addPosts', posts });
     setSelection({ type: 'post', id: posts[0].id });
+    const them = posts.length === 1 ? 'it' : 'them';
     say(
-      `Added ${posts.length} ${plural(posts.length, 'draft')}. Only you can see ${posts.length === 1 ? 'it' : 'them'} until you set ${posts.length === 1 ? 'it' : 'them'} live.`,
+      [`Added ${posts.length} ${plural(posts.length, 'draft')}. Only you can see ${them} until you set ${them} live.`, ...problems].join(' '),
     );
   }
 
@@ -336,8 +350,10 @@ export function Studio({
               {!saving && (
                 <div className="notice warn" role="status">
                   <div>
-                    <strong>Changes are not being saved.</strong> This browser is blocking storage for the page, so
-                    the sandbox will reset when you close it.
+                    <strong>Changes are not being saved.</strong>{' '}
+                    {hosted
+                      ? 'Backlot cannot reach the server. Your changes are still on this screen and it will keep trying. Check your connection.'
+                      : 'This browser is blocking storage for the page, so the sandbox will reset when you close it.'}
                   </div>
                 </div>
               )}

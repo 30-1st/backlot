@@ -13,6 +13,7 @@ import {
   type Account,
 } from '../lib/library';
 import { pruneMedia } from '../lib/media';
+import { hosted } from '../lib/supabase';
 import { plural, shortDate } from '../lib/format';
 import { makeExample } from '../sample';
 import { Intake } from './Intake';
@@ -31,10 +32,15 @@ export function Accounts({
   platform,
   onHome,
   onOpen,
+  username,
+  onSignOut,
 }: {
   platform: Platform;
   onHome: () => void;
   onOpen: (narrationId: string, flash?: string) => void;
+  /** Set in the hosted build, where a creator is signed in. */
+  username?: string;
+  onSignOut?: () => void;
 }) {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [intake, setIntake] = useState(false);
@@ -98,6 +104,14 @@ export function Accounts({
           <PlatformMark platform={platform} size={14} />
           {name}
         </span>
+        {onSignOut && (
+          <div className="bar-tools who-inline">
+            <span>@{username}</span>
+            <button type="button" className="btn quiet sm" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        )}
       </header>
 
       <main className="lobby">
@@ -111,7 +125,8 @@ export function Accounts({
           {failed && (
             <div className="notice warn" role="status">
               <div>
-                <strong>Accounts cannot be saved here.</strong> This browser is blocking storage for the page.
+                <strong>{hosted ? 'Backlot cannot reach the server.' : 'Accounts cannot be saved here.'}</strong>{' '}
+                {hosted ? 'Check your connection and reload the page.' : 'This browser is blocking storage for the page.'}
               </div>
             </div>
           )}

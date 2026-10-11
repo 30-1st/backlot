@@ -18,7 +18,29 @@ function Flat({ className }: { className: string }) {
   );
 }
 
-export function Home({ onChoose }: { onChoose: (platform: Platform) => void }) {
+/** The quiet stage behind the homescreen and the sign-in screen. */
+export function Backdrop() {
+  return (
+    <div className="home-backdrop" aria-hidden="true">
+      <Flat className="wing wing-l1" />
+      <Flat className="wing wing-l2" />
+      <Flat className="wing wing-r1" />
+      <Flat className="wing wing-r2" />
+      <i className="home-pool" />
+    </div>
+  );
+}
+
+export function Home({
+  onChoose,
+  username,
+  onSignOut,
+}: {
+  onChoose: (platform: Platform) => void;
+  /** Set in the hosted build, where a creator is signed in. */
+  username?: string;
+  onSignOut?: () => void;
+}) {
   const [counts, setCounts] = useState<Partial<Record<Platform, number>>>({});
 
   useEffect(() => {
@@ -39,13 +61,16 @@ export function Home({ onChoose }: { onChoose: (platform: Platform) => void }) {
 
   return (
     <main className="home">
-      <div className="home-backdrop" aria-hidden="true">
-        <Flat className="wing wing-l1" />
-        <Flat className="wing wing-l2" />
-        <Flat className="wing wing-r1" />
-        <Flat className="wing wing-r2" />
-        <i className="home-pool" />
-      </div>
+      <Backdrop />
+
+      {onSignOut && (
+        <div className="who">
+          <span>@{username}</span>
+          <button type="button" className="btn quiet sm" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      )}
 
       <div className="home-in">
         <div className="home-logo">

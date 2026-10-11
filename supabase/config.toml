@@ -1,0 +1,8 @@
+# Both functions authorize callers in their own code, so the platform's
+# built-in JWT check is off for them. See each function's header comment.
+
+[functions.signup]
+verify_jwt = false
+
+[functions.purge-inactive]
+verify_jwt = false

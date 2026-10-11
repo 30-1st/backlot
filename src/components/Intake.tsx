@@ -1,6 +1,6 @@
 import { useMemo, useState, type DragEvent, type FormEvent } from 'react';
 import type { Sandbox } from '../types';
-import { isMediaFile, storeFile } from '../lib/media';
+import { MediaError, isMediaFile, storeFile } from '../lib/media';
 import { newPost } from '../state';
 import { FileButton, Icon, Modal, NumberInput, cx } from './ui';
 
@@ -88,9 +88,11 @@ export function Intake({
         },
         posts.length,
       );
-    } catch {
+    } catch (err) {
       setBusy(false);
-      setError('Those files could not be read. Try again with fewer or smaller files.');
+      setError(
+        err instanceof MediaError ? err.sentence : 'Those files could not be read. Try again with fewer or smaller files.',
+      );
     }
   }
 

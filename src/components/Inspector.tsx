@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Highlight, Post, PostStatus } from '../types';
 import { MAX_CAROUSEL, MAX_PINNED, patchForStatus, statusOf, useStage } from '../state';
-import { storeFile } from '../lib/media';
+import { storeFiles } from '../lib/media';
 import { dateTime, fromInput, toInput } from '../lib/format';
 import { ConfirmButton, Field, FileButton, Icon, MediaView, NumberInput, Segmented, cx } from './ui';
 
@@ -38,15 +38,16 @@ export function Inspector() {
 /* ---------- Profile ---------- */
 
 function ProfilePanel() {
-  const { sandbox, dispatch, asOf } = useStage();
+  const { sandbox, dispatch, asOf, say } = useStage();
   const { profile, media, settings, posts } = sandbox;
   const set = (patch: Partial<typeof profile>) => dispatch({ type: 'profile', patch });
   const visible = posts.filter((p) => !p.draft && p.date <= asOf).length;
 
   async function changeAvatar(files: File[]) {
-    const item = await storeFile(files[0]);
-    dispatch({ type: 'media', items: [item] });
-    set({ avatar: item.id });
+    const { items, problems } = await storeFiles(files.slice(0, 1));
+    if (items.length === 0) return say(problems.join(' '));
+    dispatch({ type: 'media', items });
+    set({ avatar: items[0].id });
   }
 
   return (
@@ -171,16 +172,21 @@ function PostPanel({ post }: { post: Post }) {
 
   async function addMedia(files: File[]) {
     const room = MAX_CAROUSEL - post.media.length;
-    const items = await Promise.all(files.slice(0, room).map(storeFile));
-    dispatch({ type: 'media', items });
-    set({ media: [...post.media, ...items.map((m) => m.id)] });
-    if (files.length > room) say(`A post holds up to ${MAX_CAROUSEL} photos or videos. Added the first ${room}.`);
+    const { items, problems } = await storeFiles(files.slice(0, room));
+    if (items.length > 0) {
+      dispatch({ type: 'media', items });
+      set({ media: [...post.media, ...items.map((m) => m.id)] });
+    }
+    const notes = [...problems];
+    if (files.length > room) notes.unshift(`A post holds up to ${MAX_CAROUSEL} photos or videos. Added the first ${room}.`);
+    if (notes.length > 0) say(notes.join(' '));
   }
 
   async function replaceMedia(files: File[]) {
-    const item = await storeFile(files[0]);
-    dispatch({ type: 'media', items: [item] });
-    set({ media: post.media.map((id, i) => (i === index ? item.id : id)) });
+    const { items, problems } = await storeFiles(files.slice(0, 1));
+    if (items.length === 0) return say(problems.join(' '));
+    dispatch({ type: 'media', items });
+    set({ media: post.media.map((id, i) => (i === index ? items[0].id : id)) });
   }
 
   function moveShot(dir: -1 | 1) {
@@ -328,14 +334,15 @@ function PostPanel({ post }: { post: Post }) {
 /* ---------- Highlight ---------- */
 
 function HighlightPanel({ highlight }: { highlight: Highlight }) {
-  const { sandbox, dispatch, select } = useStage();
+  const { sandbox, dispatch, select, say } = useStage();
   const i = sandbox.highlights.findIndex((h) => h.id === highlight.id);
   const set = (patch: Partial<Highlight>) => dispatch({ type: 'highlight', id: highlight.id, patch });
 
   async function changeCover(files: File[]) {
-    const item = await storeFile(files[0]);
-    dispatch({ type: 'media', items: [item] });
-    set({ cover: item.id });
+    const { items, problems } = await storeFiles(files.slice(0, 1));
+    if (items.length === 0) return say(problems.join(' '));
+    dispatch({ type: 'media', items });
+    set({ cover: items[0].id });
   }
 
   return (
