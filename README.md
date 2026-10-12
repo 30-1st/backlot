@@ -19,7 +19,7 @@ This is the profile-only build. There is no feed, no forecasting, and no connect
 - **Visitor view.** See the profile the way a visitor does, right now or on any date you pick.
 - **Highlights and pins.** Add, rename, reorder and re-cover highlights. Pin up to three posts.
 - **Save point and revert.** Set a save point when the profile looks right. Revert brings back exactly that.
-- **Bring in your profile.** Type the basics, add your own photos and videos, confirm they are yours, and the sandbox is built.
+- **Bring in your Instagram.** Instagram lets every account download a copy of its own profile and posts. A short drawn guide (phone or computer) shows how to get that file. Drop the .zip in and Backlot rebuilds the page from it: photo, name, bio, link, follower counts, posts, carousels, captions and dates. The file is read in the browser, and messages and the rest of the download are never opened. Typing the basics in by hand is still there too.
 - **Light and dark, tall and square.** Check the grid in both app themes and both crops.
 
 Working with other people (hosted build only):
@@ -102,6 +102,7 @@ src/
   lib/db.ts                IndexedDB wrapper
   lib/media.ts             photos and videos: upload, show, and clean up
   lib/people.ts            contacts, chats, messages and sharing
+  lib/instagramExport.ts   reads Instagram's own download and turns it into a sandbox
   lib/format.ts            counts and dates
   components/
     SignIn.tsx             sign in or create a login
@@ -111,11 +112,12 @@ src/
     ProfileSet.tsx         the profile: header, highlights, tabs, grid, drag to move
     Inspector.tsx          the editors for the profile, a post, or a highlight, as a side panel or a sheet
     PostsFeed.tsx          the scrolling list of posts that opens when one is tapped
-    Intake.tsx             "Bring in your profile"
+    Intake.tsx             "Bring in your profile": from the Instagram download, or typed in
+    ImportGuide.tsx        the drawn guide to getting the download, the review, and the copy
     People.tsx             contacts and chats
     PeopleButton.tsx       the way into People, with a count of what is waiting
     ShareDialog.tsx        who a narration is shared with, and what each person may do
     ui.tsx                 buttons, fields, icons, logo
 ```
 
-Built with React, TypeScript, Vite, dnd-kit and Supabase.
+Built with React, TypeScript, Vite, dnd-kit, zip.js and Supabase.

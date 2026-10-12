@@ -77,14 +77,17 @@ export function Accounts({
     void refresh();
   }, [refresh]);
 
-  async function build(sandbox: Sandbox, count: number) {
+  async function build(sandbox: Sandbox, count: number, notes: string[] = []) {
     try {
       const meta = await createAccount(platform, sandbox);
       onOpen(
         meta.id,
-        count
-          ? `Your account is built with ${count} ${plural(count, 'post')}. This is its save point.`
-          : 'Your account is built. Add posts to start filling the grid.',
+        [
+          count
+            ? `Your account is built with ${count} ${plural(count, 'post')}. This is its save point.`
+            : 'Your account is built. Add posts to start filling the grid.',
+          ...notes,
+        ].join(' '),
       );
     } catch {
       setIntake(false);

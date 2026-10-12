@@ -2,22 +2,27 @@ import { useMemo, useState, type DragEvent, type FormEvent } from 'react';
 import type { Sandbox } from '../types';
 import { MediaError, isMediaFile, storeFile } from '../lib/media';
 import { newPost } from '../state';
+import { hosted } from '../lib/supabase';
+import { ImportGuide } from './ImportGuide';
 import { FileButton, Icon, Modal, NumberInput, cx } from './ui';
 
 /**
- * How a creator's own profile gets onto the set: they type the basics and hand
- * over their own photos and videos. Nothing is fetched from any other service.
+ * How a creator's own profile gets onto the set. Two ways in:
+ *   - from the download Instagram gives every account holder (the default)
+ *   - typing the basics and handing over their own photos and videos
+ * Nothing is fetched from Instagram or any other service.
  */
 export function Intake({
   onBuild,
   onClose,
   onExample,
 }: {
-  onBuild: (sandbox: Sandbox, count: number) => void;
+  onBuild: (sandbox: Sandbox, count: number, notes?: string[]) => void;
   onClose: () => void;
   /** When given, offers the example profile as a quicker way in. */
   onExample?: () => void;
 }) {
+  const [mode, setMode] = useState<'download' | 'manual'>('download');
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -96,14 +101,23 @@ export function Intake({
     }
   }
 
+  if (mode === 'download') {
+    return (
+      <Modal label="Bring in your Instagram" className="intake is-guide" onClose={onClose}>
+        <ImportGuide onBuild={onBuild} onTypeInstead={() => setMode('manual')} onClose={onClose} onExample={onExample} />
+      </Modal>
+    );
+  }
+
   return (
     <Modal label="Bring in your profile" className="intake" onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <header className="intake-head">
           <h2>Bring in your profile</h2>
           <p>
-            Type in the basics and add your own photos and videos. Everything stays in this browser, and you can change
-            all of it once the set is built.
+            Type in the basics and add your own photos and videos.{' '}
+            {hosted ? 'They are copied into your Backlot account' : 'Everything stays in this browser'}, and you can
+            change all of it once the set is built.
           </p>
           <button type="button" className="btn quiet sm intake-close" onClick={onClose} aria-label="Close">
             <Icon name="close" />
@@ -196,8 +210,11 @@ export function Intake({
         </div>
 
         <footer className="intake-foot">
+          <button type="button" className="btn quiet intake-alt" onClick={() => setMode('download')}>
+            Use my Instagram download
+          </button>
           {onExample && (
-            <button type="button" className="btn quiet intake-alt" onClick={onExample}>
+            <button type="button" className="btn quiet" onClick={onExample}>
               Use the example profile instead
             </button>
           )}

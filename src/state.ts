@@ -13,7 +13,8 @@ import type {
 import { uid } from './lib/media';
 
 export const MAX_PINNED = 3;
-export const MAX_CAROUSEL = 10;
+/** Instagram allows up to 20 photos and videos in one post. */
+export const MAX_CAROUSEL = 20;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 

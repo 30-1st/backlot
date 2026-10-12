@@ -376,16 +376,19 @@ export function Studio({
     setSelection({ type: 'highlight', id });
   }
 
-  function build(next: Sandbox, count: number) {
+  function build(next: Sandbox, count: number, notes: string[] = []) {
     dispatch({ type: 'load', sandbox: next });
     setPoint(next, true);
     setIntake(false);
     setView('creator');
     setSelection(null);
     say(
-      count
-        ? `Your sandbox is built with ${count} ${plural(count, 'post')}. This is now your save point.`
-        : 'Your sandbox is built. Add posts to start filling the grid.',
+      [
+        count
+          ? `Your sandbox is built with ${count} ${plural(count, 'post')}. This is now your save point.`
+          : 'Your sandbox is built. Add posts to start filling the grid.',
+        ...notes,
+      ].join(' '),
     );
   }
 
