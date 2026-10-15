@@ -17,12 +17,12 @@
 // set, the region is found by asking each Langfuse cloud which one knows the key.
 
 import { context, ROOT_CONTEXT } from 'npm:@opentelemetry/api@^1.9.0';
-import { resourceFromAttributes } from 'npm:@opentelemetry/resources@2.11.0';
-import { NodeTracerProvider } from 'npm:@opentelemetry/sdk-trace-node@2.11.0';
-import { LangfuseSpanProcessor } from 'npm:@langfuse/otel@5.11.1';
-import { setLangfuseTracerProvider } from 'npm:@langfuse/tracing@5.11.1';
-import { LangfuseVercelAiSdkIntegration } from 'npm:@langfuse/vercel-ai-sdk@5.11.1';
-import { registerTelemetry } from 'npm:ai@7.0.126';
+import { resourceFromAttributes } from 'npm:@opentelemetry/resources@2.12.0';
+import { NodeTracerProvider } from 'npm:@opentelemetry/sdk-trace-node@2.12.0';
+import { LangfuseSpanProcessor } from 'npm:@langfuse/otel@6.0.0';
+import { setLangfuseTracerProvider } from 'npm:@langfuse/tracing@6.0.0';
+import { LangfuseVercelAiSdkIntegration } from 'npm:@langfuse/vercel-ai-sdk@6.0.0';
+import { registerTelemetry } from 'npm:ai@7.0.141';
 import { secret } from './secrets.ts';
 
 const REGIONS = [

@@ -23,14 +23,14 @@
 // the repo. To rotate it, make a new token and replace ADMIN_TOKEN_SHA256.
 // The platform JWT check is on as well.
 
-import { generateText } from 'npm:ai@7.0.126';
-import { createXai } from 'npm:@ai-sdk/xai@5.0.14';
-import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@5.11.1';
+import { generateText } from 'npm:ai@7.0.141';
+import { createXai } from 'npm:@ai-sdk/xai@5.0.22';
+import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import { ENVIRONMENT, langfuseAuth, startTracing, withTracing } from '../_shared/observability.ts';
 import { secret, secretsPresent } from '../_shared/secrets.ts';
 import { MODELS, PRICES } from '../_shared/models.ts';
 
-const ADMIN_TOKEN_SHA256 = 'c6de2175bc82d4308dc8a532aec9ee6f690a49ab9b42f649b4f114ac7bf8b864';
+const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
 /** A public account that will always exist: X's own developer account. */
 const CHECK_HANDLE = 'XDevelopers';
