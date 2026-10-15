@@ -6,3 +6,8 @@ verify_jwt = false
 
 [functions.purge-inactive]
 verify_jwt = false
+
+# Admin-only setup check. Platform JWT check stays on, and the function also
+# demands the admin token (see its header comment).
+[functions.agent-check]
+verify_jwt = true
