@@ -9,6 +9,9 @@
 // POST {"action":"names"}
 //   Lists the names of the secrets that are set (never their values).
 //
+// POST {"action":"spend"}
+//   This month's agent spending against the caps in private.spend_limits.
+//
 // POST {"action":"prices"}
 //   Saves the prices in _shared/models.ts to Langfuse as model definitions, so
 //   every traced Grok call shows its cost. Safe to repeat: it replaces by id.
@@ -28,7 +31,8 @@ import { createXai } from 'npm:@ai-sdk/xai@5.0.22';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import { ENVIRONMENT, langfuseAuth, startTracing, withTracing } from '../_shared/observability.ts';
 import { secret, secretsPresent } from '../_shared/secrets.ts';
-import { MODELS, PRICES } from '../_shared/models.ts';
+import { MODELS, PRICES, X_PRICES, grokCost, grokEstimate } from '../_shared/models.ts';
+import { Budget, SpendLimitError } from '../_shared/spend.ts';
 
 const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
@@ -60,8 +64,8 @@ async function isAdmin(token: string): Promise<boolean> {
 
 type XProfile = { username: string; name: string; followers: number; posts: number; verified: boolean };
 
-/** Tool step: one X API user lookup. */
-function lookUpXProfile(username: string): Promise<XProfile> {
+/** Tool step: one X API user lookup, metered. */
+function lookUpXProfile(budget: Budget, username: string): Promise<XProfile> {
   return startActiveObservation(
     'look-up-x-profile',
     async (tool) => {
@@ -70,10 +74,17 @@ function lookUpXProfile(username: string): Promise<XProfile> {
       if (!token) throw new Error('The X bearer token secret is not set');
       const url = new URL(`https://api.x.com/2/users/by/username/${encodeURIComponent(username)}`);
       url.searchParams.set('user.fields', 'public_metrics,verified,description,profile_image_url');
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(10_000),
-      });
+      const res = await budget.charge(
+        'x_user_lookup',
+        X_PRICES.userLookup,
+        async () => {
+          const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
+          // X bills successful reads only; a refused request is released, not charged.
+          if (!r.ok) throw new Error(`X API HTTP ${r.status}`, { cause: r });
+          return r;
+        },
+        () => X_PRICES.userLookup,
+      ).catch((err) => (err?.cause instanceof Response ? err.cause : Promise.reject(err)));
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.data) {
         const why = body?.title ?? body?.detail ?? body?.errors?.[0]?.message ?? `HTTP ${res.status}`;
@@ -95,19 +106,28 @@ function lookUpXProfile(username: string): Promise<XProfile> {
   );
 }
 
-/** Model step: one short Grok reply. The AI SDK integration records it as a generation. */
-async function askGrok(profile: XProfile): Promise<string> {
+/** Model step: one short Grok reply, metered. The AI SDK integration records it as a generation. */
+async function askGrok(budget: Budget, profile: XProfile): Promise<string> {
   const key = secret('xaiApiKey');
   if (!key) throw new Error('The xAI API key secret is not set');
   const xai = createXai({ apiKey: key });
-  const { text } = await generateText({
-    model: xai.responses(MODELS.light),
-    system: 'You are a setup check for Backlot. Reply with one short sentence and nothing else.',
-    prompt: `The X account @${profile.username} has ${profile.followers} followers. Confirm you can read this by restating the follower count.`,
-    maxOutputTokens: 200,
-    telemetry: { functionId: 'confirm-grok-reply' },
-  });
-  return text.trim();
+  const system = 'You are a setup check for Backlot. Reply with one short sentence and nothing else.';
+  const prompt = `The X account @${profile.username} has ${profile.followers} followers. Confirm you can read this by restating the follower count.`;
+  const maxOutputTokens = 200;
+  const result = await budget.charge(
+    'grok',
+    grokEstimate(MODELS.light, system.length + prompt.length, maxOutputTokens),
+    () =>
+      generateText({
+        model: xai.responses(MODELS.light),
+        system,
+        prompt,
+        maxOutputTokens,
+        telemetry: { functionId: 'confirm-grok-reply' },
+      }),
+    (r) => grokCost(MODELS.light, r.usage),
+  );
+  return result.text.trim();
 }
 
 type Step = { ok: boolean; detail: string };
@@ -115,6 +135,7 @@ type Step = { ok: boolean; detail: string };
 async function runCheck() {
   const secrets = secretsPresent();
   const langfuseBase = await startTracing();
+  const budget = new Budget('check');
 
   return await withTracing(() =>
     startActiveObservation(
@@ -134,7 +155,7 @@ async function runCheck() {
             let profile: XProfile | null = null;
 
             try {
-              profile = await lookUpXProfile(CHECK_HANDLE);
+              profile = await lookUpXProfile(budget, CHECK_HANDLE);
               steps.x = { ok: true, detail: `@${profile.username}: ${profile.followers} followers, ${profile.posts} posts` };
             } catch (err) {
               steps.x = { ok: false, detail: err instanceof Error ? err.message : String(err) };
@@ -142,6 +163,7 @@ async function runCheck() {
 
             try {
               const text = await askGrok(
+                budget,
                 profile ?? { username: CHECK_HANDLE, name: CHECK_HANDLE, followers: 0, posts: 0, verified: false },
               );
               steps.grok = { ok: true, detail: text };
@@ -160,6 +182,8 @@ async function runCheck() {
               langfuse: langfuseBase ? { ok: true, region: langfuseBase } : { ok: false, detail: 'tracing is off' },
               steps,
               traceId: getActiveTraceId() ?? null,
+              runId: budget.runId,
+              spend: await budget.summary().catch((e) => ({ error: e.message })),
             };
           },
         ),
@@ -249,6 +273,7 @@ Deno.serve(async (req) => {
   try {
     if (body.action === 'run') return reply(200, await runCheck());
     if (body.action === 'prices') return reply(200, await syncPrices());
+    if (body.action === 'spend') return reply(200, await new Budget('check').summary());
     if (body.action === 'names') {
       // Names of the secrets you added, never their values. Platform defaults are left out.
       const builtIn = /^(SUPABASE_|SB_|DENO_|DENO$|HOME$|PATH$|HOSTNAME$|PWD$|LANG$|TZ$|EDGE_|EXECUTION_ID$|VERIFY_JWT$|OTEL_|NODE_)/;
@@ -257,8 +282,9 @@ Deno.serve(async (req) => {
     if (body.action === 'trace' && typeof body.traceId === 'string' && /^[a-f0-9]{32}$/.test(body.traceId)) {
       return reply(200, await readTrace(body.traceId));
     }
-    return reply(400, { error: 'action must be "run", "names", "prices", or "trace" with a 32-character traceId' });
+    return reply(400, { error: 'action must be "run", "names", "spend", "prices", or "trace" with a 32-character traceId' });
   } catch (err) {
+    if (err instanceof SpendLimitError) return reply(402, { error: err.message, reason: err.reason });
     console.error('agent-check failed', err);
     return reply(500, { error: err instanceof Error ? err.message : 'failed' });
   }
