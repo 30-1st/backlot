@@ -36,6 +36,9 @@ import { Budget, SpendLimitError } from '../_shared/spend.ts';
 
 const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
+/** A Grok call that takes longer than this is stopped (and its estimate kept, to be safe). */
+const GROK_TIMEOUT_MS = 60_000;
+
 /** A public account that will always exist: X's own developer account. */
 const CHECK_HANDLE = 'XDevelopers';
 
@@ -84,6 +87,7 @@ function lookUpXProfile(budget: Budget, username: string): Promise<XProfile> {
           return r;
         },
         () => X_PRICES.userLookup,
+        { resource: `x_user:${username.toLowerCase()}` },
       ).catch((err) => (err?.cause instanceof Response ? err.cause : Promise.reject(err)));
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.data) {
@@ -123,6 +127,7 @@ async function askGrok(budget: Budget, profile: XProfile): Promise<string> {
         system,
         prompt,
         maxOutputTokens,
+        abortSignal: AbortSignal.timeout(GROK_TIMEOUT_MS),
         telemetry: { functionId: 'confirm-grok-reply' },
       }),
     (r) => grokCost(MODELS.light, r.usage),

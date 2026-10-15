@@ -3,7 +3,7 @@
 //   2. make the call
 //   3. settle with the real cost, or release the reservation if the call was never charged
 // The caps and the ledger live in Postgres (private.spend_limits / private.spend_ledger);
-// see migration 20261015101500_agent_spend_meter.sql.
+// see migration 20261015101119_agent_spend_meter.sql.
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.117.2';
 import { getActiveTraceId } from 'npm:@langfuse/tracing@6.0.0';
@@ -40,11 +40,29 @@ export function serviceClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-/** Errors after which the provider may already have charged us (the call reached them). */
-function mayHaveBeenCharged(err: unknown): boolean {
-  const name = err instanceof Error ? err.name : '';
-  return name === 'TimeoutError' || name === 'AbortError';
+/**
+ * True when the provider answered with an error status (e.g. X's 402, an xAI 429), which
+ * means the request was refused and not billed. Looks through wrapped errors: the AI SDK
+ * puts the status on APICallError.statusCode and wraps retries in RetryError.lastError.
+ * Anything else (a timeout, a dropped connection) may have been billed, so the caller
+ * keeps the estimate.
+ */
+export function providerRefused(err: unknown, depth = 0): boolean {
+  if (!err || typeof err !== 'object' || depth > 5) return false;
+  const e = err as { statusCode?: unknown; cause?: unknown; lastError?: unknown };
+  if (typeof e.statusCode === 'number' && e.statusCode >= 400) return true;
+  if (e.cause instanceof Response && !e.cause.ok) return true;
+  return providerRefused(e.lastError, depth + 1) || providerRefused(e.cause, depth + 1);
 }
+
+/** Extra information a paid call can attach when it settles. */
+export type ChargeOptions = {
+  /**
+   * The billed resource, e.g. 'x_user:xdevelopers'. X bills each resource once per UTC
+   * day, so a repeat read of the same resource that day settles at $0 (done in SQL).
+   */
+  resource?: string;
+};
 
 export class Budget {
   readonly runId = crypto.randomUUID();
@@ -60,13 +78,16 @@ export class Budget {
    * @param estimate  upper-bound cost in USD, reserved before the call
    * @param work      the call itself
    * @param costOf    the real cost from the result; null means "use the estimate"
+   * @param options   e.g. the resource read, for X's once-a-day billing
    */
   async charge<T>(
     kind: string,
     estimate: number,
     work: () => Promise<T>,
     costOf: (result: T) => number | null,
+    options: ChargeOptions = {},
   ): Promise<T> {
+    const base = options.resource ? { resource: options.resource } : {};
     const { data, error } = await this.db.rpc('agent_spend_reserve', {
       run: this.runId,
       agent: this.agent,
@@ -82,15 +103,18 @@ export class Budget {
     try {
       result = await work();
     } catch (err) {
-      // Not charged (e.g. the provider refused the request): release. Possibly charged
-      // (timed out mid-call): keep the estimate, the safe side.
-      await this.settle(reservation, mayHaveBeenCharged(err) ? estimate : null, {
+      // Refused by the provider: not billed, release. Anything else (timeout, dropped
+      // connection) may have been billed: keep the estimate, the safe side.
+      const refused = providerRefused(err);
+      await this.settle(reservation, refused ? null : estimate, {
+        ...base,
         failed: err instanceof Error ? err.message.slice(0, 200) : 'failed',
+        ...(refused ? {} : { estimated: true }),
       });
       throw err;
     }
     const cost = costOf(result);
-    await this.settle(reservation, cost ?? estimate, cost === null ? { estimated: true } : {});
+    await this.settle(reservation, cost ?? estimate, cost === null ? { ...base, estimated: true } : base);
     return result;
   }
 
