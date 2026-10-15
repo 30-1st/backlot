@@ -1,10 +1,13 @@
 // Setup check for Backlot's agents. Admin only.
 //
 // POST {"action":"run"}
-//   Confirms the function secrets are set (names only, never values), looks up
-//   one public X profile with X_BEARER_TOKEN, asks Grok for a one-line reply
-//   with XAI_API_KEY, and records the whole run as one Langfuse trace.
+//   Confirms the function secrets are set (never their values), looks up one
+//   public X profile with the X bearer token, asks Grok for a one-line reply
+//   with the xAI key, and records the whole run as one Langfuse trace.
 //   Replies with what passed and the trace id.
+//
+// POST {"action":"names"}
+//   Lists the names of the secrets that are set (never their values).
 //
 // POST {"action":"trace","traceId":"..."}
 //   Reads that trace back from Langfuse so it can be checked against
@@ -19,15 +22,9 @@
 import { generateText } from 'npm:ai@7.0.126';
 import { createXai } from 'npm:@ai-sdk/xai@5.0.14';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@5.11.1';
-import { ENVIRONMENT, startTracing, withTracing } from '../_shared/observability.ts';
+import { ENVIRONMENT, langfuseAuth, startTracing, withTracing } from '../_shared/observability.ts';
+import { secret, secretsPresent } from '../_shared/secrets.ts';
 import { MODELS } from '../_shared/models.ts';
-
-const SECRET_NAMES = [
-  'XAI_API_KEY',
-  'X_BEARER_TOKEN',
-  'LANGFUSE_PUBLIC_KEY',
-  'LANGFUSE_SECRET_KEY',
-] as const;
 
 const ADMIN_TOKEN_SHA256 = 'c6de2175bc82d4308dc8a532aec9ee6f690a49ab9b42f649b4f114ac7bf8b864';
 
@@ -65,8 +62,8 @@ function lookUpXProfile(username: string): Promise<XProfile> {
     'look-up-x-profile',
     async (tool) => {
       tool.update({ input: { username } });
-      const token = Deno.env.get('X_BEARER_TOKEN');
-      if (!token) throw new Error('X_BEARER_TOKEN is not set');
+      const token = secret('xBearerToken');
+      if (!token) throw new Error('The X bearer token secret is not set');
       const url = new URL(`https://api.x.com/2/users/by/username/${encodeURIComponent(username)}`);
       url.searchParams.set('user.fields', 'public_metrics,verified,description,profile_image_url');
       const res = await fetch(url, {
@@ -96,8 +93,8 @@ function lookUpXProfile(username: string): Promise<XProfile> {
 
 /** Model step: one short Grok reply. The AI SDK integration records it as a generation. */
 async function askGrok(profile: XProfile): Promise<string> {
-  const key = Deno.env.get('XAI_API_KEY');
-  if (!key) throw new Error('XAI_API_KEY is not set');
+  const key = secret('xaiApiKey');
+  if (!key) throw new Error('The xAI API key secret is not set');
   const xai = createXai({ apiKey: key });
   const { text } = await generateText({
     model: xai.responses(MODELS.light),
@@ -112,7 +109,7 @@ async function askGrok(profile: XProfile): Promise<string> {
 type Step = { ok: boolean; detail: string };
 
 async function runCheck() {
-  const secrets = Object.fromEntries(SECRET_NAMES.map((n) => [n, Boolean(Deno.env.get(n))]));
+  const secrets = secretsPresent();
   const langfuseBase = await startTracing();
 
   return await withTracing(() =>
@@ -167,44 +164,45 @@ async function runCheck() {
   );
 }
 
-/** Reads one trace back from Langfuse, trimmed to what an audit needs. */
+/**
+ * Reads one trace's observations back from Langfuse, trimmed to what an audit needs.
+ * Uses the v2 observations API; the old /traces endpoint answers 410 Gone on v4 projects.
+ */
 async function readTrace(traceId: string) {
   const base = await startTracing();
   if (!base) return { ok: false, detail: 'tracing is off' };
-  const auth = 'Basic ' + btoa(`${Deno.env.get('LANGFUSE_PUBLIC_KEY')}:${Deno.env.get('LANGFUSE_SECRET_KEY')}`);
-  const res = await fetch(`${base}/api/public/traces/${encodeURIComponent(traceId)}`, {
-    headers: { Authorization: auth },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) return { ok: false, detail: `Langfuse returned HTTP ${res.status}` };
-  const t = await res.json();
+  const auth = langfuseAuth();
+  if (!auth) return { ok: false, detail: 'Langfuse keys are not set' };
+  const url = new URL(`${base}/api/public/v2/observations`);
+  url.searchParams.set('traceId', traceId);
+  url.searchParams.set('fields', 'core,basic,io,metadata,model,usage,trace_context');
+  url.searchParams.set('fromStartTime', new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString());
+  url.searchParams.set('toStartTime', new Date(Date.now() + 60 * 1000).toISOString());
+  url.searchParams.set('limit', '100');
+  const res = await fetch(url, { headers: { Authorization: auth }, signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) {
+    const why = await res.text().catch(() => '');
+    return { ok: false, detail: `Langfuse returned HTTP ${res.status}`, body: why.slice(0, 400) };
+  }
+  const { data = [] } = await res.json();
   return {
     ok: true,
-    trace: {
-      id: t.id,
-      name: t.name,
-      userId: t.userId,
-      sessionId: t.sessionId,
-      tags: t.tags,
-      environment: t.environment,
-      release: t.release,
-      input: t.input,
-      output: t.output,
-      metadata: t.metadata,
-      totalCost: t.totalCost,
-      latency: t.latency,
-      htmlPath: t.htmlPath,
-    },
-    observations: (t.observations ?? []).map((o: Record<string, unknown>) => ({
+    count: data.length,
+    observations: data.map((o: Record<string, unknown>) => ({
       id: o.id,
       parentObservationId: o.parentObservationId,
+      isRoot: o.isRootObservation,
       type: o.type,
       name: o.name,
-      model: o.model,
+      traceName: o.traceName,
+      environment: o.environment,
+      userId: o.userId,
+      tags: o.tags,
       level: o.level,
       statusMessage: o.statusMessage,
+      model: o.model,
       usageDetails: o.usageDetails,
-      costDetails: o.costDetails,
+      totalCost: o.totalCost,
       input: o.input,
       output: o.output,
       metadata: o.metadata,
@@ -221,10 +219,15 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   try {
     if (body.action === 'run') return reply(200, await runCheck());
+    if (body.action === 'names') {
+      // Names of the secrets you added, never their values. Platform defaults are left out.
+      const builtIn = /^(SUPABASE_|SB_|DENO_|DENO$|HOME$|PATH$|HOSTNAME$|PWD$|LANG$|TZ$|EDGE_|EXECUTION_ID$|VERIFY_JWT$|OTEL_|NODE_)/;
+      return reply(200, { names: Object.keys(Deno.env.toObject()).filter((n) => !builtIn.test(n)).sort() });
+    }
     if (body.action === 'trace' && typeof body.traceId === 'string' && /^[a-f0-9]{32}$/.test(body.traceId)) {
       return reply(200, await readTrace(body.traceId));
     }
-    return reply(400, { error: 'action must be "run", or "trace" with a 32-character traceId' });
+    return reply(400, { error: 'action must be "run", "names", or "trace" with a 32-character traceId' });
   } catch (err) {
     console.error('agent-check failed', err);
     return reply(500, { error: err instanceof Error ? err.message : 'failed' });

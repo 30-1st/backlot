@@ -12,15 +12,18 @@
 // response goes back. Edge functions can be frozen right after they reply, so
 // unsent spans would otherwise be lost.
 //
-// Keys come from Supabase function secrets: LANGFUSE_PUBLIC_KEY and
-// LANGFUSE_SECRET_KEY. LANGFUSE_BASE_URL picks the data region; when it is not
+// Keys come from Supabase function secrets, read through ./secrets.ts (saved as
+// "langfuse public key" and "langfuse secret key"). LANGFUSE_BASE_URL picks the data region; when it is not
 // set, the region is found by asking each Langfuse cloud which one knows the key.
 
+import { context, ROOT_CONTEXT } from 'npm:@opentelemetry/api@^1.9.0';
+import { resourceFromAttributes } from 'npm:@opentelemetry/resources@2.11.0';
 import { NodeTracerProvider } from 'npm:@opentelemetry/sdk-trace-node@2.11.0';
 import { LangfuseSpanProcessor } from 'npm:@langfuse/otel@5.11.1';
 import { setLangfuseTracerProvider } from 'npm:@langfuse/tracing@5.11.1';
 import { LangfuseVercelAiSdkIntegration } from 'npm:@langfuse/vercel-ai-sdk@5.11.1';
 import { registerTelemetry } from 'npm:ai@7.0.126';
+import { secret } from './secrets.ts';
 
 const REGIONS = [
   'https://cloud.langfuse.com', // EU
@@ -77,6 +80,30 @@ const maskingProcessor = {
   shutdown: () => Promise.resolve(),
 };
 
+/**
+ * The AI SDK names its spans after the model ("chat grok-4.3"). Langfuse's guide asks for
+ * stable, verb-first names with the model kept in its own field, so a model change never
+ * breaks dashboards or evaluators. The agent span takes the call's functionId; the inner
+ * spans get fixed names.
+ */
+const namingProcessor = {
+  onStart() {},
+  onEnding(span: { name: string; attributes: Record<string, unknown>; updateName(name: string): unknown }) {
+    const op = span.attributes['gen_ai.operation.name'];
+    if (op === 'invoke_agent') {
+      const agent = span.attributes['gen_ai.agent.name'];
+      span.updateName(typeof agent === 'string' && agent ? agent : 'run-model');
+    } else if (op === 'agent_step') {
+      span.updateName('model-step');
+    } else if (op === 'chat' || op === 'text_completion' || op === 'generate_content') {
+      span.updateName('call-model');
+    }
+  },
+  onEnd() {},
+  forceFlush: () => Promise.resolve(),
+  shutdown: () => Promise.resolve(),
+};
+
 // ---------- setup ----------
 
 let processor: LangfuseSpanProcessor | null = null;
@@ -102,12 +129,19 @@ async function findRegion(publicKey: string, secretKey: string): Promise<string 
   return null;
 }
 
+/** Basic auth header for Langfuse's public API, or null when the keys are missing. */
+export function langfuseAuth(): string | null {
+  const publicKey = secret('langfusePublicKey');
+  const secretKey = secret('langfuseSecretKey');
+  return publicKey && secretKey ? 'Basic ' + btoa(`${publicKey}:${secretKey}`) : null;
+}
+
 /** Starts tracing once. Resolves to the Langfuse base URL, or null when tracing is off. */
 export function startTracing(): Promise<string | null> {
   if (ready) return ready;
   ready = (async () => {
-    const publicKey = Deno.env.get('LANGFUSE_PUBLIC_KEY');
-    const secretKey = Deno.env.get('LANGFUSE_SECRET_KEY');
+    const publicKey = secret('langfusePublicKey');
+    const secretKey = secret('langfuseSecretKey');
     if (!publicKey || !secretKey) {
       console.warn('Langfuse keys are not set, so tracing is off.');
       return null;
@@ -125,12 +159,17 @@ export function startTracing(): Promise<string | null> {
       release: Deno.env.get('BACKLOT_RELEASE') ?? undefined,
       mask: ({ data }) => maskDeep(data),
     });
-    // Order matters: masking runs first, so the Langfuse exporter only sees masked text.
-    const provider = new NodeTracerProvider({ spanProcessors: [maskingProcessor, processor] });
-    // Registers the async context manager, so nested observations find their parent.
+    // Order matters: naming and masking run first, so the exporter only sees the final names and masked text.
+    const provider = new NodeTracerProvider({
+      resource: resourceFromAttributes({ 'service.name': 'backlot-agents' }),
+      spanProcessors: [namingProcessor, maskingProcessor, processor],
+    });
+    // Registers the async context manager so nested observations find their parent.
+    // The Supabase runtime may already own the global tracer; then this is a no-op,
+    // which is why our tracer is also handed to Langfuse and the AI SDK directly.
     provider.register();
     setLangfuseTracerProvider(provider);
-    registerTelemetry(new LangfuseVercelAiSdkIntegration());
+    registerTelemetry(new LangfuseVercelAiSdkIntegration({ tracer: provider.getTracer('backlot-ai-sdk') }));
     return baseUrl;
   })();
   return ready;
@@ -146,11 +185,15 @@ export async function flushTraces(): Promise<void> {
   }
 }
 
-/** Runs agent work with tracing ready before it and flushed after it, even when it throws. */
+/**
+ * Runs agent work with tracing ready before it and flushed after it, even when it throws.
+ * The work starts from an empty context, so each run is its own Langfuse trace and never
+ * hangs under a span the hosting runtime opened for the HTTP request.
+ */
 export async function withTracing<T>(work: () => Promise<T>): Promise<T> {
   await startTracing();
   try {
-    return await work();
+    return await context.with(ROOT_CONTEXT, work);
   } finally {
     await flushTraces();
   }
