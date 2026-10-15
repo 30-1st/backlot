@@ -9,6 +9,10 @@
 // POST {"action":"names"}
 //   Lists the names of the secrets that are set (never their values).
 //
+// POST {"action":"prices"}
+//   Saves the prices in _shared/models.ts to Langfuse as model definitions, so
+//   every traced Grok call shows its cost. Safe to repeat: it replaces by id.
+//
 // POST {"action":"trace","traceId":"..."}
 //   Reads that trace back from Langfuse so it can be checked against
 //   Langfuse's best practices without anyone handling the Langfuse keys.
@@ -24,7 +28,7 @@ import { createXai } from 'npm:@ai-sdk/xai@5.0.14';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@5.11.1';
 import { ENVIRONMENT, langfuseAuth, startTracing, withTracing } from '../_shared/observability.ts';
 import { secret, secretsPresent } from '../_shared/secrets.ts';
-import { MODELS } from '../_shared/models.ts';
+import { MODELS, PRICES } from '../_shared/models.ts';
 
 const ADMIN_TOKEN_SHA256 = 'c6de2175bc82d4308dc8a532aec9ee6f690a49ab9b42f649b4f114ac7bf8b864';
 
@@ -210,6 +214,31 @@ async function readTrace(traceId: string) {
   };
 }
 
+/** Writes each model's prices to Langfuse (PUT replaces by id, so repeating is safe). */
+async function syncPrices() {
+  const base = await startTracing();
+  const auth = langfuseAuth();
+  if (!base || !auth) return { ok: false, detail: 'Langfuse is not set up' };
+  const results: Record<string, string> = {};
+  for (const [model, prices] of Object.entries(PRICES)) {
+    const id = `backlot-${model.replace(/[^a-z0-9]+/gi, '-')}`;
+    const res = await fetch(`${base}/api/public/models/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({
+        modelName: model,
+        matchPattern: `(?i)^${model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+        unit: 'TOKENS',
+        pricingTiers: [{ name: 'Standard', isDefault: true, priority: 0, conditions: [], prices }],
+      }),
+    });
+    const text = await res.text().catch(() => '');
+    results[model] = res.ok ? 'saved' : `HTTP ${res.status}: ${text.slice(0, 300)}`;
+  }
+  return { ok: Object.values(results).every((r) => r === 'saved'), results };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply(405, { error: 'POST only' });
@@ -219,6 +248,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   try {
     if (body.action === 'run') return reply(200, await runCheck());
+    if (body.action === 'prices') return reply(200, await syncPrices());
     if (body.action === 'names') {
       // Names of the secrets you added, never their values. Platform defaults are left out.
       const builtIn = /^(SUPABASE_|SB_|DENO_|DENO$|HOME$|PATH$|HOSTNAME$|PWD$|LANG$|TZ$|EDGE_|EXECUTION_ID$|VERIFY_JWT$|OTEL_|NODE_)/;
@@ -227,7 +257,7 @@ Deno.serve(async (req) => {
     if (body.action === 'trace' && typeof body.traceId === 'string' && /^[a-f0-9]{32}$/.test(body.traceId)) {
       return reply(200, await readTrace(body.traceId));
     }
-    return reply(400, { error: 'action must be "run", "names", or "trace" with a 32-character traceId' });
+    return reply(400, { error: 'action must be "run", "names", "prices", or "trace" with a 32-character traceId' });
   } catch (err) {
     console.error('agent-check failed', err);
     return reply(500, { error: err instanceof Error ? err.message : 'failed' });
