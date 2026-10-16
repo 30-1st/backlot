@@ -69,11 +69,47 @@ export const TOOLS = {
   ),
 
   algorithm_search: tool(
-    'Search the indexed xai-org/x-algorithm code and the parsed weights table.',
+    'Search X\'s open-source ranking code (xai-org/x-algorithm) by keyword and meaning. Every hit links to the exact lines at the indexed snapshot. Free.',
     z.object({ question: shortText(300), limit: z.number().int().min(1).max(10) }),
     z.object({
-      repoCommit: z.string().regex(/^[0-9a-f]{7,40}$/),
-      hits: z.array(z.object({ file: shortText(200), excerpt: text(1500), source: Citation })).max(10),
+      repo: z.literal('xai-org/x-algorithm'),
+      license: z.literal('Apache-2.0'),
+      repoCommit: z.string().regex(/^[0-9a-f]{40}$/),
+      snapshotDate: isoDateTime.nullable(),
+      indexedAt: isoDateTime.nullable(),
+      search: z.enum(['keyword_and_meaning', 'keyword_only']).describe('keyword_only when the embedding check failed; say so when citing.'),
+      hits: z
+        .array(
+          z.object({
+            file: shortText(400),
+            lines: z.object({ start: z.number().int().min(1), end: z.number().int().min(1) }),
+            excerpt: text(1500),
+            source: Citation,
+          }),
+        )
+        .max(10),
+    }),
+  ),
+
+  algorithm_params: tool(
+    'Exact published DEFAULT settings from home-mixer/params/param.rs (e.g. FavoriteWeight), with change history. Defaults, not live values: X can change live values with feature switches. Free.',
+    z.object({
+      names: z.array(z.string().regex(/^[A-Za-z0-9_]{1,100}$/)).max(40).optional(),
+      contains: z.string().regex(/^[A-Za-z0-9_]{1,60}$/).optional().describe('Part of a setting name, e.g. "Weight".'),
+      limit: z.number().int().min(1).max(200),
+    }),
+    z.object({
+      note: shortText(300),
+      repo: z.literal('xai-org/x-algorithm'),
+      license: z.literal('Apache-2.0'),
+      repoCommit: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+      defaultsSyncedAt: isoDateTime.nullable(),
+      params: z
+        .array(z.object({ name: shortText(100), type: shortText(60), value: z.string().max(2000), number: z.number().optional(), source: Citation }))
+        .max(200),
+      changes: z
+        .array(z.object({ name: shortText(100), from: z.string().max(2000).nullable(), to: z.string().max(2000).nullable(), changedAt: isoDateTime, source: Citation }))
+        .max(50),
     }),
   ),
 

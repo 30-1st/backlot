@@ -11,3 +11,7 @@ verify_jwt = false
 # demands the admin token (see its header comment).
 [functions.agent-check]
 verify_jwt = true
+
+[functions.algo-ingest]
+# GitHub Actions identity tokens are not Supabase logins; the function verifies them itself.
+verify_jwt = false

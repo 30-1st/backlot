@@ -18,6 +18,7 @@ import { nicheKey, ReinBrief, type StoredEvidence } from './schemas/rein.ts';
 import { Campaign } from './schemas/bil.ts';
 import { TOOLS, type ToolName } from './schemas/tools.ts';
 import { X_PRICES } from './models.ts';
+import { algorithmParams, algorithmSearch } from './algorithm.ts';
 import { secret } from './secrets.ts';
 import { type Budget, serviceClient } from './spend.ts';
 
@@ -241,6 +242,14 @@ export const impl = {
     return { campaignId: campaign.campaignId, saved: true };
   },
 
+  async algorithm_search(_ctx: ToolContext, { question, limit }: In<'algorithm_search'>): Promise<Out<'algorithm_search'>> {
+    return await algorithmSearch(question, limit) as Out<'algorithm_search'>;
+  },
+
+  async algorithm_params(_ctx: ToolContext, input: In<'algorithm_params'>): Promise<Out<'algorithm_params'>> {
+    return await algorithmParams(input) as Out<'algorithm_params'>;
+  },
+
   async cost_meter(ctx: ToolContext): Promise<Out<'cost_meter'>> {
     const s: any = await ctx.budget.summary();
     return {
@@ -308,7 +317,7 @@ export function agentTools(ctx: ToolContext, names: readonly ImplementedTool[]):
 /** Which tools each agent may call. */
 export const AGENT_TOOLS = {
   rein: ['x_post_search', 'save_brief', 'cost_meter'],
-  bil: ['brand_kit', 'x_profile_lookup', 'write_campaign', 'cost_meter'],
+  bil: ['brand_kit', 'x_profile_lookup', 'algorithm_search', 'algorithm_params', 'write_campaign', 'cost_meter'],
   onboard: ['client_posts_read', 'brand_kit'],
 } as const satisfies Record<string, readonly ImplementedTool[]>;
 

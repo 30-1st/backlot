@@ -20,6 +20,9 @@
 //   Live check of the toolbox on real public data (about $0.08): one profile lookup,
 //   one 10-post search, and one Grok call mixing X Search with our own tool.
 //
+// POST {"action":"algorithm","questions":["..."]}
+//   Free check of the algorithm index: status, default weights, top hits per question.
+//
 // POST {"action":"trace","traceId":"..."}
 //   Reads that trace back from Langfuse so it can be checked against
 //   Langfuse's best practices without anyone handling the Langfuse keys.
@@ -39,6 +42,7 @@ import { MODELS, PRICES, X_PRICES, grokBilled, grokCost, grokEstimate } from '..
 import { Budget, SpendLimitError } from '../_shared/spend.ts';
 import { grokOptions, xaiClient } from '../_shared/grok.ts';
 import { agentTools, impl, type ToolContext } from '../_shared/toolbox.ts';
+import { indexStatus } from '../_shared/algorithm.ts';
 
 const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
@@ -299,6 +303,28 @@ async function runToolboxCheck() {
 }
 
 /**
+ * Checks the algorithm index (free): its status, the published default weights against
+ * param.rs, and the top hits for real questions Bil will ask.
+ */
+async function runAlgorithmCheck(questions: string[]) {
+  const ctx: ToolContext = { budget: new Budget('check') };
+  const status = await indexStatus();
+  const weights = await impl.algorithm_params(ctx, { contains: 'Weight', limit: 60 });
+  const answers: Record<string, unknown> = {};
+  for (const q of questions) {
+    const r = await impl.algorithm_search(ctx, { question: q, limit: 5 });
+    answers[q] = { search: r.search, hits: r.hits.map((h) => `${h.file}:${h.lines.start}-${h.lines.end}`) };
+  }
+  return {
+    status,
+    weights: weights.params.map((p) => `${p.name}=${p.value} (${p.source.label})`),
+    changes: weights.changes.length,
+    defaultsSyncedAt: weights.defaultsSyncedAt,
+    answers,
+  };
+}
+
+/**
  * Reads one trace's observations back from Langfuse, trimmed to what an audit needs.
  * Uses the v2 observations API; the old /traces endpoint answers 410 Gone on v4 projects.
  */
@@ -379,6 +405,10 @@ Deno.serve(async (req) => {
   try {
     if (body.action === 'run') return reply(200, await runCheck());
     if (body.action === 'toolbox') return reply(200, await runToolboxCheck());
+    if (body.action === 'algorithm') {
+      const qs = Array.isArray(body.questions) ? body.questions.filter((q: unknown) => typeof q === 'string').slice(0, 5) : [];
+      return reply(200, await runAlgorithmCheck(qs));
+    }
     if (body.action === 'prices') return reply(200, await syncPrices());
     if (body.action === 'spend') return reply(200, await new Budget('check').summary());
     if (body.action === 'names') {
