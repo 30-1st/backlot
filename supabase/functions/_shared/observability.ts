@@ -22,7 +22,7 @@ import { NodeTracerProvider } from 'npm:@opentelemetry/sdk-trace-node@2.12.0';
 import { LangfuseSpanProcessor } from 'npm:@langfuse/otel@6.0.0';
 import { setLangfuseTracerProvider } from 'npm:@langfuse/tracing@6.0.0';
 import { LangfuseVercelAiSdkIntegration } from 'npm:@langfuse/vercel-ai-sdk@6.0.0';
-import { registerTelemetry } from 'npm:ai@7.0.141';
+import { registerTelemetry } from 'npm:ai@7.0.142';
 import { secret } from './secrets.ts';
 
 const REGIONS = [

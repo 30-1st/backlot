@@ -3,8 +3,17 @@
 // and https://docs.x.ai/developers/pricing.md before changing.
 
 export const MODELS = {
-  /** Cheap, fast model for small jobs and setup checks. */
+  /** Cheap, fast model for Rein's trend work and setup checks. */
   light: 'grok-4.3',
+  /** xAI's most capable model (per its models page, 2026-10-16), for Bil's strategy and drafting. */
+  strong: 'grok-4.7',
+} as const;
+
+/** Which model each agent runs on. */
+export const AGENT_MODELS = {
+  rein: MODELS.light,
+  bil: MODELS.strong,
+  check: MODELS.light,
 } as const;
 
 /**
@@ -12,7 +21,8 @@ export const MODELS = {
  * (its schema: "Prices are in USD per unit (e.g., per token)").
  * Keys must match the usage keys Langfuse records for these calls exactly:
  * "input" (uncached input), "input_cached_tokens", and "output" (includes reasoning).
- * Source: xAI pricing page, checked 2026-10-15.
+ * These are the rates for prompts under 200k tokens; longer prompts cost double and are
+ * not used by Backlot. Source: xAI models page, checked 2026-10-16.
  */
 export const PRICES: Record<string, { input: number; input_cached_tokens: number; output: number }> = {
   'grok-4.3': {
@@ -20,14 +30,25 @@ export const PRICES: Record<string, { input: number; input_cached_tokens: number
     input_cached_tokens: 0.0000002, // $0.20 per million
     output: 0.0000025, // $2.50 per million
   },
+  'grok-4.7': {
+    input: 0.000002, // $2.00 per million
+    input_cached_tokens: 0.0000005, // $0.50 per million
+    output: 0.000006, // $6.00 per million
+  },
 };
 
 /**
  * X API prices in US dollars per item, pay-per-use plan.
- * userLookup: the X developer console billed $0.01 for one user lookup on 2026-10-15.
+ * Source: https://docs.x.com/x-api/getting-started/pricing, checked 2026-10-16. A resource
+ * already billed in the same UTC day is not billed again.
+ * userLookup: per user returned (the console billed $0.01 for one lookup on 2026-10-15).
+ * postRead: per post returned, read with Backlot's app token.
+ * ownedPostRead: per post when a client reads their own timeline with their own login.
  */
 export const X_PRICES = {
   userLookup: 0.01,
+  postRead: 0.005,
+  ownedPostRead: 0.001,
 } as const;
 
 /** Token counts as the AI SDK reports them (`result.usage`). */

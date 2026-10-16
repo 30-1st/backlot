@@ -5,7 +5,7 @@
 // The caps and the ledger live in Postgres (private.spend_limits / private.spend_ledger);
 // see migration 20261015101119_agent_spend_meter.sql.
 
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.117.2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { getActiveTraceId } from 'npm:@langfuse/tracing@6.0.0';
 
 export type AgentName = 'rein' | 'bil' | 'check';

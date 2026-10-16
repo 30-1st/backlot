@@ -6,7 +6,7 @@
 // which only server-side code can read. The platform's JWT check is off
 // because the scheduler has no user session.
 
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.117.2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 const IDLE_DAYS = 60;
 const BATCH = 200;

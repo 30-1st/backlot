@@ -8,7 +8,7 @@
 // JWT check is off and the function guards itself: strict input rules and a cap
 // on sign-ups per network address.
 
-import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 const USERNAME = /^[a-z0-9._]{3,24}$/;
