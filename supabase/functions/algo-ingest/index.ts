@@ -37,6 +37,8 @@ const ALLOWED_EVENTS = new Set(['schedule', 'push', 'workflow_dispatch']);
 const MAX_REMOVE_SHARE = 0.3;
 /** param.rs holds 187 settings today; fewer than this means the parser broke. */
 const MIN_PARAMS = 100;
+/** Hard cap on stored pieces (~8,000 expected); protects the database from a broken chunker. */
+const MAX_TOTAL_CHUNKS = 40_000;
 /** Vectors match when the job's and Supabase's embeddings of the same text agree this closely. */
 const MATCH_THRESHOLD = 0.99;
 
@@ -70,7 +72,13 @@ const Begin = z.object({
   commit: sha40,
   commitDate: z.string().datetime({ offset: true }),
   files: z.array(z.object({ path, sha: sha40 })).min(1).max(5000),
-  model: z.object({ repo: z.string().max(200), revision: z.string().max(100), file: z.string().max(200), probeCosine: z.number() }),
+  model: z.object({
+    repo: z.string().max(200),
+    revision: z.string().max(100),
+    file: z.string().max(200),
+    chunker: z.number().int().min(1),
+    probeCosine: z.number(),
+  }),
 });
 
 const Chunk = z.object({
@@ -160,8 +168,11 @@ async function begin(body: z.infer<typeof Begin>) {
     if (delErr) throw new Error(delErr.message);
   }
 
+  // The model and the chunker version are stored together (model_file "onnx/model.onnx#chunker2"):
+  // a change to either means every file is re-cut and re-embedded.
+  const modelKey = `${body.model.file}#chunker${body.model.chunker}`;
   const modelChanged = Boolean(current.model_file) &&
-    (current.model_repo !== body.model.repo || current.model_revision !== body.model.revision || current.model_file !== body.model.file);
+    (current.model_repo !== body.model.repo || current.model_revision !== body.model.revision || current.model_file !== modelKey);
   const byPath = new Map((stored ?? []).map((f) => [f.path, f]));
   const toIndex = body.files
     .filter((f) => {
@@ -176,7 +187,7 @@ async function begin(body: z.infer<typeof Begin>) {
     started_at: new Date().toISOString(),
     model_repo: body.model.repo,
     model_revision: body.model.revision,
-    model_file: body.model.file,
+    model_file: modelKey,
     probe_cosine: body.model.probeCosine,
     // Meaning search stays off while vectors from two different models could be mixed.
     ...(modelChanged ? { semantic_ok: false } : {}),
@@ -187,6 +198,12 @@ async function begin(body: z.infer<typeof Begin>) {
 
 async function chunks(body: z.infer<typeof Chunks>) {
   const d = db();
+  const incoming = body.files.reduce((n, f) => n + f.chunks.length, 0);
+  const { count: stored, error: countErr } = await d.from('algo_chunks').select('id', { count: 'exact', head: true });
+  if (countErr) throw new Error(countErr.message);
+  if ((stored ?? 0) + incoming > MAX_TOTAL_CHUNKS) {
+    return { refused: true, detail: `Storing ${incoming} more pieces would pass the ${MAX_TOTAL_CHUNKS} cap (${stored} stored). Nothing was stored.` };
+  }
   let pieces = 0;
   for (const f of body.files) {
     if (f.part === 0) {
@@ -226,7 +243,7 @@ async function chunks(body: z.infer<typeof Chunks>) {
       if (error) throw new Error(`${f.path}: ${error.message}`);
     }
   }
-  return { stored: pieces };
+  return { refused: false, stored: pieces };
 }
 
 async function params(body: z.infer<typeof Params>) {
@@ -335,8 +352,10 @@ Deno.serve(async (req) => {
         const r = await begin(Begin.parse(raw));
         return json(r.refused ? 409 : 200, r);
       }
-      case 'chunks':
-        return json(200, await chunks(Chunks.parse(raw)));
+      case 'chunks': {
+        const r = await chunks(Chunks.parse(raw));
+        return json(r.refused ? 409 : 200, r);
+      }
       case 'params': {
         const r = await params(Params.parse(raw));
         return json(r.refused ? 409 : 200, r);

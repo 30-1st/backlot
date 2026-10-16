@@ -86,6 +86,10 @@ EXCLUDE_PATH = re.compile(
 )
 GENERATED_MARKER = "auto-generated code should have checked"
 MAX_FILE_BYTES = 600_000
+# Safety cap: the selection makes ~8,000 pieces. Far more means the chunker broke; stop before uploading.
+MAX_TOTAL_CHUNKS = 30_000
+# Bump when chunking changes, so every file is re-cut and re-embedded on the next run.
+CHUNKER_VERSION = 2
 
 PARAMS_FILE = "home-mixer/params/param.rs"
 PARAM_RE = re.compile(r'param!\(\s*([A-Za-z0-9_]+)\s*,\s*([^,]+?)\s*,\s*"([^"]+)"\s*,\s*(.+?)\s*\);', re.S)
@@ -218,7 +222,11 @@ class Embedder:
         self.tokenizer = Tokenizer.from_file(tok_path)
         self.tokenizer.enable_truncation(max_length=512)
         self.tokenizer.enable_padding()
+        # tokenizer.json ships with its own padding and truncation settings; counting must see
+        # each line's real length, so both are switched off on the counting copy.
         self.counter_tokenizer = Tokenizer.from_file(tok_path)
+        self.counter_tokenizer.no_padding()
+        self.counter_tokenizer.no_truncation()
         self.session = ort.InferenceSession(
             hf_hub_download(MODEL_REPO, model_file, revision=revision), providers=["CPUExecutionProvider"]
         )
@@ -339,7 +347,7 @@ def run(repo: str, dry_run: bool) -> dict:
         "commit": commit,
         "commitDate": commit_date,
         "files": [{"path": f.path, "sha": f.sha} for f in files],
-        "model": {"repo": MODEL_REPO, "revision": revision, "file": model_file, "probeCosine": probe_cosine},
+        "model": {"repo": MODEL_REPO, "revision": revision, "file": model_file, "chunker": CHUNKER_VERSION, "probeCosine": probe_cosine},
     }, allow=(409,))
     if status == 409:
         raise RuntimeError(begun.get("detail", "begin refused"))
@@ -354,12 +362,22 @@ def run(repo: str, dry_run: bool) -> dict:
     def flush():
         nonlocal batch, batch_size
         if batch:
-            ingest.call({"action": "chunks", "commit": commit, "files": batch})
+            code, res = ingest.call({"action": "chunks", "commit": commit, "files": batch}, allow=(409,))
+            if code == 409:
+                raise RuntimeError(res.get("detail", "chunks refused"))
             batch, batch_size = [], 0
 
+    # Cut every changed file first, so a broken chunker is caught before anything uploads.
+    planned: list[tuple[str, list[dict]]] = []
     for path in sorted(to_index):
         with open(os.path.join(repo, path), encoding="utf-8", errors="replace") as fh:
-            chunks = chunk_file(path, fh.read(), counter)
+            planned.append((path, chunk_file(path, fh.read(), counter)))
+    total = sum(len(c) for _, c in planned)
+    log(f"{total} pieces planned for {len(planned)} files")
+    if total > MAX_TOTAL_CHUNKS:
+        raise RuntimeError(f"{total} pieces planned, over the {MAX_TOTAL_CHUNKS} safety cap. Not uploading.")
+
+    for path, chunks in planned:
         vecs = embedder.embed([c["embedText"] for c in chunks]) if chunks else []
         payload = [
             {"start": c["start"], "end": c["end"], "content": c["content"], "searchText": c["searchText"], "embedding": b64(v)}
@@ -374,7 +392,7 @@ def run(repo: str, dry_run: bool) -> dict:
         sent_files += 1
         sent_chunks += len(payload)
         if sent_files % 100 == 0:
-            log(f"... {sent_files}/{len(to_index)} files, {sent_chunks} pieces")
+            log(f"... {sent_files}/{len(planned)} files, {sent_chunks} pieces")
     flush()
 
     status, stored = ingest.call(
