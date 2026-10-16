@@ -16,6 +16,10 @@
 //   Saves the prices in _shared/models.ts to Langfuse as model definitions, so
 //   every traced Grok call shows its cost. Safe to repeat: it replaces by id.
 //
+// POST {"action":"toolbox"}
+//   Live check of the toolbox on real public data (about $0.08): one profile lookup,
+//   one 10-post search, and one Grok call mixing X Search with our own tool.
+//
 // POST {"action":"trace","traceId":"..."}
 //   Reads that trace back from Langfuse so it can be checked against
 //   Langfuse's best practices without anyone handling the Langfuse keys.
@@ -26,13 +30,15 @@
 // the repo. To rotate it, make a new token and replace ADMIN_TOKEN_SHA256.
 // The platform JWT check is on as well.
 
-import { generateText } from 'npm:ai@7.0.142';
+import { generateText, stepCountIs } from 'npm:ai@7.0.142';
 import { createXai } from 'npm:@ai-sdk/xai@5.0.23';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import { ENVIRONMENT, langfuseAuth, startTracing, withTracing } from '../_shared/observability.ts';
 import { secret, secretsPresent } from '../_shared/secrets.ts';
-import { MODELS, PRICES, X_PRICES, grokCost, grokEstimate } from '../_shared/models.ts';
+import { MODELS, PRICES, X_PRICES, grokBilled, grokCost, grokEstimate } from '../_shared/models.ts';
 import { Budget, SpendLimitError } from '../_shared/spend.ts';
+import { grokOptions, xaiClient } from '../_shared/grok.ts';
+import { agentTools, impl, type ToolContext } from '../_shared/toolbox.ts';
 
 const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
@@ -127,10 +133,11 @@ async function askGrok(budget: Budget, profile: XProfile): Promise<string> {
         system,
         prompt,
         maxOutputTokens,
+        providerOptions: grokOptions('check', 'none'),
         abortSignal: AbortSignal.timeout(GROK_TIMEOUT_MS),
         telemetry: { functionId: 'confirm-grok-reply' },
       }),
-    (r) => grokCost(MODELS.light, r.usage),
+    (r) => grokBilled(r) ?? grokCost(MODELS.light, r.usage),
   );
   return result.text.trim();
 }
@@ -189,6 +196,100 @@ async function runCheck() {
               traceId: getActiveTraceId() ?? null,
               runId: budget.runId,
               spend: await budget.summary().catch((e) => ({ error: e.message })),
+            };
+          },
+        ),
+      { asType: 'agent' },
+    )
+  );
+}
+
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Live check of the toolbox, on real public data only (about $0.08):
+ *   1. one X profile lookup through the toolbox (check budget)
+ *   2. one 10-post topic search through the toolbox (rein budget)
+ *   3. one Grok call that mixes Grok's own X Search with one of our function tools in
+ *      the same request, to settle the conflict between xAI's docs (allowed) and the
+ *      AI SDK docs (not allowed). Billed cost comes from xAI's own report.
+ */
+async function runToolboxCheck() {
+  await startTracing();
+  const checkBudget = new Budget('check');
+  const reinBudget = new Budget('rein');
+  const ctx: ToolContext = { budget: reinBudget };
+
+  return await withTracing(() =>
+    startActiveObservation(
+      'check-toolbox',
+      (root) =>
+        propagateAttributes(
+          { traceName: 'check-toolbox', userId: 'backlot-admin', tags: ['setup-check', 'toolbox'], environment: ENVIRONMENT },
+          async () => {
+            const steps: Record<string, unknown> = {};
+
+            try {
+              const p = await impl.x_profile_lookup({ budget: checkBudget }, { handle: CHECK_HANDLE });
+              steps.profileLookup = { ok: true, handle: p.handle, userId: p.userId, followers: p.followers };
+            } catch (err) {
+              steps.profileLookup = { ok: false, detail: errText(err) };
+            }
+
+            try {
+              const r = await impl.x_post_search(ctx, { query: 'AI agents', maxPosts: 10 });
+              steps.postSearch = { ok: true, returned: r.posts.length, sample: r.posts.slice(0, 2) };
+            } catch (err) {
+              steps.postSearch = { ok: false, detail: errText(err) };
+            }
+
+            try {
+              const xai = xaiClient();
+              const fromDate = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+              const prompt =
+                'Do both of these, then answer in two short lines. ' +
+                '1) Call the cost_meter tool and report monthUsedUsd. ' +
+                `2) Use X search to find the most recent post by @${CHECK_HANDLE} and give its link.`;
+              const result = await reinBudget.charge(
+                'grok',
+                grokEstimate(MODELS.light, prompt.length + 2000, 400, 3000, 10),
+                () =>
+                  generateText({
+                    model: xai.responses(MODELS.light),
+                    prompt,
+                    maxOutputTokens: 400,
+                    tools: {
+                      x_search: xai.tools.xSearch({ allowedXHandles: [CHECK_HANDLE], fromDate }),
+                      ...agentTools(ctx, ['cost_meter']),
+                    },
+                    stopWhen: stepCountIs(4),
+                    providerOptions: grokOptions('check', 'low', { maxTurns: 2 }),
+                    abortSignal: AbortSignal.timeout(GROK_TIMEOUT_MS),
+                    telemetry: { functionId: 'check-tool-mixing' },
+                  }),
+                (r) => grokBilled(r) ?? grokCost(MODELS.light, r.usage),
+              );
+              const called = result.steps.flatMap((s) => s.toolCalls.map((c) => c.toolName));
+              steps.toolMixing = {
+                ok: called.includes('cost_meter') && called.some((n) => n === 'x_search'),
+                toolsCalled: called,
+                billedUsd: grokBilled(result),
+                tokenMathUsd: grokCost(MODELS.light, result.usage),
+                cachedInputTokens: result.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+                sources: (result.sources ?? []).slice(0, 3).map((s: any) => s.url ?? s.title ?? s.id),
+                warnings: (result.warnings ?? []).map((w: any) => w.feature ?? w.message ?? w.type),
+                answer: result.text.trim().slice(0, 400),
+              };
+            } catch (err) {
+              steps.toolMixing = { ok: false, detail: errText(err) };
+            }
+
+            root.update({ output: steps });
+            return {
+              steps,
+              traceId: getActiveTraceId() ?? null,
+              runs: { check: checkBudget.runId, rein: reinBudget.runId },
+              spend: await checkBudget.summary().catch((e) => ({ error: e.message })),
             };
           },
         ),
@@ -277,6 +378,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   try {
     if (body.action === 'run') return reply(200, await runCheck());
+    if (body.action === 'toolbox') return reply(200, await runToolboxCheck());
     if (body.action === 'prices') return reply(200, await syncPrices());
     if (body.action === 'spend') return reply(200, await new Budget('check').summary());
     if (body.action === 'names') {

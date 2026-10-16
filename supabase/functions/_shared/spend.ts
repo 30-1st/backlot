@@ -8,12 +8,16 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { getActiveTraceId } from 'npm:@langfuse/tracing@6.0.0';
 
-export type AgentName = 'rein' | 'bil' | 'check';
+/**
+ * Each name is a scope in private.spend_limits. 'campaign' covers one whole campaign
+ * (its run id is the campaign id, so the plan and every drafting batch add up).
+ */
+export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign';
 
 /** Thrown when a reservation would go over a cap. Nothing was spent. */
 export class SpendLimitError extends Error {
   constructor(
-    readonly reason: 'run' | 'month' | 'no_limit',
+    readonly reason: 'run' | 'month' | 'no_limit' | 'call',
     readonly detail: Record<string, unknown>,
   ) {
     super(
@@ -21,6 +25,8 @@ export class SpendLimitError extends Error {
         ? `Monthly agent budget reached ($${detail.used} of $${detail.cap} used)`
         : reason === 'run'
           ? `This run would go over its $${detail.cap} limit`
+          : reason === 'call'
+            ? `This call's estimate ($${detail.estimate}) is over the $${detail.cap} per-call limit`
           : String(detail.detail ?? 'No spending limit is set'),
     );
     this.name = 'SpendLimitError';
@@ -64,13 +70,27 @@ export type ChargeOptions = {
   resource?: string;
 };
 
+export type BudgetOptions = {
+  /** Continue an existing run, e.g. a campaign id shared by its plan and drafting batches. */
+  runId?: string;
+  /** Refuse any single call whose estimate is above this, in USD. */
+  perCallCap?: number;
+  db?: SupabaseClient;
+};
+
 export class Budget {
-  readonly runId = crypto.randomUUID();
+  readonly runId: string;
+  private readonly perCallCap?: number;
+  private readonly db: SupabaseClient;
 
   constructor(
     readonly agent: AgentName,
-    private readonly db: SupabaseClient = serviceClient(),
-  ) {}
+    options: BudgetOptions = {},
+  ) {
+    this.runId = options.runId ?? crypto.randomUUID();
+    this.perCallCap = options.perCallCap;
+    this.db = options.db ?? serviceClient();
+  }
 
   /**
    * Runs one paid call inside a reservation.
@@ -88,6 +108,9 @@ export class Budget {
     options: ChargeOptions = {},
   ): Promise<T> {
     const base = options.resource ? { resource: options.resource } : {};
+    if (this.perCallCap !== undefined && estimate > this.perCallCap) {
+      throw new SpendLimitError('call', { estimate, cap: this.perCallCap });
+    }
     const { data, error } = await this.db.rpc('agent_spend_reserve', {
       run: this.runId,
       agent: this.agent,

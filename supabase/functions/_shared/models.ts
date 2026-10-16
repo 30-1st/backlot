@@ -72,16 +72,55 @@ export function grokCost(model: string, usage: TokenUsage | undefined): number |
   return round8(fresh * price.input + cached * price.input_cached_tokens + output * price.output);
 }
 
+/** xAI bills in ticks: 10,000,000,000 ticks = $1 (docs.x.ai cost tracking, checked 2026-10-16). */
+const TICKS_PER_USD = 10_000_000_000;
+
+type StepWithBilling = { providerMetadata?: { xai?: { costInUsdTicks?: unknown } } };
+
+/**
+ * The exact amount xAI billed for a call, from its own cost report. It includes every
+ * token, cache discounts, and server-side tool fees such as X Search's per-post charge,
+ * across all steps of a multi-step call. Returns null when xAI did not report it, so the
+ * caller falls back to grokCost() or the estimate.
+ */
+export function grokBilled(result: { steps?: StepWithBilling[]; providerMetadata?: StepWithBilling['providerMetadata'] }): number | null {
+  const steps = result.steps?.length ? result.steps : [{ providerMetadata: result.providerMetadata }];
+  let ticks = 0;
+  let seen = false;
+  for (const step of steps) {
+    const t = step.providerMetadata?.xai?.costInUsdTicks;
+    if (typeof t === 'number' && Number.isFinite(t)) {
+      ticks += t;
+      seen = true;
+    }
+  }
+  return seen ? round8(ticks / TICKS_PER_USD) : null;
+}
+
+/** X Search charges per item fetched (docs.x.ai pricing, checked 2026-10-16). */
+export const X_SEARCH_PRICES = { post: 0.005, profile: 0.01 } as const;
+
 /**
  * Upper-bound estimate for a Grok call before it runs, used to reserve budget.
  * Grok's reasoning tokens are billed as output and are NOT limited by maxOutputTokens
  * (a 200-token cap produced 573 output tokens in testing), so a reasoning allowance is added.
- * Input is counted at one token per 3 characters, on the high side.
+ * Input is counted at one token per 3 characters, on the high side. xSearchPosts adds
+ * X Search's per-post fee for the posts the call is expected to fetch at most.
  */
-export function grokEstimate(model: string, promptChars: number, maxOutputTokens: number, reasoningAllowance = 2000): number {
+export function grokEstimate(
+  model: string,
+  promptChars: number,
+  maxOutputTokens: number,
+  reasoningAllowance = 2000,
+  xSearchPosts = 0,
+): number {
   const price = PRICES[model];
   if (!price) throw new Error(`No price on file for ${model}; add it to PRICES first`);
-  return round8(Math.ceil(promptChars / 3) * price.input + (maxOutputTokens + reasoningAllowance) * price.output);
+  return round8(
+    Math.ceil(promptChars / 3) * price.input +
+      (maxOutputTokens + reasoningAllowance) * price.output +
+      xSearchPosts * X_SEARCH_PRICES.post,
+  );
 }
 
 function round8(n: number): number {

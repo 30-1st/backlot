@@ -28,6 +28,11 @@ Never write Grok code from memory. In order of preference:
 - Through the Vercel AI SDK (`ai`) with the `@ai-sdk/xai` provider, pinned to exact versions.
 - Every call runs inside a Langfuse trace using `supabase/functions/_shared/observability.ts`. See the `langfuse` skill for tracing rules.
 - Name models only in `supabase/functions/_shared/models.ts`, so a retirement means one edit.
+- Every call passes `providerOptions: grokOptions(agent, reasoning)` from `supabase/functions/_shared/grok.ts`: `store: false` (nothing kept on xAI's side), one prompt cache key per agent and knowledge version, and an explicit reasoning effort (`none` for plain tool steps, `low` for searches, `medium` for drafting, `high` for strategy).
+- Put stable text first in every prompt (instructions, knowledge), then client data, then the request, so the cached opening is as long as possible.
+- Meter every call with `grokBilled(result)` first: it sums xAI's own `costInUsdTicks` across steps, which includes X Search's per-post fee. Token math (`grokCost`) leaves that fee out and is only the fallback.
+- Calls that carry a client's own posts use `privateTelemetry(...)`, so Langfuse records timing, tokens and cost only.
+- Our own function tools and Grok's `x_search` work in the same Responses API request (verified live 2026-10-16), even though the AI SDK docs say otherwise.
 
 ## 3. Backlot's rules for anything Grok writes or reads
 

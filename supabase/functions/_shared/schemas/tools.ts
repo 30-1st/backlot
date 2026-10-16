@@ -25,6 +25,7 @@ export const TOOLS = {
     z.object({ handle }),
     z.object({
       handle,
+      userId: xPostId.describe('X user ID. Never changes, so it is saved at intake.'),
       name: shortText(100),
       bio: text(400).optional(),
       followers: z.number().int().min(0),
@@ -35,18 +36,18 @@ export const TOOLS = {
   ),
 
   x_post_search: tool(
-    'Search recent public posts on a topic. Topics only, never people. $0.005 per post returned.',
+    'Search recent public posts on a topic (last 7 days). Topics only: no from:, to: or @handles. Retweets excluded. $0.005 per post returned.',
     z.object({ query: shortText(200), maxPosts: z.number().int().min(10).max(50) }),
     z.object({ posts: z.array(PostRef.extend({ createdAt: isoDateTime, likes: z.number().int().min(0) })).max(50) }),
   ),
 
   client_posts_read: tool(
-    'Onboarding only: read up to 50 of a client\'s own recent posts to learn their voice. Text is used, then dropped; only the voice card is kept.',
-    z.object({ clientId: id, maxPosts: z.number().int().min(5).max(50) }),
+    'Onboarding only: read up to 48 of a client\'s own recent original posts (no replies or reposts) to learn their voice. Text is used, then dropped; only the voice card is kept.',
+    z.object({ clientId: id, maxPosts: z.number().int().min(5).max(48) }),
     z.object({
       clientId: id,
-      postsRead: z.number().int().min(0).max(50),
-      posts: z.array(z.object({ postId: xPostId, text: text(), createdAt: isoDateTime })).max(50),
+      postsRead: z.number().int().min(0).max(48),
+      posts: z.array(z.object({ postId: xPostId, text: text(), createdAt: isoDateTime })).max(48),
     }),
   ),
 

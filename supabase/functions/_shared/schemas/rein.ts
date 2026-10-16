@@ -37,3 +37,20 @@ export const ReinBrief = z
   });
 
 export type ReinBrief = z.infer<typeof ReinBrief>;
+
+/**
+ * Evidence as stored. Excerpts are cleared 24 hours after saving (hourly database job),
+ * so a stored excerpt may be null; the post ID stays for the official X embed.
+ */
+export const StoredEvidence = z.object({
+  trendIndex: z.number().int().min(0).max(9),
+  postId: PostRef.shape.postId,
+  excerpt: PostRef.shape.excerpt.nullable(),
+});
+
+export type StoredEvidence = z.infer<typeof StoredEvidence>;
+
+/** Turns a niche into the key briefs are shared under: lowercase, single spaces. */
+export function nicheKey(niche: string): string {
+  return niche.trim().replace(/\s+/g, ' ').toLowerCase();
+}

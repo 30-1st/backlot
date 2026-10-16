@@ -123,7 +123,7 @@ export const VoiceCard = z
       .describe('Posts the client pasted in themselves. Never text copied from X by Backlot.'),
     learnedFrom: z.object({
       intake: z.literal(true),
-      xPostsRead: z.number().int().min(0).max(50).describe('How many of the client\'s X posts Bil read at onboarding.'),
+      xPostsRead: z.number().int().min(0).max(48).describe('How many of the client\'s X posts Bil read at onboarding.'),
       clientEdits: z.number().int().min(0).describe('Client edits folded back into this card.'),
     }),
     approvedByClient: z.boolean(),

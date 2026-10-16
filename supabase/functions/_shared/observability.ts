@@ -66,11 +66,33 @@ function maskDeep(value: unknown): unknown {
  * writes prompts and replies into gen_ai.* fields, so this processor masks every
  * string field on a span while it is still open, before any exporter sees it.
  */
+/** Tools whose results carry a client's own posts. */
+const PRIVATE_TOOLS = new Set(['client_posts_read']);
+
+/**
+ * True for spans of private calls: a functionId starting "private-" (see grok.ts
+ * privateTelemetry) or a private tool. Second guard behind recordInputs/recordOutputs
+ * being off, in case a library update starts recording more.
+ */
+function isPrivateSpan(attributes: Record<string, unknown>): boolean {
+  for (const value of Object.values(attributes)) {
+    if (typeof value !== 'string') continue;
+    if (value.startsWith('private-') || PRIVATE_TOOLS.has(value)) return true;
+  }
+  return false;
+}
+
 const maskingProcessor = {
   onStart() {},
   onEnding(span: { attributes: Record<string, unknown>; setAttribute(k: string, v: string): unknown }) {
+    const hide = isPrivateSpan(span.attributes);
     for (const [key, value] of Object.entries(span.attributes)) {
       if (typeof value !== 'string') continue;
+      // On private spans, any long text (prompts, tool results, replies) is replaced whole.
+      if (hide && value.length > 120) {
+        span.setAttribute(key, '[private]');
+        continue;
+      }
       const masked = maskText(value);
       if (masked !== value) span.setAttribute(key, masked);
     }
