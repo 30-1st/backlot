@@ -11,7 +11,8 @@
 //     knowledge pack changes, so a stale cache is never reused.
 //   * reasoningEffort: 'none' for plain tool steps, 'low' for searches, 'medium' for
 //     drafting from an approved plan, 'high' for strategy. Reasoning is billed as output,
-//     so this is the biggest cost lever after caching. ('xhigh' is grok-4.6 only.)
+//     so this is the biggest cost lever after caching. grok-4.7 accepts low, medium,
+//     high and xhigh only, never 'none' (its model page, checked 2026-10-17).
 //   * Prompts must put stable text first (instructions, knowledge), then client data,
 //     then the request, so the cached opening is as long as possible.
 

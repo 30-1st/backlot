@@ -38,8 +38,8 @@ export const Licensing = z
   })
   .describe('Present only when the client is licensed.');
 
-export const ClientProfile = z
-  .object({
+/** The profile's fields without its cross-field rules, so forms can reuse a subset of them. */
+export const ClientProfileBase = z.object({
     clientId: id,
     displayName: shortText(80),
     xHandle: z.string().regex(/^[A-Za-z0-9_]{1,15}$/).describe('Without the @.'),
@@ -54,11 +54,23 @@ export const ClientProfile = z
       .min(1)
       .max(5),
     licensing: Licensing.optional(),
+    timezone: z.string().regex(/^(UTC|[A-Za-z]+(\/[A-Za-z0-9_+-]+){1,2})$/).describe('IANA time zone, e.g. "America/New_York". Posting windows use it.'),
+    language: z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/).describe('Language posts are written in, e.g. "en" or "es-MX".'),
+    xPremium: z.boolean().describe('On X Premium, so long posts are allowed. Pre-filled from the profile lookup, confirmed by the client.'),
+    postsPerWeek: z.number().int().min(1).max(35).describe('How many posts the client can really publish by hand each week.'),
+    allowedHashtags: z
+      .array(z.string().regex(/^[A-Za-z0-9_]{1,50}$/))
+      .max(15)
+      .describe('Hashtags the client is happy to use, without the #. Drafts may use only these, approved trend tags and required tags.'),
     adultContent: z.boolean().describe('Adult niche. Allowed only for adults, everyone 18+ and consenting.'),
     adultsOnlyConfirmed: z.boolean().describe('The client confirmed everyone involved is 18+ and consenting.'),
+    readConsentAt: isoDateTime
+      .optional()
+      .describe('When the person confirmed they own or manage this X account and allowed Bil to read its public posts. No read happens without it.'),
     updatedAt: isoDateTime,
-  })
-  .superRefine((p, ctx) => {
+});
+
+export const ClientProfile = ClientProfileBase.superRefine((p, ctx) => {
     if (p.adultContent && !p.adultsOnlyConfirmed) {
       ctx.addIssue({
         code: 'custom',

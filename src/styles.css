@@ -3001,3 +3001,143 @@ button.ncard:hover {
     transition: none !important;
   }
 }
+
+/* ---------- Bil test page (#bil) ---------- */
+
+.lab {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 16px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.lab-title {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.lab-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--stage-2);
+}
+.lab-card h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.lab-card h3 {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.lab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.lab-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.lab-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.lab-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.lab-check input {
+  margin-top: 3px;
+}
+.lab-note {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.lab-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+.lab-dl dt {
+  color: var(--ink-3);
+}
+.lab-dl dd {
+  margin: 0;
+}
+.lab-list,
+.lab-campaigns,
+.lab-posts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.lab-campaign {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 8px;
+}
+.lab-campaign-head {
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  white-space: normal;
+  text-align: left;
+}
+.lab-campaign-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+.lab-campaign-body p {
+  margin: 0;
+}
+.lab-post {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--stage);
+}
+.lab-post.blocked {
+  outline: 1px solid var(--danger);
+}
+.lab-post-head {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.lab-draft {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .lab-dl {
+    grid-template-columns: 1fr;
+  }
+}

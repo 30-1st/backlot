@@ -4,9 +4,10 @@
 //   * No tool can post, reply, like, follow or send messages. Only GET calls reach X.
 //   * Paid tools run inside the caller's Budget (reserve, call, settle).
 //   * Inputs and outputs are checked against the shapes in ./schemas/tools.ts.
-//   * Client data is read and written with the signed-in user's own login (userDb), so
-//     the database's access rules decide what is visible. The service key is used only
-//     for shared niche briefs (public topics) and the spend meter.
+//   * Client data is READ with the signed-in user's own login (userDb), so the database's
+//     access rules decide what is visible. Users cannot write client data directly; the
+//     server writes it with the service key, always scoped to the owner ID taken from the
+//     verified login and only after reading the row through that login.
 //
 // The same implementations can later be offered through an MCP endpoint (phase 5).
 
@@ -160,7 +161,8 @@ export const impl = {
       // Paid once per client ever: X user IDs never change.
       const profile = await impl.x_profile_lookup(ctx, { handle: client.x_handle });
       userId = profile.userId;
-      const { error: saveError } = await userDb.from('clients').update({ x_user_id: userId }).eq('id', clientId);
+      // Users can only read client rows; the server writes them, scoped to the verified owner.
+      const { error: saveError } = await serviceClient().from('clients').update({ x_user_id: userId }).eq('id', clientId).eq('owner_id', ctx.ownerId!);
       if (saveError) console.error('Could not save the X user ID', saveError.message);
     }
 
@@ -168,7 +170,8 @@ export const impl = {
     url.searchParams.set('max_results', String(maxPosts));
     // Original posts only: replies are written to someone else, reposts are someone else's words.
     url.searchParams.set('exclude', 'replies,retweets');
-    url.searchParams.set('tweet.fields', 'created_at');
+    // note_tweet carries the full text of long posts; plain text stops at 280 characters.
+    url.searchParams.set('tweet.fields', 'created_at,note_tweet');
     const body = await xGet(
       ctx.budget,
       'x_client_posts',
@@ -178,6 +181,7 @@ export const impl = {
       `x_timeline:${userId}`,
     );
     const posts = (body.data ?? [])
+      .map((p: any) => ({ ...p, text: typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text }))
       .filter((p: any) => typeof p.text === 'string' && p.text.trim())
       .slice(0, maxPosts)
       .map((p: any) => ({ postId: p.id, text: p.text.slice(0, 2048), createdAt: p.created_at }));
@@ -230,9 +234,14 @@ export const impl = {
 
   async write_campaign(ctx: ToolContext, campaign: In<'write_campaign'>): Promise<Out<'write_campaign'>> {
     const { userDb, ownerId } = needUser(ctx);
+    // The client must belong to this login (read through its own access rules) before the
+    // server writes for it: users can read campaigns but not write them directly.
+    const { data: owned, error: ownError } = await userDb.from('clients').select('id').eq('id', campaign.clientId).maybeSingle();
+    if (ownError) throw new Error(`Could not read the client: ${ownError.message}`);
+    if (!owned) throw new Error('No such client on this account');
     // approved and blocked carry over; a draft or one waiting on the client is ready for review.
     const status = campaign.approval.status === 'approved' || campaign.approval.status === 'blocked' ? campaign.approval.status : 'ready';
-    const { error } = await userDb.from('campaigns').upsert({
+    const { error } = await serviceClient().from('campaigns').upsert({
       id: campaign.campaignId,
       client_id: campaign.clientId,
       owner_id: ownerId,

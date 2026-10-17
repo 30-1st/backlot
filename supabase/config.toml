@@ -19,3 +19,12 @@ verify_jwt = false
 [functions.rein]
 # Called only by Backlot's server code with a server key (not a JWT); the function checks the key itself.
 verify_jwt = false
+
+[functions.bil]
+# The app's door to Bil. Off so the browser's CORS preflight (no login) can be answered;
+# the function verifies the login itself on every POST.
+verify_jwt = false
+
+[functions.bil-worker]
+# Called by pg_cron and the bil function with the worker token from internal_config.
+verify_jwt = false

@@ -36,6 +36,7 @@ Never write Grok code from memory. In order of preference:
 - A fixed-shape answer (`output: Output.object(...)`) works together with `x_search` on grok-4.3 (verified live 2026-10-17). Keep the schema Grok fills small and loose; code adds IDs and times and checks the full shape.
 - Pass `include: { responseBody: true }` when you need xAI's raw reply: the AI SDK drops it otherwise. It holds `usage.server_side_tool_usage_details.x_posts_fetched` and `x_users_fetched`, the exact X Search counts behind the fee.
 - Verify any post ID Grok returns against the search's own citations before keeping it. Never trust IDs from Grok's answer text alone.
+- grok-4.7 accepts reasoning effort low, medium, high or xhigh (default high) and never `none` (its model page, 2026-10-17). Bil's steps use medium and drop one level on a retry.
 
 ## 4. X API facts learned live (Rein, 2026-10-17)
 

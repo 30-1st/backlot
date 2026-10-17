@@ -7,13 +7,16 @@ import type { ReinRequest } from './schemas/rein.ts';
 /** Just under Supabase's 150 s request limit. */
 const REIN_CALL_TIMEOUT_MS = 145_000;
 
-export async function callRein(request: Partial<ReinRequest> & { niche: string }): Promise<{ status: number; body: any }> {
+export async function callRein(
+  request: Partial<ReinRequest> & { niche: string },
+  timeoutMs = REIN_CALL_TIMEOUT_MS,
+): Promise<{ status: number; body: any }> {
   const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/rein`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { apikey: serverKey(), 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(REIN_CALL_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
   return { status: res.status, body };

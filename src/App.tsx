@@ -4,6 +4,7 @@ import { Home } from './components/Home';
 import { Accounts } from './components/Accounts';
 import { SignIn } from './components/SignIn';
 import { People } from './components/People';
+import { BilLab } from './components/BilLab';
 import { Studio } from './Studio';
 import { signOut, useLogin } from './lib/auth';
 
@@ -14,6 +15,7 @@ import { signOut, useLogin } from './lib/auth';
 // and, in the hosted build, the people a creator works with:
 //   contacts and chats        #people
 //   one chat                  #people.<chat id>
+//   Bil's test page           #bil
 // The address keeps track, so Back and reload land where you expect.
 //
 // In the hosted build all of them sit behind the sign-in screen.
@@ -75,6 +77,8 @@ export default function App() {
   };
   // People, chats and sharing need a login, so they only exist in the hosted build.
   const account = login.status === 'in' ? { username: login.username, onSignOut, onPeople: () => go('people') } : {};
+
+  if (login.status === 'in' && path === 'bil') return <BilLab key={who} onHome={() => go('')} />;
 
   if (login.status === 'in' && (path === 'people' || path.startsWith('people.'))) {
     return (
