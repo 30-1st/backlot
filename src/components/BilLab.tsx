@@ -496,8 +496,22 @@ export function BilLab({ onHome }: { onHome: () => void }) {
   const [selected, setSelected] = useState<string>('');
   const [adding, setAdding] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const load = useCallback(async () => {
+    if (!supabase) {
+      setLoadError('This build is offline, so Bil is not available. Run the hosted build (npm run dev with .env).');
+      return;
+    }
+    try {
+      await loadAll();
+      setLoadError('');
+    } catch (e) {
+      setLoadError(`Could not reach Backlot's database: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
+  async function loadAll() {
     if (!supabase) return;
     const [c, v, l, k] = await Promise.all([
       supabase.from('clients').select('id, x_handle, profile, created_at').order('created_at'),
@@ -505,6 +519,8 @@ export function BilLab({ onHome }: { onHome: () => void }) {
       supabase.from('post_type_libraries').select('client_id, library'),
       supabase.from('campaigns').select('id, client_id, status, step, hold, plan, request, posts_total, posts_done, error, created_at').order('created_at', { ascending: false }).limit(20),
     ]);
+    const failed = [c, v, l, k].find((r) => r.error);
+    if (failed?.error) throw new Error(failed.error.message);
     const merged: Json[] = (c.data ?? []).map((row: Json) => ({
       ...row,
       voice: (v.data ?? []).find((x: Json) => x.client_id === row.id),
@@ -514,7 +530,7 @@ export function BilLab({ onHome }: { onHome: () => void }) {
     setCampaigns(k.data ?? []);
     setSelected((s) => s || merged[0]?.id || '');
     setLoaded(true);
-  }, []);
+  }
 
   useEffect(() => {
     void load();
@@ -540,6 +556,13 @@ export function BilLab({ onHome }: { onHome: () => void }) {
       </header>
       <main className="lab">
         <p className="lab-note">Bil drafts; nothing is posted. Every paid step is metered against your caps.</p>
+        {loadError && (
+          <p className="form-error" role="alert">
+            {loadError}{' '}
+            <button className="btn sm" onClick={() => void load()}>Try again</button>
+          </p>
+        )}
+        {!loaded && !loadError && <p className="lab-note">Loading your clients…</p>}
         {loaded && clients.length > 0 && (
           <div className="lab-row">
             <Field label="Client">

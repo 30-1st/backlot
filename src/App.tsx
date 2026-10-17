@@ -77,6 +77,7 @@ export default function App() {
   };
   // People, chats and sharing need a login, so they only exist in the hosted build.
   const account = login.status === 'in' ? { username: login.username, onSignOut, onPeople: () => go('people') } : {};
+  const bil = login.status === 'in' ? { onBil: () => go('bil') } : {};
 
   if (login.status === 'in' && path === 'bil') return <BilLab key={who} onHome={() => go('')} />;
 
@@ -95,7 +96,7 @@ export default function App() {
   }
 
   const route = parse(path);
-  if (!route) return <Home key={who} onChoose={(platform) => go(platform)} {...account} />;
+  if (!route) return <Home key={who} onChoose={(platform) => go(platform)} {...account} {...bil} />;
 
   const { platform, narrationId } = route;
   const open = (id: string, message?: string) => go(`${platform}.${id}`, message);

@@ -37,12 +37,15 @@ export function Home({
   username,
   onSignOut,
   onPeople,
+  onBil,
 }: {
   onChoose: (platform: Platform) => void;
   /** Set in the hosted build, where a creator is signed in. */
   username?: string;
   onSignOut?: () => void;
   onPeople?: () => void;
+  /** Bil's test page. Signed-in hosted build only. */
+  onBil?: () => void;
 }) {
   const [counts, setCounts] = useState<Partial<Record<Platform, number>>>({});
 
@@ -118,6 +121,12 @@ export function Home({
           })}
           </ul>
         </div>
+
+        {onBil && (
+          <button type="button" className="btn home-bil" onClick={onBil}>
+            Open Bil (agent test page)
+          </button>
+        )}
       </div>
     </main>
   );

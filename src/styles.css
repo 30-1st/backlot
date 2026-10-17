@@ -3141,3 +3141,8 @@ button.ncard:hover {
     grid-template-columns: 1fr;
   }
 }
+.home-bil {
+  margin-top: 22px;
+  border-color: var(--brass);
+  color: var(--brass);
+}
