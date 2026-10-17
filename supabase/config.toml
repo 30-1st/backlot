@@ -15,3 +15,7 @@ verify_jwt = true
 [functions.algo-ingest]
 # GitHub Actions identity tokens are not Supabase logins; the function verifies them itself.
 verify_jwt = false
+
+[functions.rein]
+# Called only by Backlot's server code with a server key (not a JWT); the function checks the key itself.
+verify_jwt = false

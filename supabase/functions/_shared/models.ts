@@ -49,6 +49,10 @@ export const X_PRICES = {
   userLookup: 0.01,
   postRead: 0.005,
   ownedPostRead: 0.001,
+  /** Recent post counts: billed per request, not per post (docs.x.com pricing, 2026-10-16). */
+  countsRequest: 0.005,
+  /** Trends by location: billed per request. */
+  trendsRequest: 0.01,
 } as const;
 
 /** Token counts as the AI SDK reports them (`result.usage`). */

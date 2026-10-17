@@ -14,7 +14,7 @@ import { tool, type ToolSet } from 'npm:ai@7.0.142';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { MAX_EXCERPT, z } from './schemas/common.ts';
 import { ClientProfile, PostTypeLibrary, VoiceCard } from './schemas/client.ts';
-import { nicheKey, ReinBrief, type StoredEvidence } from './schemas/rein.ts';
+import { nicheKey, ReinBrief, REGIONS, type Region, type StoredEvidence } from './schemas/rein.ts';
 import { Campaign } from './schemas/bil.ts';
 import { TOOLS, type ToolName } from './schemas/tools.ts';
 import { X_PRICES } from './models.ts';
@@ -63,7 +63,7 @@ function needUser(ctx: ToolContext): { userDb: SupabaseClient; ownerId: string }
 const X_API = 'https://api.x.com/2';
 
 /** One GET to X inside a reservation. Refused requests (4xx/5xx) are released, not charged. */
-async function xGet(
+export async function xGet(
   budget: Budget,
   kind: string,
   url: URL,
@@ -80,8 +80,9 @@ async function xGet(
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const why = json?.title ?? json?.detail ?? json?.errors?.[0]?.message ?? `HTTP ${res.status}`;
-        throw new Error(`X API: ${why} (HTTP ${res.status})`, { cause: res });
+        // X puts the specific reason in errors[0].message or detail; the title alone ("Invalid Request") is vague.
+        const why = [json?.title, json?.errors?.[0]?.message ?? json?.detail].filter(Boolean).join(': ') || `HTTP ${res.status}`;
+        throw new Error(`X API: ${String(why).slice(0, 300)} (HTTP ${res.status})`, { cause: res });
       }
       return json;
     },
@@ -92,9 +93,9 @@ async function xGet(
 }
 
 /** Search operators that would point a search at people instead of topics. */
-const PERSON_OPERATORS = /(^|\s)-?(from|to|retweets_of|list):|(^|\s)-?@\w/i;
+export const PERSON_OPERATORS = /(^|\s)-?(from|to|retweets_of|list):|(^|\s)-?@\w/i;
 
-function excerptOf(text: string): string {
+export function excerptOf(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length <= MAX_EXCERPT ? flat : flat.slice(0, MAX_EXCERPT - 1).trimEnd() + '…';
 }
@@ -205,12 +206,14 @@ export const impl = {
     // Excerpts live in brief_evidence, where they expire after 24 hours; the brief keeps post IDs only.
     const evidence: Array<StoredEvidence & { brief_id: string }> = [];
     const trends = brief.trends.map((t, i) => {
-      for (const e of t.evidence) evidence.push({ brief_id: brief.briefId, trendIndex: i, postId: e.postId, excerpt: e.excerpt });
+      for (const e of t.evidence) evidence.push({ brief_id: brief.briefId, trendIndex: i, postId: e.postId, excerpt: e.excerpt ?? null });
       return { ...t, evidence: t.evidence.map((e) => ({ postId: e.postId })) };
     });
     const { error } = await db.from('niche_briefs').insert({
       id: brief.briefId,
       niche_key: nicheKey(brief.niche),
+      region: REGIONS[brief.region],
+      with_video: brief.withVideo,
       brief: { ...brief, trends },
       created_at: brief.createdAt,
     });
@@ -263,26 +266,32 @@ export const impl = {
 export type ImplementedTool = keyof typeof impl;
 
 /**
- * A brief for this niche that is still inside its 6-hour reuse window, rebuilt with
- * whatever excerpts have not expired yet. Free; saves a paid fetch when clients share a niche.
+ * A brief for this niche and region that is still inside its 6-hour reuse window, rebuilt
+ * with every post ID and whatever excerpts have not expired yet. Free; saves a paid fetch
+ * when clients share a niche. When video is wanted, only a brief made with video counts.
  */
-export async function reusableBrief(niche: string): Promise<{ brief: z.infer<typeof ReinBrief>; reused: true } | null> {
+export async function reusableBrief(
+  niche: string,
+  region: Region = 'worldwide',
+  needVideo = false,
+): Promise<{ brief: z.infer<typeof ReinBrief>; reused: true } | null> {
   const db = serviceClient();
-  const { data, error } = await db
+  let q = db
     .from('niche_briefs')
     .select('id, brief')
     .eq('niche_key', nicheKey(niche))
-    .gt('reuse_until', new Date().toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq('region', REGIONS[region])
+    .gt('reuse_until', new Date().toISOString());
+  if (needVideo) q = q.eq('with_video', true);
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (error || !data) return null;
-  const { data: ev } = await db.from('brief_evidence').select('trend_index, post_id, excerpt').eq('brief_id', data.id);
-  const byTrend = new Map<number, Array<{ postId: string; excerpt: string }>>();
+  const { data: ev, error: evError } = await db.from('brief_evidence').select('trend_index, post_id, excerpt').eq('brief_id', data.id);
+  if (evError) return null;
+  const byTrend = new Map<number, Array<{ postId: string; excerpt?: string }>>();
   for (const e of ev ?? []) {
-    if (!e.excerpt) continue; // expired excerpts are dropped from the rebuilt brief
     const list = byTrend.get(e.trend_index) ?? [];
-    list.push({ postId: e.post_id, excerpt: e.excerpt });
+    // The post ID always stays (for the X embed); an expired excerpt is simply left off.
+    list.push(e.excerpt ? { postId: e.post_id, excerpt: e.excerpt } : { postId: e.post_id });
     byTrend.set(e.trend_index, list);
   }
   const stored = data.brief as any;
@@ -290,6 +299,7 @@ export async function reusableBrief(niche: string): Promise<{ brief: z.infer<typ
     ...stored,
     trends: (stored.trends ?? []).map((t: any, i: number) => ({ ...t, evidence: byTrend.get(i) ?? [] })),
   });
+  if (!brief.success) console.error('A stored brief no longer fits its shape', data.id, brief.error.message.slice(0, 300));
   return brief.success ? { brief: brief.data, reused: true } : null;
 }
 
@@ -315,8 +325,9 @@ export function agentTools(ctx: ToolContext, names: readonly ImplementedTool[]):
 }
 
 /** Which tools each agent may call. */
+// Rein has none: her Grok call uses only xAI's built-in X search, and her own code calls
+// the X API, saves the brief and meters spend (see ./rein.ts).
 export const AGENT_TOOLS = {
-  rein: ['x_post_search', 'save_brief', 'cost_meter'],
   bil: ['brand_kit', 'x_profile_lookup', 'algorithm_search', 'algorithm_params', 'write_campaign', 'cost_meter'],
   onboard: ['client_posts_read', 'brand_kit'],
 } as const satisfies Record<string, readonly ImplementedTool[]>;

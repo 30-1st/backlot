@@ -33,6 +33,16 @@ Never write Grok code from memory. In order of preference:
 - Meter every call with `grokBilled(result)` first: it sums xAI's own `costInUsdTicks` across steps, which includes X Search's per-post fee. Token math (`grokCost`) leaves that fee out and is only the fallback.
 - Calls that carry a client's own posts use `privateTelemetry(...)`, so Langfuse records timing, tokens and cost only.
 - Our own function tools and Grok's `x_search` work in the same Responses API request (verified live 2026-10-16), even though the AI SDK docs say otherwise.
+- A fixed-shape answer (`output: Output.object(...)`) works together with `x_search` on grok-4.3 (verified live 2026-10-17). Keep the schema Grok fills small and loose; code adds IDs and times and checks the full shape.
+- Pass `include: { responseBody: true }` when you need xAI's raw reply: the AI SDK drops it otherwise. It holds `usage.server_side_tool_usage_details.x_posts_fetched` and `x_users_fetched`, the exact X Search counts behind the fee.
+- Verify any post ID Grok returns against the search's own citations before keeping it. Never trust IDs from Grok's answer text alone.
+
+## 4. X API facts learned live (Rein, 2026-10-17)
+
+- Recent post counts (`/2/tweets/counts/recent`) return the count as `tweet_count`, although X's reference page names it `post_count`. Read both.
+- Send times to X in whole seconds (`YYYY-MM-DDTHH:mm:ssZ`).
+- X's API rejects search-box operators that Grok's X search accepts (`since:`, `until:`, `min_faves:`, `filter:`). Strip them from any query Grok writes for the X API.
+- Put X's `errors[0].message` in error text; the title alone ("Invalid Request") hides the cause.
 
 ## 3. Backlot's rules for anything Grok writes or reads
 

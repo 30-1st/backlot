@@ -22,7 +22,7 @@ export type Reasoning = 'none' | 'low' | 'medium' | 'high';
 
 /** Knowledge pack versions. Bump one when that agent's instructions or knowledge change. */
 export const KNOWLEDGE_VERSION = {
-  rein: 'k1',
+  rein: 'k2',
   bil: 'k1',
   check: 'k1',
 } as const;

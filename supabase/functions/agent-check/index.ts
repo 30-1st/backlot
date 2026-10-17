@@ -43,6 +43,7 @@ import { Budget, SpendLimitError } from '../_shared/spend.ts';
 import { grokOptions, xaiClient } from '../_shared/grok.ts';
 import { agentTools, impl, type ToolContext } from '../_shared/toolbox.ts';
 import { indexStatus } from '../_shared/algorithm.ts';
+import { callRein } from '../_shared/rein-client.ts';
 
 const ADMIN_TOKEN_SHA256 = 'ba110c1c1376ab186539560a37c24e9499904d71de23faade47fb53bb15127d2';
 
@@ -405,6 +406,12 @@ Deno.serve(async (req) => {
   try {
     if (body.action === 'run') return reply(200, await runCheck());
     if (body.action === 'toolbox') return reply(200, await runToolboxCheck());
+    if (body.action === 'rein') {
+      // Asks Rein over HTTP with the server key, exactly as Bil will. A real niche only.
+      if (typeof body.niche !== 'string' || !body.niche.trim()) return reply(400, { error: 'rein needs a niche' });
+      const r = await callRein({ niche: body.niche, region: body.region, video: body.video === true });
+      return reply(200, { reinStatus: r.status, ...r.body });
+    }
     if (body.action === 'algorithm') {
       const qs = Array.isArray(body.questions) ? body.questions.filter((q: unknown) => typeof q === 'string').slice(0, 5) : [];
       return reply(200, await runAlgorithmCheck(qs));
@@ -419,7 +426,7 @@ Deno.serve(async (req) => {
     if (body.action === 'trace' && typeof body.traceId === 'string' && /^[a-f0-9]{32}$/.test(body.traceId)) {
       return reply(200, await readTrace(body.traceId));
     }
-    return reply(400, { error: 'action must be "run", "names", "spend", "prices", or "trace" with a 32-character traceId' });
+    return reply(400, { error: 'action must be "run", "toolbox", "algorithm", "rein", "names", "spend", "prices", or "trace" with a 32-character traceId' });
   } catch (err) {
     if (err instanceof SpendLimitError) return reply(402, { error: err.message, reason: err.reason });
     console.error('agent-check failed', err);

@@ -36,6 +36,11 @@ export class SpendLimitError extends Error {
 /** The service-role database client edge functions use. Never sent to a browser. */
 export function serviceClient(): SupabaseClient {
   const url = Deno.env.get('SUPABASE_URL')!;
+  return createClient(url, serverKey(), { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+/** The project's default server key: the named "default" secret key, else the legacy service role key. */
+export function serverKey(): string {
   let key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   try {
     const named = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
@@ -43,7 +48,21 @@ export function serviceClient(): SupabaseClient {
   } catch {
     // Fall back to the legacy key above.
   }
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return key;
+}
+
+/** Every server key this project accepts: all named secret keys plus the legacy service role key. */
+export function serverKeys(): string[] {
+  const keys = new Set<string>();
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) keys.add(legacy);
+  try {
+    const named = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    for (const v of Object.values(named)) if (typeof v === 'string' && v) keys.add(v);
+  } catch {
+    // No named keys.
+  }
+  return [...keys];
 }
 
 /**
@@ -80,6 +99,8 @@ export type BudgetOptions = {
 
 export class Budget {
   readonly runId: string;
+  /** What this Budget has charged so far, in USD (settled costs, estimates where no cost came back). */
+  spentUsd = 0;
   private readonly perCallCap?: number;
   private readonly db: SupabaseClient;
 
@@ -129,6 +150,7 @@ export class Budget {
       // Refused by the provider: not billed, release. Anything else (timeout, dropped
       // connection) may have been billed: keep the estimate, the safe side.
       const refused = providerRefused(err);
+      if (!refused) this.spentUsd += estimate;
       await this.settle(reservation, refused ? null : estimate, {
         ...base,
         failed: err instanceof Error ? err.message.slice(0, 200) : 'failed',
@@ -137,6 +159,7 @@ export class Budget {
       throw err;
     }
     const cost = costOf(result);
+    this.spentUsd += cost ?? estimate;
     await this.settle(reservation, cost ?? estimate, cost === null ? { ...base, estimated: true } : base);
     return result;
   }
