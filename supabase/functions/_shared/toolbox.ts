@@ -171,7 +171,8 @@ export const impl = {
     // Original posts only: replies are written to someone else, reposts are someone else's words.
     url.searchParams.set('exclude', 'replies,retweets');
     // note_tweet carries the full text of long posts; plain text stops at 280 characters.
-    url.searchParams.set('tweet.fields', 'created_at,note_tweet');
+    // public_metrics and attachments come back in the same request at no extra cost.
+    url.searchParams.set('tweet.fields', 'created_at,note_tweet,public_metrics,attachments');
     const body = await xGet(
       ctx.budget,
       'x_client_posts',
@@ -184,7 +185,26 @@ export const impl = {
       .map((p: any) => ({ ...p, text: typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text }))
       .filter((p: any) => typeof p.text === 'string' && p.text.trim())
       .slice(0, maxPosts)
-      .map((p: any) => ({ postId: p.id, text: p.text.slice(0, 2048), createdAt: p.created_at }));
+      .map((p: any) => {
+        const m = p.public_metrics;
+        const n = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : 0);
+        return {
+          postId: p.id,
+          text: p.text.slice(0, 2048),
+          createdAt: p.created_at,
+          hasMedia: Array.isArray(p.attachments?.media_keys) && p.attachments.media_keys.length > 0,
+          metrics: m
+            ? {
+              impressions: n(m.impression_count),
+              likes: n(m.like_count),
+              replies: n(m.reply_count),
+              reposts: n(m.retweet_count),
+              quotes: n(m.quote_count),
+              bookmarks: n(m.bookmark_count),
+            }
+            : undefined,
+        };
+      });
     return { clientId, postsRead: posts.length, posts };
   },
 

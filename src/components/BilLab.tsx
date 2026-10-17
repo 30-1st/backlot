@@ -262,6 +262,59 @@ function Onboard({ onDone }: { onDone: () => void }) {
 
 // ---------- voice card ----------
 
+/** What performs on their page, measured from X's public numbers, with a refresh button. */
+function WhatWorksView({ client, onChange }: { client: Json; onChange: () => void }) {
+  const w = client.voice?.card?.whatWorks;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function refresh() {
+    setBusy(true);
+    setError('');
+    try {
+      await callBil('learn', { requestId: crypto.randomUUID(), clientId: client.id });
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h3>What performs on their page</h3>
+      {w ? (
+        <>
+          <p className="lab-note">{w.summary}</p>
+          <dl className="lab-dl">
+            <dt>Posts measured</dt><dd>{w.stats.postsMeasured} (median views {w.stats.medianImpressions ?? 'n/a'}, median score {w.stats.medianScorePer1k ?? 'n/a'})</dd>
+            {w.patterns.length > 0 && (<><dt>Top posts share</dt><dd>{w.patterns.join(' · ')}</dd></>)}
+            {w.doMore.length > 0 && (<><dt>Do more</dt><dd>{w.doMore.join(' · ')}</dd></>)}
+            {w.avoid.length > 0 && (<><dt>Avoid</dt><dd>{w.avoid.join(' · ')}</dd></>)}
+            {w.stats.groups.map((g: Json) => (
+              <span key={g.label} style={{ display: 'contents' }}>
+                <dt>{g.label}</dt><dd>{g.posts} posts, median score {g.medianScorePer1k ?? 'n/a'}</dd>
+              </span>
+            ))}
+          </dl>
+          <p className="field-hint">
+            Score = replies, quotes, reposts and likes weighted by X's published ranking weights, per 1,000 views. Measured {new Date(w.measuredAt).toLocaleString()}.
+          </p>
+        </>
+      ) : (
+        <p className="lab-note">Not measured yet. Refresh to read their latest posts and their numbers.</p>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="lab-row">
+        <button className="btn" disabled={busy} onClick={refresh}>
+          {busy ? 'Measuring their posts…' : 'Refresh what performs (about $0.25)'}
+        </button>
+      </div>
+    </>
+  );
+}
+
 function VoiceCardView({ client, onChange }: { client: Json; onChange: () => void }) {
   const card = client.voice?.card;
   const [summary, setSummary] = useState<string>(card?.summary ?? '');
@@ -298,6 +351,7 @@ function VoiceCardView({ client, onChange }: { client: Json; onChange: () => voi
         <dt>Off limits</dt><dd>{card.offLimits.join('; ') || '(none)'}</dd>
         <dt>Posts read</dt><dd>{card.learnedFrom.xPostsRead}</dd>
       </dl>
+      <WhatWorksView client={client} onChange={onChange} />
       {client.library && (
         <>
           <h3>Post types</h3>

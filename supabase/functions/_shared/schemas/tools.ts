@@ -42,12 +42,32 @@ export const TOOLS = {
   ),
 
   client_posts_read: tool(
-    'Onboarding only: read up to 48 of a client\'s own recent original posts (no replies or reposts) to learn their voice. Text is used, then dropped; only the voice card is kept.',
+    'Onboarding only: read up to 48 of a client\'s own recent original posts (no replies or reposts) with their public numbers, to learn their voice and what performs. Text is used, then dropped; only the voice card and derived numbers are kept.',
     z.object({ clientId: id, maxPosts: z.number().int().min(5).max(48) }),
     z.object({
       clientId: id,
       postsRead: z.number().int().min(0).max(48),
-      posts: z.array(z.object({ postId: xPostId, text: text(), createdAt: isoDateTime })).max(48),
+      posts: z
+        .array(
+          z.object({
+            postId: xPostId,
+            text: text(),
+            createdAt: isoDateTime,
+            hasMedia: z.boolean(),
+            metrics: z
+              .object({
+                impressions: z.number().int().min(0),
+                likes: z.number().int().min(0),
+                replies: z.number().int().min(0),
+                reposts: z.number().int().min(0),
+                quotes: z.number().int().min(0),
+                bookmarks: z.number().int().min(0),
+              })
+              .optional()
+              .describe('X\'s public numbers for the post, read in the same request at no extra cost.'),
+          }),
+        )
+        .max(48),
     }),
   ),
 

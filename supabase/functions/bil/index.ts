@@ -9,6 +9,7 @@
 //   lookup         { handle }                 public profile facts to pre-fill intake ($0.01)
 //   onboard        OnboardRequest             voice card + post-type library (about $0.30)
 //   approve_voice  { clientId, edits? }       the client approves their card (free)
+//   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25)
 //   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)
 //   campaign       CampaignRequest            queues a campaign and returns at once
 //   resume         { campaignId }             resumes a campaign paused at the month's budget
@@ -19,6 +20,8 @@ import {
   BilInputError,
   CampaignRequest,
   estimateCampaign,
+  LearnRequest,
+  learnWhatWorks,
   loadKit,
   LookupRequest,
   lookupHandle,
@@ -70,6 +73,8 @@ Deno.serve(async (req) => {
         return reply(200, await lookupHandle(parse(LookupRequest, input).handle));
       case 'onboard':
         return reply(200, await onboardClient(user.userDb, user.ownerId, parse(OnboardRequest, input)));
+      case 'learn':
+        return reply(200, await learnWhatWorks(user.userDb, user.ownerId, parse(LearnRequest, input)));
       case 'approve_voice':
         return reply(200, await approveVoice(user.ownerId, parse(ApproveVoiceRequest, input)));
       case 'estimate': {
@@ -88,7 +93,7 @@ Deno.serve(async (req) => {
         return reply(200, r);
       }
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, approve_voice, estimate, campaign or resume.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign or resume.' });
     }
   } catch (err) {
     if (err instanceof BilInputError) return reply(err.status, { error: err.message });

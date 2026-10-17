@@ -16,6 +16,15 @@ const replyStyle = VoiceCard.shape.replyStyle.shape;
 
 // ---------- onboarding ----------
 
+/** What Grok writes about what performs; code adds the measured numbers and post IDs. */
+export const WhatWorksDraft = z.object({
+  summary: str('What their audience rewards, from the numbers given. Two or three plain sentences, under 600 characters.'),
+  patterns: z.array(z.string()).max(8).describe('What the top posts share: topics, formats, hooks, length, timing, media. Each under 200 characters.'),
+  doMore: z.array(z.string()).max(6).describe('What to do more of to reach further, each under 200 characters.'),
+  avoid: z.array(z.string()).max(6).describe('What underperforms or draws negative reactions, each under 200 characters.'),
+});
+export type WhatWorksDraft = z.infer<typeof WhatWorksDraft>;
+
 export const VoiceDraft = z.object({
   tone: ToneSliders,
   personality: z.object({ primary: Personality, secondary: Personality.optional() }),
@@ -45,6 +54,7 @@ export const VoiceDraft = z.object({
     )
     .max(12)
     .describe('This client\'s own library of post types, 5 to 12 of them.'),
+  whatWorks: WhatWorksDraft,
   observations: str('What in their posts and answers shaped this card, and anything the client should confirm. Under 800 characters.'),
 });
 export type VoiceDraft = z.infer<typeof VoiceDraft>;

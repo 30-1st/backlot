@@ -5,7 +5,7 @@
 // Only the card is stored; text read from X is not. Samples the client pastes in
 // themselves are their own content and may be kept.
 
-import { z, id, isoDateTime, shortText, slug, text, FunnelStage } from './common.ts';
+import { z, id, isoDateTime, shortText, slug, text, xPostId, FunnelStage } from './common.ts';
 
 // ---------- client profile ----------
 
@@ -104,6 +104,37 @@ export const Personality = z.enum(['sincerity', 'excitement', 'competence', 'sop
 
 export const Situation = z.enum(['everyday', 'sale', 'announcement', 'education', 'banter', 'apology', 'crisis']);
 
+/**
+ * What already performs on the client's own page, measured from their public post
+ * numbers (X's public_metrics). Bil builds every campaign on this, then pushes past it.
+ * Only derived numbers and post IDs are kept, never the posts' text.
+ */
+export const WhatWorks = z
+  .object({
+    summary: text(600).describe('What their audience rewards, in two or three plain sentences.'),
+    patterns: z.array(shortText(200)).max(8).describe('Patterns the top posts share: topics, formats, hooks, length, timing, media.'),
+    doMore: z.array(shortText(200)).max(6),
+    avoid: z.array(shortText(200)).max(6),
+    stats: z.object({
+      postsMeasured: z.number().int().min(0).max(48),
+      medianImpressions: z.number().min(0).nullable(),
+      medianScorePer1k: z
+        .number()
+        .min(0)
+        .nullable()
+        .describe('Engagement weighted by X\'s ranking weights (replies and quotes count most), per 1,000 impressions.'),
+      groups: z
+        .array(z.object({ label: shortText(60), posts: z.number().int().min(0), medianScorePer1k: z.number().min(0).nullable() }))
+        .max(12)
+        .describe('The same score split by time of day, media and length.'),
+    }),
+    topPostIds: z.array(xPostId).max(5).describe('Their best posts by score, shown with X\'s embed.'),
+    measuredAt: isoDateTime,
+  })
+  .describe('What performs on their page today.');
+
+export type WhatWorks = z.infer<typeof WhatWorks>;
+
 export const VoiceCard = z
   .object({
     clientId: id,
@@ -133,6 +164,7 @@ export const VoiceCard = z
       .array(text())
       .max(10)
       .describe('Posts the client pasted in themselves. Never text copied from X by Backlot.'),
+    whatWorks: WhatWorks.optional(),
     learnedFrom: z.object({
       intake: z.literal(true),
       xPostsRead: z.number().int().min(0).max(48).describe('How many of the client\'s X posts Bil read at onboarding.'),
