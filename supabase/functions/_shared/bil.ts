@@ -65,7 +65,7 @@ const POSTS_PROMPT_TOTAL = 30_000;
 const SCHEMA_ALLOWANCE = 4_000;
 
 /** How long each step may take, in seconds. A step starts only if it fits before WALL_MS. */
-export const STEP_SECONDS = { brief: 125, review: 60, plan: 100, batch: 100 } as const;
+export const STEP_SECONDS = { brief: 125, review: 60, plan: 120, batch: 110 } as const;
 export type StepKind = keyof typeof STEP_SECONDS;
 /** Supabase stops a function worker at 150 s; steps must finish before this. */
 export const WALL_MS = 145_000;
@@ -388,9 +388,9 @@ export async function onboardClient(userDb: SupabaseClient, ownerId: string, req
       schema: VoiceDraft,
       prompt,
       maxOutputTokens: 4000,
-      reasoning: 'medium',
-      reasoningAllowance: 4000,
-      timeoutMs: 100_000,
+      reasoning: 'low',
+      reasoningAllowance: 3000,
+      timeoutMs: 125_000,
       functionId: 'bil-onboard-voice',
       privateCall: true,
     });
@@ -517,7 +517,7 @@ export function estimateCampaign(posts: number, useTrends: boolean, snapshotChar
   const base = BIL_KNOWLEDGE.length + snapshotChars + SCHEMA_ALLOWANCE;
   const planChars = 6_000 + posts * 350;
   const review = useTrends ? grokEstimate(BIL_MODEL, base + 6_000, 2_500, 3_000) : 0;
-  const plan = grokEstimate(BIL_MODEL, base + 8_000, Math.min(9_000, 800 + posts * 140), 4_000);
+  const plan = grokEstimate(BIL_MODEL, base + 8_000, Math.min(9_000, 800 + posts * 140), 3_000);
   const batchCost = (n: number) => grokEstimate(BIL_MODEL, base + planChars + 2_000 + n * 300, n * 600 + 800, 3_000);
   let batches = batchCost(Math.min(BATCH_START, posts));
   for (let left = posts - BATCH_START; left > 0; left -= BATCH_MAX) batches += batchCost(Math.min(BATCH_MAX, left));
@@ -696,7 +696,12 @@ async function handleStepError(db: SupabaseClient, c: Campaign, step: Step, clai
   await db.rpc('bil_step_retry', { p_id: step.id, p_claim: claimId, p_delay_seconds: 20 * step.attempts, p_error: message });
 }
 
-/** One level less reasoning on a retry, so a slow first try is not repeated. */
+/**
+ * One level less reasoning on a retry, so a slow first try is not repeated. Onboarding,
+ * plans and drafts already run at grok-4.7's lowest level ('low'): in the first live run
+ * (2026-10-17) 'medium' passed the time limit 4 times out of 7, while 'low' finished
+ * every time with the same voice scores. The review keeps 'medium'; it is short.
+ */
 function reasoningFor(base: 'medium' | 'high', attempts: number): 'low' | 'medium' | 'high' {
   if (attempts <= 1) return base;
   return base === 'high' ? 'medium' : 'low';
@@ -900,8 +905,8 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     schema: PlanDraft,
     prompt,
     maxOutputTokens: Math.min(9000, 800 + posts * 140),
-    reasoning: reasoningFor('medium', step.attempts),
-    reasoningAllowance: 4000,
+    reasoning: 'low',
+    reasoningAllowance: 3000,
     timeoutMs: timeLeft(deadline),
     functionId: 'bil-plan',
   });
@@ -1070,7 +1075,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
       schema: BatchDraft,
       prompt,
       maxOutputTokens: slots.length * 600 + 800,
-      reasoning: reasoningFor('medium', step.attempts),
+      reasoning: 'low',
       reasoningAllowance: 3000,
       timeoutMs: timeLeft(deadline),
       functionId: 'bil-batch',
