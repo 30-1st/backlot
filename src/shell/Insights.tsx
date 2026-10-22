@@ -214,7 +214,7 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
             </section>
           )}
 
-          {(ww.doMore?.length || ww.avoid?.length) && (
+          {Boolean(ww.doMore?.length || ww.avoid?.length) && (
             <ul className="bl-tips bl-rise bl-d3">
               {(ww.doMore ?? []).map((t) => (
                 <li key={`d${t}`}>
