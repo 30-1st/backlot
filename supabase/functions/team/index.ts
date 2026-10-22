@@ -17,7 +17,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { serviceClient } from '../_shared/spend.ts';
-import { AccessError, memberOf, requireTeam } from '../_shared/workspace.ts';
+import { AccessError, memberOf, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 
@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
     const member = await memberOf(userId);
     if (!member) return reply(403, { error: 'Your login is not part of a Backlot team yet.' });
     const db = serviceClient();
+    // Right after a team reset, only "who am I" and choosing a password work.
+    if (action !== 'me' && action !== 'password_set') requireOwnPassword(member);
 
     switch (action) {
       case 'me': {
@@ -165,6 +167,9 @@ Deno.serve(async (req) => {
         if (error) throw new Error(`Could not reset the password: ${error.message}`);
         const { error: flagError } = await db.from('members').update({ must_change_password: true }).eq('id', r.userId);
         if (flagError) throw new Error(`Could not mark the reset: ${flagError.message}`);
+        // Sign that login out everywhere, so whoever had the old password loses access.
+        const { error: revokeError } = await db.rpc('revoke_sessions', { p_user: r.userId });
+        if (revokeError) console.error('team: could not sign the old sessions out', revokeError.message);
         return reply(200, { userId: r.userId, temporaryPassword: temp });
       }
 

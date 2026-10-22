@@ -6,6 +6,8 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://hfmszquugwbfxsndpcao.supabase.co; media-src 'self' blob: https://hfmszquugwbfxsndpcao.supabase.co; connect-src 'self' https://hfmszquugwbfxsndpcao.supabase.co wss://hfmszquugwbfxsndpcao.supabase.co; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
 
 # The service worker must always be checked for a newer copy.
 /sw.js

@@ -20,6 +20,9 @@ const LOGIN_DOMAIN = 'login.backlot.invalid';
 const USERNAME = /^[a-z0-9._]{3,24}$/;
 const RESERVED = new Set(['admin', 'administrator', 'backlot', 'support', 'help', 'root', 'system', 'staff', 'moderator']);
 const MAX_SIGNUPS_PER_HOUR = 5;
+// Across every address together. The forwarded address can be spoofed, so this cap is
+// what really bounds guessing; a small team never comes near it.
+const MAX_SIGNUPS_PER_HOUR_ALL = 30;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -75,6 +78,12 @@ Deno.serve(async (req: Request) => {
     .gte('created_at', since);
   if (countError) return reply(500, { error: 'server' });
   if ((count ?? 0) >= MAX_SIGNUPS_PER_HOUR) return reply(429, { error: 'too_many' });
+  const { count: all, error: allError } = await db
+    .from('signup_log')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', since);
+  if (allError) return reply(500, { error: 'server' });
+  if ((all ?? 0) >= MAX_SIGNUPS_PER_HOUR_ALL) return reply(429, { error: 'too_many' });
   await db.from('signup_log').insert({ ip });
 
   // Claim the code before making anything. Wrong, used and expired codes look the same.

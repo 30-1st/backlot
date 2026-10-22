@@ -18,6 +18,8 @@ export type Member = {
   role: Role;
   /** Set only for clients: the one client they are. */
   clientId: string | null;
+  /** True right after a team password reset, until they choose their own. */
+  mustChangePassword: boolean;
 };
 
 /** Thrown when someone signed in tries something their role does not allow. */
@@ -30,18 +32,29 @@ export class AccessError extends Error {
 
 /** Reads the person's membership with the server key. Null when they are in no workspace. */
 export async function memberOf(userId: string): Promise<Member | null> {
-  const { data, error } = await serviceClient()
-    .from('workspace_members')
-    .select('workspace_id, role, client_id')
-    .eq('user_id', userId)
-    .maybeSingle();
+  const db = serviceClient();
+  const [{ data, error }, { data: me }] = await Promise.all([
+    db.from('workspace_members').select('workspace_id, role, client_id').eq('user_id', userId).maybeSingle(),
+    db.from('members').select('must_change_password').eq('id', userId).maybeSingle(),
+  ]);
   if (error) throw new Error(`Could not read your membership: ${error.message}`);
   if (!data) return null;
-  return { userId, workspaceId: data.workspace_id, role: data.role as Role, clientId: data.client_id };
+  return {
+    userId,
+    workspaceId: data.workspace_id,
+    role: data.role as Role,
+    clientId: data.client_id,
+    mustChangePassword: me?.must_change_password ?? false,
+  };
 }
 
 export function isTeam(m: Member): boolean {
   return m.role === 'owner' || m.role === 'team';
+}
+
+/** After a team reset, nothing works until the person picks their own password. */
+export function requireOwnPassword(m: Member): void {
+  if (m.mustChangePassword) throw new AccessError('Pick a new password first.');
 }
 
 /** Owner or team only. */

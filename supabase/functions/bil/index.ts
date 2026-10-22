@@ -43,7 +43,7 @@ import {
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
-import { AccessError, memberOf, requireClientAccess, requireTeam } from '../_shared/workspace.ts';
+import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
   try {
     const member = await memberOf(user.ownerId);
     if (!member) return reply(403, { error: 'Your login is not part of a Backlot team yet.' });
+    requireOwnPassword(member);
     // From here on, ownerId means the workspace, never the individual login.
     const workspaceId = member.workspaceId;
 

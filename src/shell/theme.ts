@@ -2,7 +2,7 @@ import { createContext, createElement, useContext, useEffect, useState, type Rea
 
 // Light (off-white and teal) or Night (the original stage colours and brass).
 // "Match phone" follows the device's dark mode. The choice is a per-device convenience,
-// so it lives in this browser only; if storage is blocked, Match phone is used.
+// so it lives in this browser only. Light is the default until someone picks otherwise.
 
 export type ThemeChoice = 'light' | 'night' | 'system';
 export type Theme = 'light' | 'night';
@@ -12,9 +12,9 @@ const KEY = 'backlot.theme';
 function readChoice(): ThemeChoice {
   try {
     const v = window.localStorage.getItem(KEY);
-    return v === 'light' || v === 'night' || v === 'system' ? v : 'system';
+    return v === 'light' || v === 'night' || v === 'system' ? v : 'light';
   } catch {
-    return 'system';
+    return 'light';
   }
 }
 

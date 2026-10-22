@@ -587,11 +587,14 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   requireClientAccess(m, c.client_id);
 
   const { data: post, error: pError } = await db
-    .from('campaign_posts').select('status').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
+    .from('campaign_posts').select('status, review').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
   if (pError) throw new Error(`Could not read the post: ${pError.message}`);
   if (!post) throw new BilInputError('No such post in this campaign.', 404);
   if (post.status !== 'ok' && (req.decision === 'approved' || req.decision === 'posted')) {
     throw new BilInputError('This post still needs a detail from you before it can be approved.', 409);
+  }
+  if (req.decision === 'posted' && post.review !== 'approved' && post.review !== 'posted') {
+    throw new BilInputError('Approve this post before marking it as posted.', 409);
   }
   const note = req.note && req.note.length > 0 ? req.note : null;
   if (req.decision === 'changes' && !note) throw new BilInputError('Say what should change.');
