@@ -12,7 +12,7 @@
   --line-2: #c9c8c1;
   --ink: #111716;
   --ink-2: #4f5755;
-  --ink-3: #6b7371;
+  --ink-3: #636b69;
   --accent: #3fd0c1;
   --accent-text: #0a6e66;
   --accent-ink: #04302c;
@@ -1012,7 +1012,7 @@ body[data-bl='light'] {
   --rule: #dcdbd5;
   --ink: #111716;
   --ink-2: #4f5755;
-  --ink-3: #6b7371;
+  --ink-3: #636b69;
   --brass: #0a6e66;
   --brass-ink: #ffffff;
   --live: #1f8a5b;
@@ -1033,4 +1033,481 @@ body[data-bl='light'] .home-logo {
 }
 .bl-mode:hover {
   color: var(--accent-text);
+}
+
+/* =====================================================================
+ * The lit stage: Home, the three rooms, and the shared glass language.
+ * A warm key light falls from the top. Surfaces are frosted glass.
+ * Teal (brass at night) only marks what you can tap; status is ink; problems are red.
+ * ===================================================================== */
+
+.bl-root {
+  --ease: cubic-bezier(0.2, 0.9, 0.25, 1.05);
+  --t-fast: 150ms;
+  --t-med: 300ms;
+  --t-slow: 550ms;
+  --sun-core: rgba(255, 253, 246, 1);
+  --sun-tint: rgba(255, 246, 226, 0.55);
+  --ray: rgba(255, 255, 255, 1);
+  --ray-tint: rgba(255, 249, 236, 0.45);
+  --cone-a: rgba(255, 255, 255, 1);
+  --cone-b: rgba(255, 251, 242, 0.6);
+  --floor: rgba(80, 70, 50, 0.07);
+  --pool: rgba(40, 34, 24, 0.2);
+  --vig: rgba(70, 62, 48, 0.1);
+  --deck-a: rgba(255, 255, 255, 0.78);
+  --deck-b: rgba(255, 255, 255, 0.3);
+  --deck-tint: rgba(255, 250, 240, 0.35);
+  --deck-edge-a: rgba(255, 255, 255, 1);
+  --deck-edge-b: rgba(17, 23, 22, 0.1);
+  --deck-shadow: 0 30px 60px -34px rgba(40, 34, 24, 0.35), 0 2px 6px -2px rgba(0, 0, 0, 0.08);
+  --spot-w: rgba(255, 255, 255, 0.95);
+  --edge-hi: rgba(255, 255, 255, 0.95);
+  --logo-glow: rgba(255, 255, 255, 0.8);
+}
+.bl-root[data-theme='night'] {
+  --sun-core: rgba(255, 236, 204, 0.34);
+  --sun-tint: rgba(255, 226, 180, 0.12);
+  --ray: rgba(255, 236, 204, 0.16);
+  --ray-tint: rgba(255, 226, 180, 0.05);
+  --cone-a: rgba(255, 236, 204, 0.17);
+  --cone-b: rgba(255, 226, 180, 0.03);
+  --floor: rgba(255, 226, 180, 0.04);
+  --pool: rgba(0, 0, 0, 0.6);
+  --vig: rgba(0, 0, 0, 0.45);
+  --deck-a: rgba(40, 52, 47, 0.7);
+  --deck-b: rgba(21, 29, 26, 0.35);
+  --deck-tint: rgba(255, 236, 204, 0.04);
+  --deck-edge-a: rgba(236, 231, 219, 0.22);
+  --deck-edge-b: rgba(236, 231, 219, 0.1);
+  --deck-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.8);
+  --spot-w: rgba(255, 236, 204, 0.3);
+  --edge-hi: rgba(255, 240, 210, 0.85);
+  --logo-glow: rgba(255, 214, 140, 0.45);
+}
+.bl-root[data-still] *,
+.bl-root[data-still] *::before,
+.bl-root[data-still] *::after {
+  animation-play-state: paused !important;
+}
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+@keyframes bl-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.bl-in { animation: bl-in var(--t-slow) var(--ease) both; }
+
+/* ---------- the light on every room screen (quiet: no beams) ---------- */
+.bl-set {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 30% at 50% -6%, var(--sun-core), transparent 100%),
+    radial-gradient(140% 95% at 50% 8%, transparent 55%, var(--vig) 100%);
+}
+.bl-set ~ .bl-app { position: relative; z-index: 1; }
+.bl-app.no-dock { padding-bottom: 48px; }
+
+.bl-bar-start { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bl-bar-start .bl-round { margin-left: -10px; }
+.bl-room-title {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- the dock: the same glass as Home's panel ---------- */
+.bl-dock {
+  height: 60px;
+  border: 0;
+  background: linear-gradient(165deg, var(--deck-a), var(--deck-b) 60%, var(--deck-tint));
+  box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b), var(--deck-shadow);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  justify-content: stretch;
+  padding: 0 6px;
+}
+.bl-tab {
+  flex: 1;
+  width: auto;
+  height: 48px;
+  border-radius: 24px;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--ink-3);
+}
+.bl-tab:hover { filter: none; background: rgba(var(--glow), 0.08); }
+.bl-tab[aria-current='page']::after { display: none; }
+.bl-tab[aria-current='page'] svg { filter: drop-shadow(0 0 8px rgba(var(--glow), 0.6)); }
+.bl-tab-ic { position: relative; display: flex; }
+.bl-tab-label { font-size: 11px; font-weight: 600; line-height: 1; }
+.bl-badge {
+  top: -5px;
+  right: -9px;
+  background: var(--danger);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.bl-root[data-theme='night'] .bl-badge { color: #1a0d0a; }
+
+/* ---------- glass cards and ink status ---------- */
+.bl-glass-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, var(--deck-a) 0%, var(--deck-b) 60%, var(--deck-tint) 100%);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b), 0 18px 40px -30px rgba(40, 34, 24, 0.3);
+}
+.bl-chip-ink {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(17, 23, 22, 0.06);
+  color: var(--ink-2);
+}
+.bl-root[data-theme='night'] .bl-chip-ink { background: rgba(236, 231, 219, 0.08); }
+.bl-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.bl-spend { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.bl-meter-ink { flex: 1; height: 4px; border-radius: 2px; background: var(--mist); overflow: hidden; }
+.bl-meter-ink span { display: block; height: 100%; background: var(--ink); }
+
+/* ---------- Home ---------- */
+.bl-home {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px 20px max(28px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+.bl-home-bar { position: relative; z-index: 1; }
+.bl-home-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 56px;
+  padding-bottom: 12px;
+}
+.bl-home-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bl-home-logo { display: flex; color: var(--ink); filter: drop-shadow(0 -2px 10px var(--logo-glow)); }
+.bl-home-pool {
+  width: 120px;
+  height: 14px;
+  border-radius: 50%;
+  margin: 10px 0 26px;
+  background: radial-gradient(closest-side, var(--pool), transparent);
+}
+.bl-home-date { margin: 0 0 12px; font-size: 13px; color: var(--ink-3); }
+.bl-greet {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  animation: bl-in var(--t-slow) var(--ease) 80ms both, bl-shine 7s ease-in-out 1.8s infinite;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .bl-greet {
+    background: linear-gradient(100deg, var(--ink) 0%, var(--ink) 38%, var(--accent-text) 50%, var(--ink) 62%, var(--ink) 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+@keyframes bl-shine {
+  0% { background-position: 100% 0; }
+  60%, 100% { background-position: 0 0; }
+}
+.bl-home-pick { display: flex; flex-direction: column; gap: 14px; }
+.bl-home-ask { margin: 0; text-align: center; font-size: 13px; color: var(--ink-3); }
+.bl-home-foot {
+  position: relative;
+  z-index: 1;
+  margin: 24px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.bl-live-dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); animation: bl-pulse 2s ease-out infinite; }
+
+/* the stage behind Home */
+.bl-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  animation: bl-lightson 1.8s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+@keyframes bl-lightson {
+  0% { opacity: 0; }
+  18% { opacity: 0.55; }
+  24% { opacity: 0.25; }
+  40%, 100% { opacity: 1; }
+}
+.bl-sun {
+  position: absolute;
+  left: 50%;
+  top: -300px;
+  width: 520px;
+  height: 460px;
+  margin-left: -260px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--sun-core), var(--sun-tint) 45%, transparent 100%);
+  filter: blur(6px);
+  animation: bl-sunbreath 9s ease-in-out infinite;
+}
+@keyframes bl-sunbreath {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+.bl-cone-wrap { position: absolute; inset: 0; filter: blur(9px); animation: bl-conebreath 8s ease-in-out infinite; }
+@keyframes bl-conebreath { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+.bl-cone {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  width: 300px;
+  height: 330px;
+  margin-left: -150px;
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, var(--cone-a), var(--cone-b) 70%, transparent 100%);
+}
+.bl-rays { position: absolute; left: 50%; top: -40px; width: 0; height: 0; }
+.bl-ray {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--w);
+  height: 760px;
+  margin-left: calc(var(--w) / -2);
+  transform-origin: 50% 0;
+  transform: rotate(var(--a));
+  background: linear-gradient(180deg, var(--ray) 0%, var(--ray-tint) 40%, transparent 85%);
+  filter: blur(var(--b));
+  opacity: 0;
+  animation: bl-raysway var(--d) ease-in-out var(--o) infinite;
+}
+@keyframes bl-raysway {
+  0%, 100% { opacity: 0.35; transform: rotate(var(--a)); }
+  50% { opacity: 0.85; transform: rotate(calc(var(--a) + 2.5deg)); }
+}
+.bl-motes i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--sun-core);
+  box-shadow: 0 0 6px var(--sun-core);
+  opacity: 0;
+  animation: bl-mote var(--d) linear var(--o) infinite;
+}
+@keyframes bl-mote {
+  0% { opacity: 0; transform: translateY(0); }
+  25% { opacity: 0.75; }
+  80% { opacity: 0; transform: translateY(48px); }
+  100% { opacity: 0; transform: translateY(60px); }
+}
+.bl-floor {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  bottom: -180px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--floor), transparent);
+}
+.bl-vignette { position: absolute; inset: 0; background: radial-gradient(120% 85% at 50% 18%, transparent 45%, var(--vig) 100%); }
+
+/* the glass panel of rooms (also the Playground's tools) */
+.bl-deck {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-radius: 28px;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(165deg, var(--deck-a) 0%, var(--deck-b) 55%, var(--deck-tint) 100%);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: var(--deck-shadow);
+}
+.bl-deck.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.bl-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(160deg, var(--deck-edge-a), transparent 40%, var(--deck-edge-b));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.bl-deck::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 50%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: bl-glint 7s ease-in-out 1.2s infinite;
+}
+.bl-root[data-theme='night'] .bl-deck::after { background: linear-gradient(105deg, transparent, rgba(255, 226, 170, 0.1), transparent); }
+@keyframes bl-glint { 0% { left: -60%; } 35%, 100% { left: 120%; } }
+.bl-deck-glow {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(0.2, 0.9, 0.25, 1.08);
+}
+.bl-deck-beam { position: absolute; inset: 0; filter: blur(4px); }
+.bl-deck-beam i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 88px;
+  height: 70px;
+  margin-left: -44px;
+  clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--spot-w));
+}
+.bl-deck-glow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50px;
+  width: 72px;
+  height: 22px;
+  margin-left: -36px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--glow), 0.4), transparent);
+}
+.bl-room {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 112px;
+  padding: 26px 4px 22px;
+  text-decoration: none;
+  color: var(--ink-2);
+  transition: background var(--t-med) var(--ease), color var(--t-med) var(--ease);
+  animation: bl-in var(--t-slow) var(--ease) both;
+}
+.bl-room:nth-child(2) { animation-delay: 140ms; }
+.bl-room:nth-child(3) { animation-delay: 220ms; }
+.bl-room:nth-child(4) { animation-delay: 300ms; }
+.bl-room + .bl-room::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--line), transparent);
+}
+.bl-room:hover { background: rgba(var(--glow), 0.08); color: var(--ink); }
+.bl-room svg { transition: transform var(--t-med) var(--ease), filter var(--t-med) var(--ease); }
+.bl-room:hover svg { transform: translateY(-3px); }
+.bl-room.lit { color: var(--accent-text); }
+.bl-room.lit svg { filter: drop-shadow(0 0 10px rgba(var(--glow), 0.75)); animation: bl-float 4s ease-in-out infinite; }
+@keyframes bl-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.bl-room.lit::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  bottom: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 12px 1px rgba(var(--glow), 0.9);
+}
+.bl-room-name {
+  padding: 0 4px;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.bl-room.lit .bl-room-name { color: var(--ink); }
+
+/* lit icons: the bright top edge where the light catches */
+.bl-lit .bl-edge { stroke: var(--edge-hi); stroke-width: 1.1; fill: none; }
+.bl-room:not(.lit) .bl-lit .bl-edge { opacity: 0.75; }
+
+/* ---------- the Playground ---------- */
+.bl-play {
+  min-height: calc(100dvh - 220px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 40px;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+}
+.bl-play-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bl-play-head .bl-home-ask { margin-top: 12px; }
+
+/* Desktop: the glass dock stands up on the left, icons stacked. */
+@media (min-width: 900px) {
+  .bl-dock {
+    height: auto;
+    width: 76px;
+    padding: 12px 6px;
+    gap: 6px;
+  }
+  .bl-tab {
+    flex: none;
+    width: 64px;
+    height: 58px;
+    border-radius: 20px;
+  }
 }

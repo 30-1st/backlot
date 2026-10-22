@@ -101,9 +101,9 @@ export default function App() {
     );
   }
 
-  // In the hosted build the platform chooser lives at #narrate (reached from Create);
+  // In the hosted build the narration tools live in the Playground (#playground);
   // the offline build keeps it as its homescreen.
-  const home = login.status === 'in' ? 'narrate' : '';
+  const home = login.status === 'in' ? 'playground' : '';
   const route = parse(path);
   if (!route) return <Home key={who} onChoose={(platform) => go(platform)} {...account} {...bil} />;
 

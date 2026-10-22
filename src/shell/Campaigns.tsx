@@ -37,7 +37,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 className="bl-h1 bl-rise">Campaigns</h1>
+      <h1 className="bl-h1 bl-rise">Schedule</h1>
       {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
       {list.length === 0 ? (
         <div className="bl-empty bl-rise bl-d1">

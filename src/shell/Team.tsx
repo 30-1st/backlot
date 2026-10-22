@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { team, type People, type Person } from '../lib/team';
 import { ChangePassword } from './ChangePassword';
-import { Back, Rings } from './icons';
+import { Rings } from './icons';
 import type { ThemeChoice } from './theme';
 import type { ScreenProps } from './Shell';
 
@@ -21,12 +21,7 @@ export function TeamScreen({
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div className="bl-bar" style={{ justifyContent: 'flex-start', gap: 12 }}>
-        <button type="button" className="bl-ghost bl-round" aria-label="Back to Home" onClick={() => go('home')}>
-          <Back />
-        </button>
-        <h1 className="bl-h1">{isTeam ? 'Team' : 'Account'}</h1>
-      </div>
+      <h1 className="bl-sr">Account</h1>
 
       {isTeam && <TeamPanel />}
 

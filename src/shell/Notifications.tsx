@@ -151,7 +151,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div className="bl-head bl-rise">
-        <h1 className="bl-h1">Notifications</h1>
+        <h1 className="bl-h1">Today</h1>
         {needs > 0 && <span className="bl-count">{needs} need you</span>}
       </div>
 

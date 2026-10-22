@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useId, type CSSProperties } from 'react';
 
 // Backlot's own icon set, drawn in the ripple and signal language of the brand.
 // All are 26 by 26, stroke in the current text colour, and hidden from screen readers
@@ -170,6 +170,167 @@ export function Rings({ size, style, dashed = true }: { size: number; style?: CS
         strokeDasharray={dashed ? '3 8' : undefined}
       />
       <circle cx={c} cy={c} r={size * 0.46} stroke="var(--accent)" strokeWidth="1" opacity="0.2" />
+    </svg>
+  );
+}
+
+/* ---------- Room and tool icons: objects from a film set, lit from above ----------
+ * Each has a shaded body (light at the top, darker below), a solid part that gives it
+ * weight, and a thin bright line along its top edge where the light catches it.
+ * 32 by 32, drawn in the current text colour. */
+
+const lit = (size: number) => ({
+  width: size,
+  height: size,
+  viewBox: '0 0 32 32',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true,
+  className: 'bl-lit',
+});
+
+/** A gradient id that is safe inside url(#...). */
+function useSvgId(): string {
+  return 'bl' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function Shade({ id }: { id: string }) {
+  return (
+    <defs>
+      <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="currentColor" stopOpacity=".04" />
+        <stop offset="1" stopColor="currentColor" stopOpacity=".32" />
+      </linearGradient>
+    </defs>
+  );
+}
+
+function star(cx: number, cy: number, R: number, r: number): string {
+  const pts: string[] = [];
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + (k * Math.PI) / 5;
+    const rad = k % 2 === 0 ? R : r;
+    pts.push(`${(cx + rad * Math.cos(a)).toFixed(2)},${(cy + rad * Math.sin(a)).toFixed(2)}`);
+  }
+  return `M${pts.join(' L')}Z`;
+}
+const STAR = star(16, 12.4, 3.6, 1.55);
+
+/** Team: a clapperboard, for the crew that makes it. */
+export function Clapper({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <rect x="5" y="14.5" width="22" height="12.5" rx="2" fill={`url(#${id})`} />
+      <path d="M5 19h22" />
+      <path d="M5.4 14.3 25.2 9.1l.9 3.4L6.3 17.7z" fill="currentColor" stroke="none" />
+      <path className="bl-edge" d="M6.6 13.6 24.6 8.9" />
+    </svg>
+  );
+}
+
+/** Client: a dressing-room door with a star, for the talent. */
+export function StarDoor({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <path d="M9 27V7.5A2.5 2.5 0 0 1 11.5 5h9A2.5 2.5 0 0 1 23 7.5V27z" fill={`url(#${id})`} />
+      <path d="M5.5 27h21" />
+      <path d={STAR} fill="currentColor" stroke="none" />
+      <circle cx="20" cy="19" r=".9" fill="currentColor" stroke="none" />
+      <path className="bl-edge" d="M11 5.9h10" />
+    </svg>
+  );
+}
+
+const HOLES = [0, 1, 2, 3, 4].map((k) => {
+  const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+  return [16 + 5.6 * Math.cos(a), 16 + 5.6 * Math.sin(a)];
+});
+
+/** Playground: a film reel, for stories you play with. */
+export function Reel({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <circle cx="16" cy="16" r="10.5" fill={`url(#${id})`} />
+      {HOLES.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="1.9" fill="currentColor" stroke="none" opacity=".85" />
+      ))}
+      <circle cx="16" cy="16" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M16 26.5h11.5" />
+      <path className="bl-edge" d="M8.6 9.4A10 10 0 0 1 23.4 9.4" />
+    </svg>
+  );
+}
+
+/** Narrate Instagram: a page of lines. */
+export function Page({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <rect x="6" y="5" width="20" height="22" rx="4" fill={`url(#${id})`} />
+      <path d="M11 12h10M11 16h10M11 20h6" />
+      <path className="bl-edge" d="M9 5.8h14" />
+    </svg>
+  );
+}
+
+/** Narrate X: a speech bubble. */
+export function Bubble({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <path
+        d="M6 8.5A2.5 2.5 0 0 1 8.5 6h15A2.5 2.5 0 0 1 26 8.5v10a2.5 2.5 0 0 1-2.5 2.5H14l-6 5v-5H8.5A2.5 2.5 0 0 1 6 18.5z"
+        fill={`url(#${id})`}
+      />
+      <path d="M11 11.5h10M11 15.5h7" />
+      <path className="bl-edge" d="M9 6.8h14" />
+    </svg>
+  );
+}
+
+/** Rein: a radar with its sweep. */
+export function Radar({ size = 36 }: P) {
+  const id = useSvgId();
+  return (
+    <svg {...lit(size)}>
+      <Shade id={id} />
+      <circle cx="16" cy="16" r="10.5" fill={`url(#${id})`} />
+      <circle cx="16" cy="16" r="5.5" />
+      <path d="M16 16 24.2 9.4A10.5 10.5 0 0 0 16 5.5z" fill="currentColor" stroke="none" opacity=".9" />
+      <circle cx="16" cy="16" r="1.2" fill="currentColor" stroke="none" />
+      <path className="bl-edge" d="M8.6 9.4A10 10 0 0 1 16 6" />
+    </svg>
+  );
+}
+
+/** Home: a house. */
+export function House({ size = 20 }: P) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 11l8-6.5 8 6.5" />
+      <path d="M6.5 9.5V19h11V9.5" />
+    </svg>
+  );
+}
+
+/** Clients: two people. */
+export function People({ size = 26 }: P) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="9.5" cy="9" r="3.5" />
+      <path d="M3.5 21a6 6 0 0 1 12 0" />
+      <path d="M17 5.6a3.4 3.4 0 0 1 0 6.8M19 15.4a6 6 0 0 1 3.5 5.6" />
     </svg>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { team, type Me } from '../lib/team';
 import { useWorkspace } from './data';
-import { Chevron, Dial, Rise, Sequence, Signal, Vault } from './icons';
+import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
 import { CreateScreen } from './Create';
@@ -10,20 +10,26 @@ import { CampaignsScreen } from './Campaigns';
 import { InsightsScreen } from './Insights';
 import { TeamScreen } from './Team';
 import { ChangePassword } from './ChangePassword';
-import { ModeSwitch } from './ModeSwitch';
-import { NarrateScreen } from './Narrate';
+import { HomeRooms } from './Rooms';
+import { ClientsScreen } from './Clients';
+import { PlaygroundScreen, PlaygroundSoon } from './Playground';
 
-// The signed-in app: a status line, the screen, and the floating dock.
-// Routes (in the address after #): home, create, library, campaigns, campaigns.<id>,
-// insights, team. The older tools (narration studio, people, Bil's test page) keep their
-// own routes and are reached from Create and Team.
+// The signed-in app is three rooms behind one Home:
+//   Home                      #home
+//   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #create
+//   Client                    the same #today and #campaigns for a client; the team previews
+//                             a client's view under #client, #client.campaigns[.id]
+//   Playground (everyone)     #playground  #instagram (narration studio)  #narrate-x  #rein
+//   Account (from the avatar) #account
+// The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-export type ShellRoute = 'home' | 'create' | 'library' | 'campaigns' | 'insights' | 'team' | 'narrate';
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'narrate-x', 'rein'];
 
 export function isShellPath(path: string): boolean {
-  const head = path.split('.')[0];
-  return path === '' || ['home', 'create', 'library', 'campaigns', 'insights', 'team', 'narrate'].includes(head);
+  return SHELL_HEADS.includes(path.split('.')[0]);
 }
+
+type RoomKey = 'home' | 'team' | 'client' | 'preview' | 'play' | 'account';
 
 export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) => void; onSignOut: () => void }) {
   const { theme, choice, setChoice } = useTheme();
@@ -31,6 +37,14 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   const [meError, setMeError] = useState('');
   const ws = useWorkspace();
   const [picked, setPicked] = useState<string>('all');
+  const [still, setStill] = useState(false);
+
+  // Ambient motion pauses whenever Backlot is not on screen, to save the phone's battery.
+  useEffect(() => {
+    const on = () => setStill(document.visibilityState !== 'visible');
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
 
   const loadMe = () =>
     team.me().then(
@@ -44,18 +58,20 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     void loadMe();
   }, []);
 
-  const [head, sub] = [path.split('.')[0] || 'home', path.split('.').slice(1).join('.')];
-  const route = (head === '' ? 'home' : head) as ShellRoute;
+  const parts = path.split('.');
+  const preview = parts[0] === 'client';
+  const inner = preview ? parts.slice(1) : parts;
+  const head = inner[0] || (preview ? 'today' : 'home');
+  const sub = inner.slice(1).join('.');
 
   const isTeam = me ? me.role !== 'client' : false;
   const clients = ws.data?.clients ?? [];
-  // A client is always looking at themselves. The team picks one, or all.
   const focus = !isTeam ? me?.clientId ?? null : picked === 'all' ? null : picked;
   const single = focus ?? clients[0]?.id ?? null;
-  const badge = useMemo(() => (me && ws.data ? needsYouCount(me, ws.data, focus) : 0), [me, ws.data, focus]);
+  const badge = useMemo(() => (me && ws.data ? needsYouCount(me, ws.data, isTeam ? null : focus) : 0), [me, ws.data, focus, isTeam]);
 
   const wrap = (children: ReactNode) => (
-    <div className="bl-root" data-theme={theme}>
+    <div className="bl-root" data-theme={theme} data-still={still ? '' : undefined}>
       {children}
     </div>
   );
@@ -83,81 +99,161 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     return wrap(<ChangePassword forced onDone={() => void loadMe()} onSignOut={onSignOut} />);
   }
 
-  const budget = me.budget;
-  const used = budget && budget.cap > 0 ? Math.min(100, Math.round((budget.used / budget.cap) * 100)) : 0;
-  const resets = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1))
-    .toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-    .toUpperCase();
+  // Home has its own stage and no dock.
+  if (!preview && (head === 'home' || head === '')) return wrap(<HomeRooms me={me} go={go} needs={badge} />);
 
-  const props = { me, ws, go, focus, single, isTeam };
+  // Which room this screen belongs to.
+  const room: RoomKey = preview
+    ? 'preview'
+    : ['playground', 'narrate', 'narrate-x', 'rein'].includes(head)
+      ? 'play'
+      : head === 'account' || head === 'team'
+        ? 'account'
+        : isTeam
+          ? 'team'
+          : 'client';
+
+  // The team previews a client's view: the screens think they are the client.
+  const asMe: Me = preview ? { ...me, role: 'client', clientId: single, clientHandle: clients.find((c) => c.id === single)?.handle ?? null } : me;
+  const goIn = preview ? (p: string) => go(p === 'today' || p.startsWith('campaigns') ? `client.${p}` : p) : go;
+  const props = { me: asMe, ws, go: goIn, focus: preview ? single : focus, single, isTeam: preview ? false : isTeam };
 
   let screen: ReactNode;
-  switch (route) {
-    case 'create':
-      screen = <CreateScreen {...props} />;
-      break;
-    case 'library':
-      screen = <LibraryScreen {...props} />;
-      break;
-    case 'narrate':
-      screen = <NarrateScreen {...props} />;
-      break;
+  switch (head) {
     case 'campaigns':
       screen = <CampaignsScreen {...props} campaignId={sub || null} />;
+      break;
+    case 'clients':
+      screen = isTeam ? <ClientsScreen {...props} pick={setPicked} /> : <Notifications {...props} />;
       break;
     case 'insights':
       screen = <InsightsScreen {...props} />;
       break;
+    case 'library':
+      screen = <LibraryScreen {...props} />;
+      break;
+    case 'create':
+      screen = isTeam ? <CreateScreen {...props} /> : <Notifications {...props} />;
+      break;
+    case 'account':
     case 'team':
       screen = <TeamScreen {...props} theme={{ choice, setChoice }} onSignOut={onSignOut} onChanged={() => void loadMe()} />;
+      break;
+    case 'playground':
+    case 'narrate':
+      screen = <PlaygroundScreen {...props} />;
+      break;
+    case 'narrate-x':
+      screen = <PlaygroundSoon {...props} tool="x" />;
+      break;
+    case 'rein':
+      screen = <PlaygroundSoon {...props} tool="rein" />;
       break;
     default:
       screen = <Notifications {...props} />;
   }
 
-  const tab = (r: ShellRoute, label: string, icon: ReactNode, extra?: ReactNode) => (
+  const title =
+    room === 'team' ? 'Team' : room === 'client' ? 'Your posts' : room === 'preview' ? 'Client' : room === 'play' ? 'Playground' : 'Account';
+  const nested = head === 'narrate-x' || head === 'rein';
+
+  const budget = me.budget;
+  const used = budget && budget.cap > 0 ? Math.min(100, Math.round((budget.used / budget.cap) * 100)) : 0;
+
+  const tab = (to: string, label: string, icon: ReactNode, current: boolean, count = 0) => (
     <a
-      href={`#${r}`}
+      href={`#${to}`}
       className="bl-tab"
-      aria-label={label}
-      aria-current={route === r ? 'page' : undefined}
+      aria-label={count ? `${label}, ${count} need you` : label}
+      aria-current={current ? 'page' : undefined}
       onClick={(e) => {
         e.preventDefault();
-        go(r);
+        go(to);
       }}
     >
-      {icon}
-      {extra}
+      <span className="bl-tab-ic">
+        {icon}
+        {count > 0 && !current && <span className="bl-badge">{count}</span>}
+      </span>
+      {current && <span className="bl-tab-label">{label}</span>}
     </a>
   );
 
+  let dock: ReactNode = null;
+  if (room === 'team') {
+    dock = (
+      <nav aria-label="Team" className="bl-dock">
+        {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+        {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library'].includes(head))}
+        {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
+      </nav>
+    );
+  } else if (room === 'client') {
+    dock = (
+      <nav aria-label="Your posts" className="bl-dock">
+        {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+        {tab('playground', 'Playground', <Reel size={22} />, false)}
+      </nav>
+    );
+  } else if (room === 'preview') {
+    dock = (
+      <nav aria-label="Client view" className="bl-dock">
+        {tab('client', 'Today', <Signal size={22} />, head === 'today')}
+        {tab('client.campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+      </nav>
+    );
+  }
+
+  const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
+
   return wrap(
     <>
-      <div className="bl-app">
+      <div className="bl-set" aria-hidden="true" />
+      <div className={`bl-app${dock ? '' : ' no-dock'}`}>
         <header className="bl-top">
           <div className="bl-bar">
-            <a
-              href="#home"
-              className="bl-word"
-              onClick={(e) => {
-                e.preventDefault();
-                go('home');
-              }}
-            >
-              Backlot
-            </a>
+            <div className="bl-bar-start">
+              {nested ? (
+                <a
+                  href="#playground"
+                  className="bl-ghost bl-round"
+                  aria-label="Back to the Playground"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go('playground');
+                  }}
+                >
+                  <Back />
+                </a>
+              ) : (
+                <a
+                  href="#home"
+                  className="bl-ghost bl-round"
+                  aria-label="Home"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go('home');
+                  }}
+                >
+                  <House />
+                </a>
+              )}
+              <span className="bl-room-title">{nested ? (head === 'rein' ? 'Rein' : 'X') : title}</span>
+            </div>
             <div className="bl-bar-end">
-              {isTeam && clients.length > 0 && (
+              {showPicker && (
                 <label className="bl-ghost" style={{ position: 'relative', paddingRight: 14 }}>
                   <span className="bl-sr">Which client</span>
-                  <span>{focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
+                  <span>{room === 'preview' ? `@${clients.find((c) => c.id === single)?.handle ?? ''}` : focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
                   <Chevron />
                   <select
-                    value={picked}
+                    value={room === 'preview' ? single ?? '' : picked}
                     onChange={(e) => setPicked(e.target.value)}
                     style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
                   >
-                    <option value="all">All clients</option>
+                    {room !== 'preview' && <option value="all">All clients</option>}
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         @{c.handle}
@@ -166,30 +262,28 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
                   </select>
                 </label>
               )}
-              <ModeSwitch />
               <a
-                href="#team"
+                href="#account"
                 className={`bl-avatar${isTeam ? '' : ' soft'}`}
-                aria-label={isTeam ? 'Team and your account' : 'Your account'}
+                aria-label="Your account"
                 onClick={(e) => {
                   e.preventDefault();
-                  go('team');
+                  go('account');
                 }}
               >
                 {(me.username ?? '?').slice(0, 1)}
               </a>
             </div>
           </div>
-          {budget && (
-            <div className="bl-status">
-              <span className="bl-dot bl-live" />
-              <span>
-                Budget ${budget.used.toFixed(2)} / ${budget.cap.toFixed(0)}
+          {head === 'create' && budget && (
+            <div className="bl-spend">
+              <span>Spent this month</span>
+              <span className="num">
+                ${budget.used.toFixed(2)} of ${budget.cap.toFixed(0)}
               </span>
-              <span className={`bl-meter${used >= 90 ? ' warn' : ''}`} role="img" aria-label={`${used} percent of this month's AI budget used`}>
+              <span className="bl-meter-ink" role="img" aria-label={`${used} percent of this month's AI budget used`}>
                 <span style={{ width: `${used}%` }} />
               </span>
-              <span>Resets {resets}</span>
             </div>
           )}
           {ws.error && (
@@ -200,25 +294,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         </header>
         {screen}
       </div>
-
-      <nav aria-label="Main" className="bl-dock">
-        {tab('home', badge ? `Home, ${badge} need you` : 'Home', <Signal />, badge ? <span className="bl-badge">{badge}</span> : null)}
-        {tab('library', 'Library', <Vault />)}
-        <a
-          href="#create"
-          className="bl-orb"
-          aria-label="Create with Bil"
-          aria-current={route === 'create' ? 'page' : undefined}
-          onClick={(e) => {
-            e.preventDefault();
-            go('create');
-          }}
-        >
-          <Rise />
-        </a>
-        {tab('campaigns', 'Campaigns', <Sequence />)}
-        {tab('insights', 'Insights', <Dial />)}
-      </nav>
+      {dock}
     </>,
   );
 }
