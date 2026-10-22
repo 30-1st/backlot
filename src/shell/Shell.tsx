@@ -14,6 +14,7 @@ import { HomeRooms } from './Rooms';
 import { ClientsScreen } from './Clients';
 import { PlaygroundScreen, PlaygroundSoon } from './Playground';
 import { MeasureFlow, PlanFlow } from './PlanFlow';
+import { AddClientFlow } from './AddClientFlow';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -140,6 +141,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         <PlanFlow {...props} />
       ) : sub === 'measure' ? (
         <MeasureFlow {...props} />
+      ) : sub === 'client' ? (
+        <AddClientFlow {...props} />
       ) : (
         <CreateScreen {...props} />
       );
@@ -218,7 +221,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights'].includes(head) || (head === 'create' && sub !== '');
+  const one = room === 'preview' || ['library', 'insights'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>

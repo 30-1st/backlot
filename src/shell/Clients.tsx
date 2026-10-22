@@ -21,8 +21,8 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
           <p className="bl-p bl-muted" style={{ margin: 0 }}>
             Ask Bil to bring in your first client. He reads their page and drafts their voice.
           </p>
-          <button type="button" className="bl-btn" onClick={() => go('create')}>
-            Ask Bil
+          <button type="button" className="bl-btn" onClick={() => go('create.client')}>
+            Add a client
           </button>
         </div>
       )}
