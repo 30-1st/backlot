@@ -30,7 +30,10 @@ export type ToolContext = {
   budget: Budget;
   /** Database client acting as the signed-in user. Required for client data. */
   userDb?: SupabaseClient;
-  /** That user's ID, taken from their verified login, never from model output. */
+  /**
+   * The workspace the client data belongs to (its owner's login ID), resolved by the server
+   * from the verified login's membership, never from model output.
+   */
   ownerId?: string;
 };
 
@@ -38,6 +41,8 @@ export type ToolContext = {
  * Builds a database client that acts as the person who sent the request, from their
  * Authorization header. Returns null when there is no valid login.
  */
+// ownerId here is the caller's own login ID; front doors swap it for their workspace ID
+// (see _shared/workspace.ts) before touching client data.
 export async function userContextFromRequest(req: Request): Promise<{ userDb: SupabaseClient; ownerId: string } | null> {
   const auth = req.headers.get('Authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';

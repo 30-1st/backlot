@@ -1,4 +1,9 @@
-// Creates a Backlot login from a username and a password.
+// Creates a Backlot login from a one-time invite code, a username and a password.
+//
+// Backlot is private: nobody can sign up without a code a teammate made (team function,
+// invite_create). The code decides whether the new login joins as team or as a client,
+// and which client. It is claimed in one step, so it can never be used twice; if making
+// the login fails afterwards, the code is handed back.
 //
 // Backlot has no email. Supabase Auth still needs an address for every user,
 // so each username gets an internal one on a domain that can never receive
@@ -9,6 +14,7 @@
 // on sign-ups per network address.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { hashCode, looksLikeCode } from '../_shared/invite-code.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 const USERNAME = /^[a-z0-9._]{3,24}$/;
@@ -41,7 +47,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply(405, { error: 'method' });
 
-  let body: { username?: unknown; password?: unknown };
+  let body: { username?: unknown; password?: unknown; code?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -50,7 +56,9 @@ Deno.serve(async (req: Request) => {
 
   const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
+  const code = typeof body.code === 'string' ? body.code : '';
 
+  if (!looksLikeCode(code)) return reply(400, { error: 'invite_invalid' });
   if (!USERNAME.test(username)) return reply(400, { error: 'username_format' });
   if (RESERVED.has(username)) return reply(409, { error: 'username_taken' });
   if (password.length < 8 || password.length > 72) return reply(400, { error: 'password_length' });
@@ -69,6 +77,19 @@ Deno.serve(async (req: Request) => {
   if ((count ?? 0) >= MAX_SIGNUPS_PER_HOUR) return reply(429, { error: 'too_many' });
   await db.from('signup_log').insert({ ip });
 
+  // Claim the code before making anything. Wrong, used and expired codes look the same.
+  const { data: claimed, error: claimError } = await db.rpc('invite_claim', { p_code_hash: await hashCode(code) });
+  if (claimError) {
+    console.error('invite claim failed', claimError.code, claimError.message);
+    return reply(500, { error: 'server' });
+  }
+  const invite = Array.isArray(claimed) ? claimed[0] : null;
+  if (!invite) return reply(403, { error: 'invite_invalid' });
+  const giveBack = async () => {
+    const { error } = await db.rpc('invite_finish', { p_invite: invite.invite_id, p_user: null });
+    if (error) console.error('could not hand the invite back', error.message);
+  };
+
   const { data: created, error: createError } = await db.auth.admin.createUser({
     email: `${username}@${LOGIN_DOMAIN}`,
     password,
@@ -76,21 +97,44 @@ Deno.serve(async (req: Request) => {
     app_metadata: { username },
   });
   if (createError || !created.user) {
-    const code = (createError as { code?: string } | null)?.code ?? '';
-    if (code === 'email_exists' || code === 'user_already_exists') return reply(409, { error: 'username_taken' });
-    if (code === 'weak_password') return reply(400, { error: 'password_weak' });
-    console.error('createUser failed', code, createError?.message);
+    await giveBack();
+    const errCode = (createError as { code?: string } | null)?.code ?? '';
+    if (errCode === 'email_exists' || errCode === 'user_already_exists') return reply(409, { error: 'username_taken' });
+    if (errCode === 'weak_password') return reply(400, { error: 'password_weak' });
+    console.error('createUser failed', errCode, createError?.message);
     return reply(500, { error: 'server' });
   }
+  const newId = created.user.id;
 
-  const { error: memberError } = await db.from('members').insert({ id: created.user.id, username });
+  // Do not leave a login behind without its member row and membership.
+  const undo = async () => {
+    await db.auth.admin.deleteUser(newId);
+    await giveBack();
+  };
+
+  const { error: memberError } = await db.from('members').insert({ id: newId, username });
   if (memberError) {
-    // Do not leave a login behind without its member row.
-    await db.auth.admin.deleteUser(created.user.id);
+    await undo();
     if (memberError.code === '23505') return reply(409, { error: 'username_taken' });
     console.error('member insert failed', memberError.code, memberError.message);
     return reply(500, { error: 'server' });
   }
 
-  return reply(200, { ok: true, username });
+  const { error: joinError } = await db.from('workspace_members').insert({
+    user_id: newId,
+    workspace_id: invite.workspace_id,
+    role: invite.role,
+    client_id: invite.client_id,
+  });
+  if (joinError) {
+    await undo();
+    // 23505 on client_id would mean the client already has a login.
+    console.error('workspace join failed', joinError.code, joinError.message);
+    return reply(500, { error: 'server' });
+  }
+
+  const { error: finishError } = await db.rpc('invite_finish', { p_invite: invite.invite_id, p_user: newId });
+  if (finishError) console.error('could not record who used the invite', finishError.message);
+
+  return reply(200, { ok: true, username, role: invite.role });
 });

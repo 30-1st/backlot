@@ -28,3 +28,8 @@ verify_jwt = false
 [functions.bil-worker]
 # Called by pg_cron and the bil function with the worker token from internal_config.
 verify_jwt = false
+
+[functions.team]
+# The team's door (who you are, people, invites, passwords). Off so the browser's CORS
+# preflight can be answered; the function verifies the login itself on every POST.
+verify_jwt = false

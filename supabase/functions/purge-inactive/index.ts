@@ -2,6 +2,11 @@
 // accounts, narrations and media, and clears out chats nobody is in any more.
 // Runs once a day from pg_cron.
 //
+// Anyone in the team workspace (owner, team or client) is never removed: deleting the
+// owner's login would delete every client, voice card and campaign with it, and a client
+// who goes quiet for two months is still a client. Only logins outside the workspace
+// (from before Backlot went invite-only) can expire.
+//
 // The caller must present the cleanup token kept in public.internal_config,
 // which only server-side code can read. The platform's JWT check is off
 // because the scheduler has no user session.
@@ -63,10 +68,18 @@ Deno.serve(async (req: Request) => {
     .limit(BATCH);
   if (idleError) return reply(500, { error: 'server' });
 
+  // Never purge workspace members, whatever their activity.
+  const idleIds = (idle ?? []).map((m) => m.id);
+  const { data: kept, error: keptError } = idleIds.length
+    ? await db.from('workspace_members').select('user_id').in('user_id', idleIds)
+    : { data: [], error: null };
+  if (keptError) return reply(500, { error: 'server' });
+  const protectedIds = new Set((kept ?? []).map((k) => k.user_id));
+
   let logins = 0;
   let files = 0;
   const failed: string[] = [];
-  for (const member of idle ?? []) {
+  for (const member of (idle ?? []).filter((m) => !protectedIds.has(m.id))) {
     try {
       files += await emptyFolder(db, member.id);
       // Deleting the login removes its member row, accounts and narrations with it.

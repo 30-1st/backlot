@@ -1,18 +1,25 @@
-// Bil's front door for the app. Every request needs a signed-in Backlot login.
+// Bil's front door for the app. Every request needs a signed-in Backlot login that belongs
+// to the workspace.
 //
 // The platform's JWT check is off (config.toml) so the browser's CORS preflight, which
 // carries no login, can be answered; this code verifies the login itself on every POST
 // (getClaims checks the token's signature). Reads happen through the user's own access
-// rules; writes go through the server, scoped to the verified owner.
+// rules; writes go through the server, scoped to the verified workspace.
+//
+// Who may do what (see _shared/workspace.ts):
+//   team (owner or team)  every action, for any client in the workspace
+//   client                approve_voice and review_post, for their own client only.
+//                         Clients never start paid work.
 //
 // Actions (POST JSON with "action"):
-//   lookup         { handle }                 public profile facts to pre-fill intake ($0.01)
-//   onboard        OnboardRequest             voice card + post-type library (about $0.30)
-//   approve_voice  { clientId, edits? }       the client approves their card (free)
-//   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25)
-//   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)
-//   campaign       CampaignRequest            queues a campaign and returns at once
-//   resume         { campaignId }             resumes a campaign paused at the month's budget
+//   lookup         { handle }                 public profile facts to pre-fill intake ($0.01)       team
+//   onboard        OnboardRequest             voice card + post-type library (about $0.30)           team
+//   approve_voice  { clientId, edits? }       the client approves their card (free)                  team, client
+//   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25) team
+//   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)                 team
+//   campaign       CampaignRequest            queues a campaign and returns at once                  team
+//   resume         { campaignId }             resumes a campaign paused at the month's budget        team
+//   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
 
 import {
   ApproveVoiceRequest,
@@ -29,11 +36,14 @@ import {
   OnboardRequest,
   onboardClient,
   resumeCampaign,
+  ReviewPostRequest,
+  reviewPost,
   startCampaign,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
+import { AccessError, memberOf, requireClientAccess, requireTeam } from '../_shared/workspace.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -68,34 +78,51 @@ Deno.serve(async (req) => {
   const { action, ...input } = body as { action?: string };
 
   try {
+    const member = await memberOf(user.ownerId);
+    if (!member) return reply(403, { error: 'Your login is not part of a Backlot team yet.' });
+    // From here on, ownerId means the workspace, never the individual login.
+    const workspaceId = member.workspaceId;
+
     switch (action) {
       case 'lookup':
+        requireTeam(member);
         return reply(200, await lookupHandle(parse(LookupRequest, input).handle));
       case 'onboard':
-        return reply(200, await onboardClient(user.userDb, user.ownerId, parse(OnboardRequest, input)));
+        requireTeam(member);
+        return reply(200, await onboardClient(user.userDb, workspaceId, parse(OnboardRequest, input)));
       case 'learn':
-        return reply(200, await learnWhatWorks(user.userDb, user.ownerId, parse(LearnRequest, input)));
-      case 'approve_voice':
-        return reply(200, await approveVoice(user.ownerId, parse(ApproveVoiceRequest, input)));
+        requireTeam(member);
+        return reply(200, await learnWhatWorks(user.userDb, workspaceId, parse(LearnRequest, input)));
+      case 'approve_voice': {
+        const r = parse(ApproveVoiceRequest, input);
+        requireClientAccess(member, r.clientId);
+        return reply(200, await approveVoice(workspaceId, r));
+      }
       case 'estimate': {
+        requireTeam(member);
         const r = parse(EstimateRequest, input);
-        const kit = await loadKit(serviceClient(), r.clientId, user.ownerId);
+        const kit = await loadKit(serviceClient(), r.clientId, workspaceId);
         return reply(200, estimateCampaign(r.posts, r.useTrends, JSON.stringify([kit.profile, kit.card, kit.library]).length + 200));
       }
       case 'campaign': {
-        const started = await startCampaign(user.ownerId, parse(CampaignRequest, input));
+        requireTeam(member);
+        const started = await startCampaign(workspaceId, parse(CampaignRequest, input));
         if (!started.repeated) EdgeRuntime.waitUntil(kickWorker());
         return reply(202, started);
       }
       case 'resume': {
-        const r = await resumeCampaign(user.ownerId, parse(ResumeRequest, input).campaignId);
+        requireTeam(member);
+        const r = await resumeCampaign(workspaceId, parse(ResumeRequest, input).campaignId);
         if (r.resumed) EdgeRuntime.waitUntil(kickWorker());
         return reply(200, r);
       }
+      case 'review_post':
+        return reply(200, await reviewPost(member, parse(ReviewPostRequest, input)));
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign or resume.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign, resume or review_post.' });
     }
   } catch (err) {
+    if (err instanceof AccessError) return reply(err.status, { error: err.message });
     if (err instanceof BilInputError) return reply(err.status, { error: err.message });
     if (err instanceof SpendLimitError) return reply(402, { error: err.message, reason: err.reason });
     console.error(`bil: ${action} failed`, err instanceof Error ? err.message : err);

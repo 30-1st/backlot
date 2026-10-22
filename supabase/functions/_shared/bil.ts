@@ -20,6 +20,7 @@ import { generateText, Output } from 'npm:ai@7.0.142';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { id, isoDate, shortText, text, z } from './schemas/common.ts';
+import { type Member, requireClientAccess } from './workspace.ts';
 import {
   ClientProfile,
   ClientProfileBase,
@@ -562,6 +563,52 @@ export async function approveVoice(ownerId: string, req: z.infer<typeof ApproveV
     .eq('owner_id', ownerId);
   if (error) throw new Error(`Could not save the approval: ${error.message}`);
   return { clientId: req.clientId, card };
+}
+
+// =====================================================================================
+// Post review (team or the client themselves)
+// =====================================================================================
+
+export const ReviewPostRequest = z.object({
+  campaignId: id,
+  slot: z.number().int().min(1).max(60),
+  // pending undoes a decision; posted is the client saying they posted it themselves.
+  decision: z.enum(['approved', 'changes', 'posted', 'pending']),
+  note: z.string().trim().max(500).optional(),
+});
+
+/** Records a decision on one post. Backlot never posts; "posted" is only a note from the person. */
+export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostRequest>) {
+  const db = serviceClient();
+  const { data: c, error: cError } = await db
+    .from('campaigns').select('id, client_id').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
+  if (cError) throw new Error(`Could not read the campaign: ${cError.message}`);
+  if (!c) throw new BilInputError('No such campaign.', 404);
+  requireClientAccess(m, c.client_id);
+
+  const { data: post, error: pError } = await db
+    .from('campaign_posts').select('status').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
+  if (pError) throw new Error(`Could not read the post: ${pError.message}`);
+  if (!post) throw new BilInputError('No such post in this campaign.', 404);
+  if (post.status !== 'ok' && (req.decision === 'approved' || req.decision === 'posted')) {
+    throw new BilInputError('This post still needs a detail from you before it can be approved.', 409);
+  }
+  const note = req.note && req.note.length > 0 ? req.note : null;
+  if (req.decision === 'changes' && !note) throw new BilInputError('Say what should change.');
+
+  const reviewedAt = new Date().toISOString();
+  const { error } = await db
+    .from('campaign_posts')
+    .update({
+      review: req.decision,
+      review_note: req.decision === 'changes' ? note : null,
+      reviewed_by: req.decision === 'pending' ? null : m.userId,
+      reviewed_at: req.decision === 'pending' ? null : reviewedAt,
+    })
+    .eq('campaign_id', req.campaignId)
+    .eq('slot', req.slot);
+  if (error) throw new Error(`Could not save the decision: ${error.message}`);
+  return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt };
 }
 
 // =====================================================================================

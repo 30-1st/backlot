@@ -3,8 +3,9 @@ import { FunctionsFetchError, FunctionsHttpError } from '@supabase/supabase-js';
 import { clearMediaCache } from './media';
 import { supabase } from './supabase';
 
-// Backlot logins are a username and a password, nothing else. There is no
-// email and no password reset.
+// Backlot logins are a username and a password, nothing else. There is no email.
+// Backlot is private: a new login needs a one-time invite code from the team, and a
+// forgotten password is reset by a teammate (team function, password_reset).
 //
 // Supabase Auth needs an address for every user, so each username maps to an
 // internal one on a domain that can never receive mail. The sign-up function
@@ -21,6 +22,7 @@ export function cleanUsername(raw: string): string {
 }
 
 export type LoginProblem =
+  | 'invite_invalid'
   | 'username_format'
   | 'username_taken'
   | 'password_length'
@@ -31,6 +33,7 @@ export type LoginProblem =
   | 'server';
 
 export const PROBLEM_TEXT: Record<LoginProblem, string> = {
+  invite_invalid: 'That invite code is not valid. It may be mistyped, used already or older than 7 days. Ask your team for a new one.',
   username_format: 'Use 3 to 24 lowercase letters, numbers, dots or underscores for the username.',
   username_taken: 'That username is taken. Try another one.',
   password_length: `Use at least ${MIN_PASSWORD} characters for the password.`,
@@ -52,10 +55,10 @@ export async function signIn(username: string, password: string): Promise<LoginP
   return 'server';
 }
 
-/** Create a login, then sign straight in with it. */
-export async function createLogin(username: string, password: string): Promise<LoginProblem | null> {
+/** Create a login with an invite code, then sign straight in with it. */
+export async function createLogin(code: string, username: string, password: string): Promise<LoginProblem | null> {
   if (!supabase) return 'server';
-  const { error } = await supabase.functions.invoke('signup', { body: { username, password } });
+  const { error } = await supabase.functions.invoke('signup', { body: { code, username, password } });
   if (error) {
     if (error instanceof FunctionsFetchError) return 'network';
     if (error instanceof FunctionsHttpError) {

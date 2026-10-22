@@ -16,6 +16,7 @@ type Mode = 'in' | 'new';
 /** The door to the hosted build: sign in, or make a login with a username and a password. */
 export function SignIn() {
   const [mode, setMode] = useState<Mode>('in');
+  const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -27,6 +28,7 @@ export function SignIn() {
     const name = cleanUsername(username);
     let problem: LoginProblem | null = null;
 
+    if (mode === 'new' && !code.trim()) return setError('Type the invite code your team sent you.');
     if (!name || !password) return setError('Type your username and password.');
     if (!USERNAME_RULE.test(name)) problem = mode === 'new' ? 'username_format' : 'wrong';
     else if (mode === 'new' && password.length < MIN_PASSWORD) problem = 'password_length';
@@ -35,7 +37,7 @@ export function SignIn() {
 
     setBusy(true);
     setError('');
-    problem = mode === 'new' ? await createLogin(name, password) : await signIn(name, password);
+    problem = mode === 'new' ? await createLogin(code.trim(), name, password) : await signIn(name, password);
     // On success the app swaps this screen out by itself.
     if (problem) {
       setBusy(false);
@@ -59,13 +61,29 @@ export function SignIn() {
             value={mode}
             options={[
               { value: 'in', label: 'Sign in' },
-              { value: 'new', label: 'Create a login' },
+              { value: 'new', label: 'Join with a code' },
             ]}
             onChange={(next) => {
               setMode(next);
               setError('');
             }}
           />
+
+          {mode === 'new' && (
+            <label className="field">
+              <span className="field-label">Invite code</span>
+              <input
+                id="login-code"
+                value={code}
+                maxLength={20}
+                placeholder="BKLT-XXXX-XXXX"
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                spellCheck={false}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </label>
+          )}
 
           <label className="field">
             <span className="field-label">Username</span>
@@ -106,8 +124,7 @@ export function SignIn() {
                 />
               </label>
               <p className="login-note">
-                Backlot has no email and no password reset. If you lose your password, the login cannot be recovered.
-                Logins that are not opened for 60 days are deleted with everything in them.
+                Backlot is private and invite only. If you forget your password, ask your team to set a new one for you.
               </p>
             </>
           )}
@@ -119,7 +136,7 @@ export function SignIn() {
           )}
 
           <button type="submit" className="btn primary login-go" disabled={busy}>
-            {mode === 'new' ? (busy ? 'Creating your login' : 'Create login') : busy ? 'Signing in' : 'Sign in'}
+            {mode === 'new' ? (busy ? 'Creating your login' : 'Create my login') : busy ? 'Signing in' : 'Sign in'}
           </button>
         </form>
       </div>
