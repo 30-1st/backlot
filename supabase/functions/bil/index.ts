@@ -45,11 +45,11 @@ import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { id, z } from '../_shared/schemas/common.ts';
+import { withCors } from '../_shared/cors.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -67,7 +67,7 @@ function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
 const EstimateRequest = z.object({ clientId: id, posts: z.number().int().min(1).max(MAX_POSTS), useTrends: z.boolean().default(true) });
 const ResumeRequest = z.object({ campaignId: id });
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return reply(405, { error: 'POST only' });
 
@@ -129,4 +129,6 @@ Deno.serve(async (req) => {
     console.error(`bil: ${action} failed`, err instanceof Error ? err.message : err);
     return reply(500, { error: err instanceof Error ? err.message.slice(0, 400) : 'failed' });
   }
-});
+}
+
+Deno.serve(withCors(handle));

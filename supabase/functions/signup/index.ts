@@ -15,6 +15,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { hashCode, looksLikeCode } from '../_shared/invite-code.ts';
+import { withCors } from '../_shared/cors.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 const USERNAME = /^[a-z0-9._]{3,24}$/;
@@ -25,7 +26,6 @@ const MAX_SIGNUPS_PER_HOUR = 5;
 const MAX_SIGNUPS_PER_HOUR_ALL = 30;
 
 const cors = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -46,7 +46,7 @@ function admin() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-Deno.serve(async (req: Request) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply(405, { error: 'method' });
 
@@ -146,4 +146,6 @@ Deno.serve(async (req: Request) => {
   if (finishError) console.error('could not record who used the invite', finishError.message);
 
   return reply(200, { ok: true, username, role: invite.role });
-});
+}
+
+Deno.serve(withCors(handle));

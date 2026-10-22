@@ -20,11 +20,11 @@ import { serviceClient } from '../_shared/spend.ts';
 import { AccessError, memberOf, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
+import { withCors } from '../_shared/cors.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -55,7 +55,7 @@ const SetRequest = z.object({
   currentPassword: z.string().max(72).optional(),
 });
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return reply(405, { error: 'POST only' });
 
@@ -207,5 +207,6 @@ Deno.serve(async (req) => {
     console.error(`team: ${action} failed`, err instanceof Error ? err.message : err);
     return reply(500, { error: 'Something went wrong. Try again.' });
   }
-});
+}
 
+Deno.serve(withCors(handle));
