@@ -37,11 +37,11 @@ export function CreateScreen({ ws, go, single }: ScreenProps) {
       key: 'plan',
       title: 'Plan a campaign',
       body: client ? `A run of posts toward one goal for @${client.handle}.` : 'Bring in a client first.',
-      path: 'bil',
+      path: 'create.plan',
       ready: Boolean(client),
     },
     { key: 'client', title: 'Add a client', body: 'Bil reads their page and drafts their voice for them to approve.', path: 'bil', ready: true },
-    { key: 'measure', title: 'Measure what works', body: 'Reads their latest posts and updates what performs.', path: 'bil', ready: Boolean(client) },
+    { key: 'measure', title: 'Measure what works', body: 'Reads their latest posts and updates what performs.', path: 'create.measure', ready: Boolean(client) },
   ];
 
   const checks = [

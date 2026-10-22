@@ -64,4 +64,19 @@ export const bil = {
     call<Record<string, unknown>>('bil', 'learn', { requestId: crypto.randomUUID(), clientId }),
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
   resume: (campaignId: string) => call<{ resumed: boolean }>('bil', 'resume', { campaignId }),
+  estimate: (clientId: string, posts: number, useTrends: boolean) =>
+    call<{ campaignUsd: number; reinUsd: number; totalUsd: number }>('bil', 'estimate', { clientId, posts, useTrends }),
+  campaign: (r: {
+    requestId: string;
+    clientId: string;
+    goal: string;
+    startDate: string;
+    lengthDays: number;
+    posts: number;
+    useTrends: boolean;
+    region: 'worldwide' | 'us' | 'uk' | 'canada';
+    reward: 'none' | 'draw' | 'guaranteed';
+    rewardDetails?: string;
+    notes?: string;
+  }) => call<{ campaignId: string; status: string }>('bil', 'campaign', r),
 };

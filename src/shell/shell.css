@@ -1808,3 +1808,20 @@ a.bl-card:hover,
 .bl-root .bl-row { color: var(--ink); }
 .bl-root[data-theme='night'] .bl-chip.needs { background: var(--ink); color: var(--bg); }
 .bl-meter > span { background: var(--ink); box-shadow: none; }
+
+/* ---------- guided flows (Ask Bil) ---------- */
+.bl-flow { display: flex; flex-direction: column; gap: 18px; max-width: 520px; }
+.bl-flow-top { display: flex; flex-direction: column; gap: 8px; }
+.bl-steps { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.bl-steps span { height: 3px; border-radius: 2px; background: var(--line); transition: background var(--t-med) var(--ease); }
+.bl-steps span.on { background: var(--ink); }
+.bl-flow-step { display: flex; flex-direction: column; gap: 12px; }
+.bl-flow-q { margin: 0 0 4px; font-family: var(--display); font-weight: 500; font-size: 28px; line-height: 1.15; }
+.bl-choice { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-choice legend,
+.bl-choice-label { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+.bl-choice-label { margin: 4px 0 -4px; }
+.bl-switch { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px; cursor: pointer; }
+.bl-switch input { width: 22px; height: 22px; accent-color: var(--accent-text); }
+.bl-price { display: flex; align-items: baseline; gap: 10px; }
+.bl-flow-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }
