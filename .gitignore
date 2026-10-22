@@ -5,3 +5,4 @@ dist-single
 *.local
 __pycache__/
 *.pyc
+*.tsbuildinfo
