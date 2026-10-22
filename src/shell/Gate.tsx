@@ -11,6 +11,7 @@ import {
 import { Arrow, Back } from './icons';
 import { useTheme } from './theme';
 import { Install } from './Install';
+import { ModeSwitch } from './ModeSwitch';
 
 // The door for signed-out visitors: the welcome page, sign in, join with an invite code,
 // and the add-to-phone guide. Backlot is private, so there is no open sign-up.
@@ -26,7 +27,7 @@ export function Gate() {
   const [view, setView] = useState<View>('welcome');
 
   return (
-    <div className="bl" data-theme={theme}>
+    <div className="bl-root" data-theme={theme}>
       {view === 'welcome' && <Welcome go={setView} />}
       {(view === 'in' || view === 'join') && <Door mode={view} go={setView} />}
       {view === 'install' && <Install onBack={() => setView('welcome')} />}
@@ -52,9 +53,14 @@ function Welcome({ go }: { go: (v: View) => void }) {
       <div className="bl-core" aria-hidden="true" />
 
       <div className="bl-welcome-in">
-        <div className="bl-word">Backlot</div>
+        <div className="bl-bar">
+          <div className="bl-word">Backlot</div>
+          <span style={{ marginRight: 72 }}>
+            <ModeSwitch />
+          </span>
+        </div>
 
-        <div style={{ paddingTop: 110, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ paddingTop: 90, display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="bl-label accent bl-rise">Private · by invite</div>
           <h1 className="bl-hero bl-rise bl-d1">
             Get seen.
@@ -164,7 +170,7 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
             <Back />
           </button>
           <div className="bl-word">Backlot</div>
-          <span style={{ width: 44 }} />
+          <ModeSwitch />
         </div>
 
         <div className="bl-seg" style={{ marginTop: 16 }}>

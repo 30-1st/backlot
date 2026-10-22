@@ -10,17 +10,19 @@ import { CampaignsScreen } from './Campaigns';
 import { InsightsScreen } from './Insights';
 import { TeamScreen } from './Team';
 import { ChangePassword } from './ChangePassword';
+import { ModeSwitch } from './ModeSwitch';
+import { NarrateScreen } from './Narrate';
 
 // The signed-in app: a status line, the screen, and the floating dock.
 // Routes (in the address after #): home, create, library, campaigns, campaigns.<id>,
 // insights, team. The older tools (narration studio, people, Bil's test page) keep their
 // own routes and are reached from Create and Team.
 
-export type ShellRoute = 'home' | 'create' | 'library' | 'campaigns' | 'insights' | 'team';
+export type ShellRoute = 'home' | 'create' | 'library' | 'campaigns' | 'insights' | 'team' | 'narrate';
 
 export function isShellPath(path: string): boolean {
   const head = path.split('.')[0];
-  return path === '' || ['home', 'create', 'library', 'campaigns', 'insights', 'team'].includes(head);
+  return path === '' || ['home', 'create', 'library', 'campaigns', 'insights', 'team', 'narrate'].includes(head);
 }
 
 export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) => void; onSignOut: () => void }) {
@@ -53,7 +55,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   const badge = useMemo(() => (me && ws.data ? needsYouCount(me, ws.data, focus) : 0), [me, ws.data, focus]);
 
   const wrap = (children: ReactNode) => (
-    <div className="bl" data-theme={theme}>
+    <div className="bl-root" data-theme={theme}>
       {children}
     </div>
   );
@@ -96,6 +98,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       break;
     case 'library':
       screen = <LibraryScreen {...props} />;
+      break;
+    case 'narrate':
+      screen = <NarrateScreen {...props} />;
       break;
     case 'campaigns':
       screen = <CampaignsScreen {...props} campaignId={sub || null} />;
@@ -161,6 +166,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
                   </select>
                 </label>
               )}
+              <ModeSwitch />
               <a
                 href="#team"
                 className={`bl-avatar${isTeam ? '' : ' soft'}`}

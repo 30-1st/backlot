@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 // Backlot's own icon set, drawn in the ripple and signal language of the brand.
 // All are 26 by 26, stroke in the current text colour, and hidden from screen readers
 // (the button or link that holds one carries the name).
@@ -99,6 +101,26 @@ export function Rising({ size = 28 }: P) {
   );
 }
 
+/** Night: a crescent with a small star. */
+export function Moon({ size = 20 }: P) {
+  return (
+    <svg {...base(size)} viewBox="0 0 24 24" strokeWidth={1.7}>
+      <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+      <path d="M17 3.5v3M15.5 5h3" />
+    </svg>
+  );
+}
+
+/** Light: a sun rising over the horizon line, matching Rise. */
+export function Sun({ size = 20 }: P) {
+  return (
+    <svg {...base(size)} viewBox="0 0 24 24" strokeWidth={1.7}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" />
+    </svg>
+  );
+}
+
 export function Back({ size = 20 }: P) {
   return (
     <svg {...base(size)} viewBox="0 0 24 24" strokeWidth={1.8}>
@@ -132,7 +154,7 @@ export function Check({ size = 12 }: P) {
 }
 
 /** Concentric rings for dark cards and the welcome screen. */
-export function Rings({ size, style, dashed = true }: { size: number; style?: React.CSSProperties; dashed?: boolean }) {
+export function Rings({ size, style, dashed = true }: { size: number; style?: CSSProperties; dashed?: boolean }) {
   const c = size / 2;
   return (
     <svg className="bl-rings" width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden="true" style={style}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from 'react';
 
 // Light (off-white and teal) or Night (the original stage colours and brass).
 // "Match phone" follows the device's dark mode. The choice is a per-device convenience,
@@ -26,7 +26,22 @@ function systemTheme(): Theme {
   }
 }
 
-export function useTheme(): { theme: Theme; choice: ThemeChoice; setChoice: (c: ThemeChoice) => void } {
+export type ThemeState = { theme: Theme; choice: ThemeChoice; setChoice: (c: ThemeChoice) => void };
+
+const ThemeContext = createContext<ThemeState | null>(null);
+
+/** One theme for the whole app, so a switch anywhere changes every screen at once. */
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  return createElement(ThemeContext.Provider, { value: useThemeState() }, children);
+}
+
+export function useTheme(): ThemeState {
+  const t = useContext(ThemeContext);
+  if (!t) throw new Error('useTheme needs ThemeProvider');
+  return t;
+}
+
+function useThemeState(): ThemeState {
   const [choice, setChoiceState] = useState<ThemeChoice>(readChoice);
   const [system, setSystem] = useState<Theme>(systemTheme);
 

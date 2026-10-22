@@ -1,10 +1,10 @@
 /*
  * Backlot's app shell: off-white glass, one hydrating teal, the ripple motif.
  * Night mode brings back the original stage colours with the brass accent.
- * Every colour is a token on .bl, so the two modes only swap tokens.
+ * Every colour is a token on .bl-root, so the two modes only swap tokens.
  */
 
-.bl {
+.bl-root {
   --bg: #f3f2ee;
   --paper: #fafaf7;
   --mist: #e9e8e3;
@@ -32,7 +32,7 @@
   color-scheme: light;
 }
 
-.bl[data-theme='night'] {
+.bl-root[data-theme='night'] {
   --bg: #0e1412;
   --paper: #151d1a;
   --mist: #1e2824;
@@ -58,7 +58,7 @@
   color-scheme: dark;
 }
 
-.bl {
+.bl-root {
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--bg);
@@ -67,30 +67,30 @@
   -webkit-font-smoothing: antialiased;
   transition: background 0.3s, color 0.3s;
 }
-.bl *,
-.bl *::before,
-.bl *::after {
+.bl-root *,
+.bl-root *::before,
+.bl-root *::after {
   box-sizing: border-box;
 }
-.bl input,
-.bl button,
-.bl select,
-.bl textarea {
+.bl-root input,
+.bl-root button,
+.bl-root select,
+.bl-root textarea {
   font-family: inherit;
   color: inherit;
 }
-.bl a {
+.bl-root a {
   color: var(--accent-text);
 }
-.bl a:focus-visible,
-.bl button:focus-visible {
+.bl-root a:focus-visible,
+.bl-root button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-.bl button {
+.bl-root button {
   cursor: pointer;
 }
-.bl button:disabled {
+.bl-root button:disabled {
   cursor: default;
   opacity: 0.45;
 }
@@ -145,9 +145,9 @@
 .bl-breathe { animation: bl-breathe 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
 @media (prefers-reduced-motion: reduce) {
-  .bl *,
-  .bl *::before,
-  .bl *::after {
+  .bl-root *,
+  .bl-root *::before,
+  .bl-root *::after {
     animation: none !important;
     transition: none !important;
   }
@@ -997,4 +997,40 @@ body[data-bl='light'] {
 }
 body[data-bl='night'] {
   background: #0e1412;
+}
+
+/*
+ * The older screens (narration accounts and studio, people, Bil's test page) are styled
+ * with the original stage tokens. In Light they take the shell's off-white and teal so the
+ * whole app reads as one product; in Night they keep their original colours.
+ * The profile itself (.lit) keeps its own lighting: it previews how the profile looks.
+ */
+body[data-bl='light'] {
+  --stage: #f3f2ee;
+  --stage-2: #fafaf7;
+  --stage-3: #e9e8e3;
+  --rule: #dcdbd5;
+  --ink: #111716;
+  --ink-2: #4f5755;
+  --ink-3: #6b7371;
+  --brass: #0a6e66;
+  --brass-ink: #ffffff;
+  --live: #1f8a5b;
+  --sched: #2f66a8;
+  --draft: #6b7371;
+  --danger: #b2402c;
+  --danger-ink: #ffffff;
+  --veil: rgba(17, 23, 22, 0.42);
+  color-scheme: light;
+}
+body[data-bl='light'] .home-logo {
+  filter: drop-shadow(0 0 42px rgba(63, 208, 193, 0.35));
+}
+
+/* The look switch in the top bar. */
+.bl-mode {
+  color: var(--ink-2);
+}
+.bl-mode:hover {
+  color: var(--accent-text);
 }
