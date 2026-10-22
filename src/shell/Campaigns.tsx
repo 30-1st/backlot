@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { bil, type Decision } from '../lib/team';
-import { supabase } from '../lib/supabase';
-import { signedUrls } from '../lib/clientMedia';
+import { PostMedia } from './PostMedia';
+import { DayView } from './Schedule';
+import { timedPosts } from './timing';
 import type { Campaign, Post } from './data';
 import { Back } from './icons';
 import { campaignTitle } from './Notifications';
@@ -30,16 +31,25 @@ function dayOf(c: Campaign, p: Post): string {
 
 export function CampaignsScreen(props: ScreenProps & { campaignId: string | null }) {
   const { ws, go, focus, campaignId } = props;
+  const [view, setView] = useState<'day' | 'list'>('day');
   if (!ws.data) return <main aria-busy="true" />;
   const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
   if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
+  if (!campaignId && view === 'day' && timedPosts(ws.data, focus).length > 0) return <DayView {...props} onAll={() => setView('list')} />;
 
   const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 className="bl-h1 bl-rise">Schedule</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h1 className="bl-h1 bl-rise">All campaigns</h1>
+        {view === 'list' && timedPosts(ws.data, focus).length > 0 && (
+          <button type="button" className="bl-ghost" onClick={() => setView('day')}>
+            By day
+          </button>
+        )}
+      </div>
       {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
       {list.length === 0 ? (
         <div className="bl-empty bl-rise bl-d1">
@@ -355,31 +365,3 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
   );
 }
 
-/** The client's own photo or video that Bil matched to this post. */
-function PostMedia({ id }: { id: string }) {
-  const [file, setFile] = useState<{ kind: string; url: string } | null>(null);
-  const [gone, setGone] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      if (!supabase) return;
-      const { data } = await supabase.from('library_items').select('path, kind, removed_at').eq('id', id).maybeSingle();
-      if (!data || data.removed_at) {
-        if (alive) setGone(true);
-        return;
-      }
-      const urls = await signedUrls([data.path]);
-      if (alive && urls[data.path]) setFile({ kind: data.kind, url: urls[data.path] });
-    })().catch(() => alive && setGone(true));
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-  if (gone) return <div className="bl-small">The file Bil picked for this post was removed from Media.</div>;
-  if (!file) return <div className="bl-post-media" aria-busy="true" />;
-  return (
-    <div className="bl-post-media">
-      {file.kind === 'video' ? <video src={`${file.url}#t=0.1`} controls playsInline preload="metadata" /> : <img src={file.url} alt="The photo for this post" />}
-    </div>
-  );
-}

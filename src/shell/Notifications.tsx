@@ -1,5 +1,7 @@
 import type { Me } from '../lib/team';
-import { railTime, type Workspace } from './data';
+import type { Workspace } from './data';
+import { PostMedia, ShotFrame } from './PostMedia';
+import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
 
 // Home: notifications on a signal rail, newest first, with the ones that need you on top.
@@ -142,84 +144,135 @@ export function needsYouCount(me: Me, ws: Workspace, focus: string | null): numb
   return build(me, ws, focus).filter((i) => i.needs).length;
 }
 
+function Alert() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 4l9 16H3z" />
+      <path d="M12 10v4M12 17.2v.1" />
+    </svg>
+  );
+}
+function Tick() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+function Go() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+/** The next post, set large: its time, then its photo or video, its first line, and one button. */
+function NextUp({ t, isTeam, go }: { t: Timed; isTeam: boolean; go: (p: string) => void }) {
+  const c = clock(t.start, t.tz);
+  const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zone = here !== t.tz ? ` (${t.tz.split('/').pop()?.replace(/_/g, ' ')} time)` : '';
+  const mediaId = typeof t.post.post.mediaId === 'string' ? t.post.post.mediaId : null;
+  const blocked = t.post.status === 'blocked';
+  const text = blocked ? String(t.post.post.idea ?? 'Waiting on a detail') : String(t.post.post.hook ?? t.post.post.draft ?? '');
+  const approved = t.post.review === 'approved';
+  return (
+    <>
+      <section className="bl-next bl-in" aria-labelledby="next-label">
+        <span id="next-label" className="bl-small">
+          {isTeam ? `Next post for @${t.client?.handle ?? ''}` : 'Your next post'}
+        </span>
+        <div className="bl-next-time">
+          <span className="bl-hero-time num">{c.time}</span>
+          <span className="bl-next-half">{c.half}</span>
+        </div>
+        <span className="bl-small num">
+          {when(t)}
+          {zone}
+        </span>
+      </section>
+      <article className="bl-glass-card bl-next-card bl-in" style={{ animationDelay: '80ms' }}>
+        {mediaId ? <PostMedia id={mediaId} size="hero" /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} /> : null}
+        <p className="bl-next-text">{text}</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span className={`bl-chip-ink${blocked ? ' bad' : ''}`}>{blocked ? 'Needs a detail' : approved ? 'Approved' : 'Waiting for OK'}</span>
+          {!isTeam && !blocked && <span className="bl-chip-ink">You post it yourself</span>}
+        </div>
+        <button type="button" className="bl-btn bl-wide" onClick={() => go(`campaigns.${t.campaign.id}`)}>
+          {blocked ? 'See what is missing' : approved ? 'Open the post' : 'Review and approve'}
+        </button>
+      </article>
+    </>
+  );
+}
+
 export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   if (!ws.data) return <main aria-busy="true" />;
   const items = build(me, ws.data, focus);
-  const needs = items.filter((i) => i.needs).length;
-  const now = Date.now();
+  const needs = items.filter((i) => i.needs);
+  const quiet = items.filter((i) => !i.needs).slice(0, 4);
+  const next = nextPost(ws.data, isTeam ? focus : me.clientId ?? focus);
+
+  const row = (it: Item, i: number) => (
+    <li key={it.key}>
+      <a
+        className="bl-row bl-in"
+        style={{ animationDelay: `${120 + i * 50}ms` }}
+        href={`#${it.action?.path ?? 'today'}`}
+        onClick={(e) => {
+          e.preventDefault();
+          if (it.action) go(it.action.path);
+        }}
+      >
+        <span className={`bl-row-ic${it.needs ? ' alert' : ''}`}>{it.needs ? <Alert /> : <Tick />}</span>
+        <span className="bl-row-txt">
+          <b>{it.title}</b>
+          <small>{[it.label.replace(' · ', ', '), it.body].filter(Boolean).join('. ')}</small>
+        </span>
+        <span className="bl-row-go">
+          <Go />
+        </span>
+      </a>
+    </li>
+  );
 
   return (
-    <main style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div className="bl-head bl-rise">
-        <h1 className="bl-h1">Today</h1>
-        {needs > 0 && <span className="bl-count">{needs} need you</span>}
-      </div>
+    <main className="bl-today">
+      <h1 className="bl-sr">Today</h1>
+      {next && <NextUp t={next} isTeam={isTeam} go={go} />}
 
-      {items.length === 0 ? (
-        <div className="bl-empty bl-rise bl-d1">
-          <b style={{ fontSize: 17 }}>You are all caught up.</b>
+      {needs.length > 0 && (
+        <section>
+          <h2 className="bl-section-title">
+            Needs you <span className="num">{needs.length}</span>
+          </h2>
+          <ul className="bl-rows">{needs.map(row)}</ul>
+        </section>
+      )}
+
+      {quiet.length > 0 && (
+        <section>
+          <h2 className="bl-section-title">Lately</h2>
+          <ul className="bl-rows">{quiet.map(row)}</ul>
+        </section>
+      )}
+
+      {items.length === 0 && !next && (
+        <div className="bl-glass-card bl-in" style={{ alignItems: 'center', textAlign: 'center', padding: '28px 20px' }}>
+          <b style={{ fontSize: 17 }}>You are all caught up</b>
           <span className="bl-small">
             {isTeam
               ? ws.data.clients.length
                 ? 'Nothing is waiting on you. Start something new with Bil.'
-                : 'No clients yet. Onboard your first client with Bil to begin.'
+                : 'No clients yet. Bring in your first client with Bil to begin.'
               : 'Nothing needs you right now. New posts from your team show up here.'}
           </span>
           {isTeam && (
             <button type="button" className="bl-btn" onClick={() => go('create')}>
-              Create with Bil
+              Ask Bil
             </button>
           )}
         </div>
-      ) : (
-        <ol className="bl-rail">
-          {items.map((it, i) => {
-            const time = railTime(it.at, now);
-            const last = i === items.length - 1;
-            return (
-              <li key={it.key} className={`bl-rise bl-d${Math.min(4, i + 1)}`}>
-                <div className="bl-rail-side">
-                  <span className={`bl-rail-time${it.needs && time === 'NOW' ? ' now' : ''}`}>{time}</span>
-                  <span className={`bl-node${it.needs ? (i === 0 ? ' bl-live' : '') : ' quiet'}`} />
-                  {!last && <span className={`bl-line${it.needs && i === 0 ? ' flow' : ''}`} />}
-                </div>
-                <div className="bl-rail-body">
-                  {it.needs ? (
-                    <article className={`bl-card lift${i === 0 ? ' hero' : ''}`}>
-                      <span className="bl-label">{it.label}</span>
-                      <div className="bl-card-title">{it.title}</div>
-                      {it.body && <div className="bl-small">{it.body}</div>}
-                      {it.action && (
-                        <button
-                          type="button"
-                          className={`${it.action.primary ? 'bl-btn' : 'bl-ghost accent'} bl-start`}
-                          onClick={() => go(it.action!.path)}
-                        >
-                          {it.action.label}
-                        </button>
-                      )}
-                    </article>
-                  ) : (
-                    <a
-                      className="bl-rail-quiet"
-                      href={`#${it.action?.path ?? 'home'}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (it.action) go(it.action.path);
-                      }}
-                    >
-                      <span className="bl-label">{it.label}</span>
-                      <span style={{ lineHeight: 1.4 }}>
-                        {it.title} {it.body}
-                      </span>
-                      {it.action && <span className="bl-count">{it.action.label}</span>}
-                    </a>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
       )}
     </main>
   );
