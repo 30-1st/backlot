@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { isReadyPlatform, type Platform } from './platforms';
 import { Home } from './components/Home';
 import { Accounts } from './components/Accounts';
-import { SignIn } from './components/SignIn';
 import { People } from './components/People';
 import { BilLab } from './components/BilLab';
 import { Studio } from './Studio';
 import { signOut, useLogin } from './lib/auth';
+import { Gate } from './shell/Gate';
+import { Shell, isShellPath } from './shell/Shell';
+import './shell/shell.css';
 
 // Three screens, one inside the next:
 //   the homescreen            #home
@@ -66,7 +68,8 @@ export default function App() {
   }, []);
 
   if (login.status === 'loading') return <div className="app" aria-busy="true" />;
-  if (login.status === 'out') return <SignIn />;
+  // The hosted build is private: signed-out visitors get the welcome page and sign-in.
+  if (login.status === 'out') return <Gate />;
 
   // In the hosted build, show who is signed in and let them leave.
   // Keying each screen by the login makes sure nothing carries over between people.
@@ -77,7 +80,10 @@ export default function App() {
   };
   // People, chats and sharing need a login, so they only exist in the hosted build.
   const account = login.status === 'in' ? { username: login.username, onSignOut, onPeople: () => go('people') } : {};
-  const bil = login.status === 'in' ? { onBil: () => go('bil') } : {};
+  const bil = login.status === 'in' ? { onBil: () => go('bil'), onBack: () => go('home') } : {};
+
+  // The app shell: notifications, create, library, campaigns, insights, team.
+  if (login.status === 'in' && isShellPath(path)) return <Shell key={who} path={path} go={go} onSignOut={onSignOut} />;
 
   if (login.status === 'in' && path === 'bil') return <BilLab key={who} onHome={() => go('')} />;
 
@@ -95,6 +101,9 @@ export default function App() {
     );
   }
 
+  // In the hosted build the platform chooser lives at #narrate (reached from Create);
+  // the offline build keeps it as its homescreen.
+  const home = login.status === 'in' ? 'narrate' : '';
   const route = parse(path);
   if (!route) return <Home key={who} onChoose={(platform) => go(platform)} {...account} {...bil} />;
 
@@ -108,7 +117,7 @@ export default function App() {
         key={`${who}:${platform}`}
         platform={platform}
         flash={note}
-        onHome={() => go('')}
+        onHome={() => go(home)}
         onOpen={open}
         {...account}
       />
@@ -121,7 +130,7 @@ export default function App() {
       platform={platform}
       narrationId={narrationId}
       flash={note}
-      onHome={() => go('')}
+      onHome={() => go(home)}
       onAccounts={(message) => go(platform, message)}
       onOpen={open}
       onPeople={login.status === 'in' ? () => go('people') : undefined}

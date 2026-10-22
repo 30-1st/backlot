@@ -1,0 +1,353 @@
+import { useMemo, useState } from 'react';
+import { bil, type Decision } from '../lib/team';
+import type { Campaign, Post } from './data';
+import { Back } from './icons';
+import { campaignTitle } from './Notifications';
+import type { ScreenProps } from './Shell';
+
+// Campaigns: the list, and one campaign's posts reviewed one at a time or as a list.
+// Post statuses use four words only: Draft, Needs you, Approved, Posted by you.
+// Backlot never posts. "Posted by you" is the person telling us they posted it.
+
+type Status = { word: 'Draft' | 'Needs you' | 'Approved' | 'Posted by you'; cls: string };
+
+function statusOf(p: Post): Status {
+  if (p.review === 'posted') return { word: 'Posted by you', cls: 'posted' };
+  if (p.review === 'approved') return { word: 'Approved', cls: 'approved' };
+  return { word: 'Needs you', cls: 'needs' };
+}
+
+function dayOf(c: Campaign, p: Post): string {
+  const start = (c.request as { startDate?: string } | null)?.startDate;
+  const offset = Number(p.post.dayOffset ?? 0);
+  if (!start) return `Day ${offset + 1}`;
+  const d = new Date(`${start}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+export function CampaignsScreen(props: ScreenProps & { campaignId: string | null }) {
+  const { ws, go, focus, campaignId } = props;
+  if (!ws.data) return <main aria-busy="true" />;
+  const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
+  if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
+
+  const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
+  const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
+
+  return (
+    <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <h1 className="bl-h1 bl-rise">Campaigns</h1>
+      {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
+      {list.length === 0 ? (
+        <div className="bl-empty bl-rise bl-d1">
+          <b style={{ fontSize: 17 }}>No campaigns yet.</b>
+          <span className="bl-small">
+            {props.isTeam ? 'Plan one with Bil. Tag media in your Library first so he plans around what you have.' : 'Your team will send your first campaign here for your OK.'}
+          </span>
+          {props.isTeam && (
+            <button type="button" className="bl-btn" onClick={() => go('create')}>
+              Plan a campaign
+            </button>
+          )}
+        </div>
+      ) : (
+        list.map((c, i) => {
+          const posts = ws.data!.posts.filter((p) => p.campaignId === c.id);
+          const done = posts.filter((p) => p.review === 'approved' || p.review === 'posted').length;
+          const needs = posts.length - done;
+          const pct = c.postsTotal ? Math.round((done / c.postsTotal) * 100) : 0;
+          return (
+            <a
+              key={c.id}
+              href={`#campaigns.${c.id}`}
+              className={`bl-card bl-rise bl-d${Math.min(4, i + 1)}`}
+              onClick={(e) => {
+                e.preventDefault();
+                go(`campaigns.${c.id}`);
+              }}
+            >
+              <span className="bl-label">
+                @{handle(c.clientId)} · {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+              <div className="bl-card-title">{campaignTitle(c)}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {needs > 0 && <span className="bl-chip needs">{needs} need you</span>}
+                {done > 0 && <span className="bl-chip approved">{done} approved</span>}
+                {(c.status === 'planning' || c.status === 'drafting') && !c.hold && <span className="bl-chip draft">Bil is writing</span>}
+                {c.hold && <span className="bl-chip changes">Paused at budget</span>}
+              </div>
+              <span className="bl-meter" role="img" aria-label={`${pct} percent approved`}>
+                <span style={{ width: `${pct}%` }} />
+              </span>
+            </a>
+          );
+        })
+      )}
+    </main>
+  );
+}
+
+function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Campaign }) {
+  const posts = useMemo(
+    () => ws.data!.posts.filter((p) => p.campaignId === campaign.id).sort((a, b) => a.slot - b.slot),
+    [ws.data, campaign.id],
+  );
+  const queue = posts.filter((p) => p.status === 'ok' && p.review === 'pending');
+  const blocked = posts.filter((p) => p.status === 'blocked');
+  const [mode, setMode] = useState<'one' | 'all'>(queue.length ? 'one' : 'all');
+  const [openSlot, setOpenSlot] = useState<number | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const current = openSlot !== null ? posts.find((p) => p.slot === openSlot) ?? null : queue[0] ?? null;
+  const total = Math.max(campaign.postsTotal, posts.length);
+  const working = (campaign.status === 'planning' || campaign.status === 'drafting') && !campaign.hold;
+
+  async function decide(p: Post, decision: Decision, text?: string) {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.review(campaign.id, p.slot, decision, text);
+      ws.patchPost(campaign.id, p.slot, { review: decision, reviewNote: decision === 'changes' ? text ?? null : null });
+      setAsking(false);
+      setNote('');
+      setOpenSlot(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save that.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(p: Post) {
+    try {
+      await navigator.clipboard.writeText(String(p.post.draft ?? ''));
+      setCopied(p.slot);
+      window.setTimeout(() => setCopied((s) => (s === p.slot ? null : s)), 1800);
+    } catch {
+      setError('Copying is blocked here. Press and hold the text to copy it instead.');
+    }
+  }
+
+  async function resume() {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.resume(campaign.id);
+      await ws.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not resume.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="bl-bar" style={{ justifyContent: 'flex-start', gap: 12 }}>
+        <button type="button" className="bl-ghost bl-round" aria-label="All campaigns" onClick={() => go('campaigns')}>
+          <Back />
+        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <span style={{ fontFamily: 'var(--display)', fontSize: 22 }} className="bl-ellipsis">
+            {campaignTitle(campaign)}
+          </span>
+          <span className="bl-label bl-ellipsis">Goal · {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="bl-ticks" style={{ gridTemplateColumns: `repeat(${Math.max(1, total)}, minmax(0, 1fr))` }} role="img" aria-label="Review progress">
+          {Array.from({ length: total }, (_, i) => {
+            const p = posts.find((x) => x.slot === i + 1);
+            const done = p && (p.review === 'approved' || p.review === 'posted');
+            const now = p && current && p.slot === current.slot;
+            return <span key={i} className={done ? 'done' : now ? 'now' : undefined} />;
+          })}
+        </div>
+        <div className="bl-status" style={{ justifyContent: 'space-between' }}>
+          <span>
+            {posts.filter((p) => p.review === 'approved' || p.review === 'posted').length} approved · {queue.length} to review
+            {blocked.length ? ` · ${blocked.length} need a detail` : ''}
+          </span>
+          {working && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-text)' }}>
+              <span className="bl-dot bl-live" /> Bil is writing {campaign.postsDone}/{campaign.postsTotal}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {campaign.hold && isTeam && (
+        <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <b>Paused at this month's AI budget.</b>
+          <span className="bl-small">Resuming continues where it stopped and spends from the new headroom, if any.</span>
+          <button type="button" className="bl-btn bl-start" disabled={busy} onClick={() => void resume()}>
+            Resume
+          </button>
+        </div>
+      )}
+
+      <div className="bl-seg">
+        <button type="button" aria-pressed={mode === 'one'} onClick={() => setMode('one')}>
+          One at a time
+        </button>
+        <button type="button" aria-pressed={mode === 'all'} onClick={() => setMode('all')}>
+          All posts
+        </button>
+      </div>
+
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {mode === 'one' &&
+        (current ? (
+          <>
+            <PostCard campaign={campaign} post={current} copied={copied === current.slot} onCopy={() => void copy(current)} />
+            {current.status === 'ok' && (current.review === 'pending' || current.review === 'changes') && (
+              <>
+                {asking && (
+                  <label className="bl-field">
+                    <span className="bl-label">What should change</span>
+                    <textarea
+                      className="bl-textarea"
+                      rows={2}
+                      maxLength={500}
+                      value={note}
+                      placeholder="Shorter, or use a different photo"
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                  </label>
+                )}
+                <div className="bl-grid2">
+                  <button
+                    type="button"
+                    className="bl-ghost big"
+                    disabled={busy || (asking && !note.trim())}
+                    onClick={() => (asking ? void decide(current, 'changes', note.trim()) : setAsking(true))}
+                  >
+                    {asking ? 'Send to the team' : 'Ask for a change'}
+                  </button>
+                  <button type="button" className="bl-btn big" disabled={busy} onClick={() => void decide(current, 'approved')}>
+                    Approve
+                  </button>
+                </div>
+              </>
+            )}
+            {current.review === 'approved' && (
+              <button type="button" className="bl-ghost big" disabled={busy} onClick={() => void decide(current, 'posted')}>
+                I posted this
+              </button>
+            )}
+            <p className="bl-small" style={{ textAlign: 'center' }}>
+              Approved posts wait for you to post them yourself. Backlot never posts.
+            </p>
+          </>
+        ) : (
+          <div className="bl-empty">
+            <b style={{ fontSize: 17 }}>{working ? 'Bil is still writing.' : 'Nothing left to review.'}</b>
+            <span className="bl-small">
+              {working
+                ? 'New posts appear here as he finishes them.'
+                : blocked.length
+                  ? `${blocked.length} ${blocked.length === 1 ? 'post needs' : 'posts need'} a detail before they can be written. See All posts.`
+                  : 'Every post has a decision. Copy the approved ones when it is time to post.'}
+            </span>
+          </div>
+        ))}
+
+      {mode === 'all' && (
+        <ul className="bl-list">
+          {posts.map((p) => {
+            const s = statusOf(p);
+            const reasons: string[] = Array.isArray(p.post.blockedReasons) ? p.post.blockedReasons : [];
+            return (
+              <li key={p.slot} style={{ alignItems: 'flex-start' }}>
+                <span className="bl-label" style={{ width: 28, paddingTop: 3 }}>
+                  {String(p.slot).padStart(2, '0')}
+                </span>
+                <div className="bl-list-main">
+                  <span className="bl-label">
+                    {dayOf(campaign, p)} · {String(p.post.postWindow ?? '')}
+                  </span>
+                  <span style={{ lineHeight: 1.4 }}>
+                    {p.status === 'blocked' ? String(p.post.idea ?? 'Waiting on a detail') : String(p.post.hook ?? p.post.draft ?? '')}
+                  </span>
+                  {reasons.length > 0 && <span className="bl-small">Needs: {reasons.join(' ')}</span>}
+                  {p.review === 'changes' && p.reviewNote && <span className="bl-small">Change asked: {p.reviewNote}</span>}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                  <span className={`bl-chip ${s.cls}`}>{s.word}</span>
+                  {p.status === 'ok' && (
+                    <button
+                      type="button"
+                      className="bl-linkish accent"
+                      onClick={() => {
+                        setOpenSlot(p.slot);
+                        setMode('one');
+                        setAsking(false);
+                      }}
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {posts.length === 0 && <li className="bl-small">No posts written yet.</li>}
+        </ul>
+      )}
+    </main>
+  );
+}
+
+function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post: Post; copied: boolean; onCopy: () => void }) {
+  const s = statusOf(post);
+  const signals: { why?: string }[] = Array.isArray(post.post.algorithm?.signals) ? post.post.algorithm.signals : [];
+  const why = signals.find((x) => x.why)?.why;
+  return (
+    <article className="bl-post">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span className="bl-label">
+          {dayOf(campaign, post)} · {String(post.post.postWindow ?? '')}
+        </span>
+        <span className={`bl-chip ${s.cls}`}>{s.word}</span>
+      </div>
+      {post.post.mediaIdea && (
+        <div className="bl-wash" style={{ fontSize: 14, lineHeight: 1.45 }}>
+          <span className="bl-label accent">Media · </span>
+          {String(post.post.mediaIdea)}
+        </div>
+      )}
+      <p className="bl-post-text">{String(post.post.draft ?? '')}</p>
+      {post.post.engagementPlan && (
+        <div className="bl-why">
+          <span className="bl-label accent" style={{ paddingTop: 2 }}>
+            After
+          </span>
+          <span>{String(post.post.engagementPlan)}</span>
+        </div>
+      )}
+      {why && (
+        <div className="bl-why">
+          <span className="bl-label accent" style={{ paddingTop: 2 }}>
+            Why
+          </span>
+          <span>{why}</span>
+        </div>
+      )}
+      {post.review === 'changes' && post.reviewNote && <div className="bl-error">Change asked: {post.reviewNote}</div>}
+      <button type="button" className="bl-ghost bl-start" onClick={onCopy}>
+        {copied ? 'Copied' : 'Copy the text'}
+      </button>
+    </article>
+  );
+}

@@ -5,7 +5,7 @@
 // code verifies the login on every POST.
 //
 // Actions (POST JSON with "action"):
-//   me               {}                              your role, workspace and client     everyone
+//   me               {}                              your role, client, and (team) budget everyone
 //   people           {}                              everyone in the workspace + clients team
 //   invite_create    { role, clientId? }             a one-time code, shown once         team
 //   password_reset   { userId }                      a temporary password, shown once    team
@@ -79,8 +79,16 @@ Deno.serve(async (req) => {
             ? db.from('clients').select('x_handle').eq('id', member.clientId).maybeSingle()
             : Promise.resolve({ data: null }),
         ]);
+        // The shared monthly AI budget, for the team's status line. Clients never see spend.
+        let budget: { used: number; cap: number } | null = null;
+        if (member.role !== 'client') {
+          const { data: s, error: sError } = await db.rpc('agent_spend_summary');
+          if (sError) console.error('team: spend summary failed', sError.message);
+          else budget = { used: Number(s?.month_used ?? 0), cap: Number(s?.month_cap ?? 0) };
+        }
         return reply(200, {
           userId,
+          budget,
           username: me?.username ?? null,
           role: member.role,
           workspaceId: member.workspaceId,
