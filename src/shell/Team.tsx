@@ -28,7 +28,7 @@ export function TeamScreen({
       <section className="bl-card">
         <h2 className="bl-h2">You</h2>
         <span className="bl-small">
-          Signed in as <b>@{me.username}</b> · {me.role === 'client' ? `client${me.clientHandle ? ` (@${me.clientHandle})` : ''}` : me.role}
+          Signed in as <b>@{me.username}</b>, {me.role === 'client' ? `client${me.clientHandle ? ` (@${me.clientHandle})` : ''}` : me.role}
         </span>
         <span className="bl-label" style={{ marginTop: 6 }}>
           Look
@@ -96,7 +96,7 @@ function TeamPanel() {
     try {
       const r = await team.invite(kind, kind === 'client' ? clientId : undefined);
       const handle = data?.clients.find((c) => c.clientId === clientId)?.handle;
-      setCode({ code: r.code, label: kind === 'client' ? `Client invite · @${handle}` : 'Teammate invite' });
+      setCode({ code: r.code, label: kind === 'client' ? `Client invite for @${handle}` : 'Teammate invite' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not make the code.');
     } finally {
@@ -163,7 +163,7 @@ function TeamPanel() {
         <span className="bl-small">
           {kind === 'client'
             ? 'A client sees only their own voice, results and posts. They approve posts and answer Bil. They cannot spend the budget.'
-            : 'A teammate sees every client, runs Bil and Rein, and can reset passwords.'}
+            : 'A teammate sees every client, plans campaigns with Bil, and can reset passwords.'}
         </span>
         {code ? (
           <div className="bl-dark" style={{ borderRadius: 22, padding: 18, gap: 10 }}>
@@ -214,7 +214,7 @@ function TeamPanel() {
                 </span>
                 <div className="bl-list-main">
                   <span style={{ fontWeight: 500 }}>{p.isYou ? 'You' : `@${p.username}`}</span>
-                  <span className="bl-label">{p.role === 'client' ? `Client · @${p.clientHandle}` : p.role}</span>
+                  <span className="bl-label">{p.role === 'client' ? `Client, @${p.clientHandle}` : p.role}</span>
                 </div>
                 {!p.isYou && p.role !== 'owner' && (
                   <button type="button" className="bl-ghost" disabled={busy} onClick={() => void reset(p)}>
@@ -232,7 +232,7 @@ function TeamPanel() {
                   </span>
                   <div className="bl-list-main">
                     <span style={{ fontWeight: 500 }}>@{c.handle}</span>
-                    <span className="bl-label">Client · not joined yet</span>
+                    <span className="bl-label">Client, not joined yet</span>
                   </div>
                   <button
                     type="button"

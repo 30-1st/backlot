@@ -195,7 +195,7 @@ function Onboard({ onDone }: { onDone: () => void }) {
         <Field label="Display name"><input value={f.displayName} onChange={(e) => set({ displayName: e.target.value })} /></Field>
         <Field label="Kind"><Pick value={f.kind} options={KINDS} onChange={(kind) => set({ kind })} /></Field>
         <Field label="Account style"><Pick value={f.accountStyle} options={STYLES} onChange={(accountStyle) => set({ accountStyle })} /></Field>
-        <Field label="Niche" hint="Rein searches trends for this."><input value={f.niche} onChange={(e) => set({ niche: e.target.value })} /></Field>
+        <Field label="Niche" hint="Used to check what is trending."><input value={f.niche} onChange={(e) => set({ niche: e.target.value })} /></Field>
         <Field label="Main goal"><Pick value={f.goal} options={GOALS} onChange={(goal) => set({ goal })} /></Field>
         <Field label="Goal in their words"><input value={f.goalDetail} onChange={(e) => set({ goalDetail: e.target.value })} /></Field>
         <Field label="Time zone"><input value={f.timezone} onChange={(e) => set({ timezone: e.target.value })} /></Field>
@@ -439,10 +439,10 @@ function NewCampaign({ client, onStarted }: { client: Json; onStarted: () => voi
       </div>
       {c.reward !== 'none' && <Field label="Reward details"><input value={c.rewardDetails} onChange={(e) => set({ rewardDetails: e.target.value })} /></Field>}
       <Field label="Notes for Bil"><textarea rows={2} value={c.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
-      <label className="lab-check"><input type="checkbox" checked={c.useTrends} onChange={(e) => set({ useTrends: e.target.checked })} /> Ask Rein for trends first</label>
+      <label className="lab-check"><input type="checkbox" checked={c.useTrends} onChange={(e) => set({ useTrends: e.target.checked })} /> Check what is trending first</label>
       {estimate && (
         <p className="lab-note">
-          Up to {money(estimate.campaignUsd)} for Bil{estimate.reinUsd ? ` plus about ${money(estimate.reinUsd)} for Rein` : ''}, at uncached prices. Real cost is usually lower.
+          Up to {money(estimate.campaignUsd)}{estimate.reinUsd ? ` plus about ${money(estimate.reinUsd)} for the trend check` : ''}, at uncached prices. Real cost is usually lower.
         </p>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}

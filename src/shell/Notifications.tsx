@@ -47,8 +47,8 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
         at: c.updatedAt,
         needs: true,
         label,
-        title: `Bil needs ${blocked.length === 1 ? 'a detail' : `${blocked.length} details`} to finish ${blocked.length === 1 ? 'a post' : 'posts'}`,
-        body: reasons ? `${reasons} He never makes these up.` : 'He never makes up links, prices or times.',
+        title: `${blocked.length} ${blocked.length === 1 ? 'post needs' : 'posts need'} a detail`,
+        body: reasons || 'A link, price or time only you know.',
         action: { label: 'See what is missing', path: open, primary: true },
       });
     }

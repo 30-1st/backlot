@@ -98,9 +98,9 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
         <span className="bl-label">
           @{client.handle}
           {ww?.measuredAt
-            ? ` · ${ww.stats?.postsMeasured ?? 0} posts · measured ${new Date(ww.measuredAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+            ? `. ${ww.stats?.postsMeasured ?? 0} posts, measured ${new Date(ww.measuredAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
             : ''}
-          {tz ? ` · ${tz.replace(/_/g, ' ')}` : ''}
+          {tz ? `. ${tz.replace(/_/g, ' ')}` : ''}
         </span>
       </div>
 

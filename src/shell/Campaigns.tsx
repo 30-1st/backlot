@@ -80,7 +80,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
               }}
             >
               <span className="bl-label">
-                @{handle(c.clientId)} · {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                @{handle(c.clientId)}, {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
               </span>
               <div className="bl-card-title">{campaignTitle(c)}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -168,7 +168,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           <span style={{ fontFamily: 'var(--display)', fontSize: 22 }} className="bl-ellipsis">
             {campaignTitle(campaign)}
           </span>
-          <span className="bl-label bl-ellipsis">Goal · {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
+          <span className="bl-label bl-ellipsis">Goal: {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
         </div>
       </div>
 
@@ -183,8 +183,8 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
         </div>
         <div className="bl-status" style={{ justifyContent: 'space-between' }}>
           <span>
-            {posts.filter((p) => p.review === 'approved' || p.review === 'posted').length} approved · {queue.length} to review
-            {blocked.length ? ` · ${blocked.length} need a detail` : ''}
+            {posts.filter((p) => p.review === 'approved' || p.review === 'posted').length} approved, {queue.length} to review
+            {blocked.length ? `, ${blocked.length} need a detail` : ''}
           </span>
           {working && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-text)' }}>
@@ -287,7 +287,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
                 </span>
                 <div className="bl-list-main">
                   <span className="bl-label">
-                    {dayOf(campaign, p)} · {String(p.post.postWindow ?? '')}
+                    {dayOf(campaign, p)}, {String(p.post.postWindow ?? '')}
                   </span>
                   <span style={{ lineHeight: 1.4 }}>
                     {p.status === 'blocked' ? String(p.post.idea ?? 'Waiting on a detail') : String(p.post.hook ?? p.post.draft ?? '')}
@@ -329,14 +329,14 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
     <article className="bl-post">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span className="bl-label">
-          {dayOf(campaign, post)} · {String(post.post.postWindow ?? '')}
+          {dayOf(campaign, post)}, {String(post.post.postWindow ?? '')}
         </span>
         <span className={`bl-chip ${s.cls}`}>{s.word}</span>
       </div>
-      {typeof post.post.mediaId === 'string' && <PostMedia id={post.post.mediaId} />}
+      {typeof post.post.mediaId === 'string' && <PostMedia id={post.post.mediaId} size="hero" />}
       {post.post.mediaIdea && (
         <div className="bl-wash" style={{ fontSize: 14, lineHeight: 1.45 }}>
-          <span className="bl-label accent">{post.post.mediaId ? 'How to post it · ' : 'Media · '}</span>
+          <span className="bl-label accent">{post.post.mediaId ? 'How to post it: ' : 'Media: '}</span>
           {String(post.post.mediaIdea)}
         </div>
       )}
