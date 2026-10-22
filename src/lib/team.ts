@@ -17,6 +17,25 @@ export type Me = {
   budget: { used: number; cap: number } | null;
 };
 
+export type ReinRegion = 'worldwide' | 'us' | 'uk' | 'canada';
+export type ReinTrend = {
+  topic: string;
+  summary: string;
+  whyNow: string;
+  momentum: string;
+  hashtags: string[];
+  touchesFinance: boolean;
+  sources: { url: string; title: string | null }[];
+};
+export type ReinBrief = { briefId: string; niche: string; createdAt: string; notFound: string | null; trends: ReinTrend[] };
+
+/** An error from a door, with the HTTP status and whether payment is what stopped it. */
+export class DoorError extends Error {
+  constructor(message: string, readonly status: number, readonly pay = false) {
+    super(message);
+  }
+}
+
 export type Person = {
   userId: string;
   username: string | null;
@@ -38,7 +57,7 @@ async function call<T>(fn: 'team' | 'bil', action: string, input: Record<string,
     if (error instanceof FunctionsFetchError) throw new Error('Backlot cannot reach the server. Check your connection and try again.');
     if (error instanceof FunctionsHttpError) {
       const body = await error.context.json().catch(() => ({}));
-      throw new Error(body?.error ?? `The server answered ${error.context.status}.`);
+      throw new DoorError(body?.error ?? `The server answered ${error.context.status}.`, error.context.status, Boolean(body?.pay));
     }
     throw new Error(error.message);
   }
@@ -51,6 +70,8 @@ export const team = {
   invite: (role: 'team' | 'client', clientId?: string) =>
     call<{ code: string; expiresAt: string }>('team', 'invite_create', { role, clientId }),
   resetPassword: (userId: string) => call<{ temporaryPassword: string }>('team', 'password_reset', { userId }),
+  reinSearch: (niche: string, region: ReinRegion) => call<{ brief: ReinBrief; reused: boolean }>('team', 'rein_search', { niche, region }),
+  reinHistory: () => call<{ freeLeft: number | null; searches: { niche: string; region: string; at: string }[]; last: ReinBrief | null }>('team', 'rein_history'),
   setPassword: (password: string, currentPassword?: string) =>
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),
 };

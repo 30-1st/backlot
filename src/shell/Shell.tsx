@@ -15,6 +15,7 @@ import { ClientsScreen } from './Clients';
 import { PlaygroundScreen, PlaygroundSoon } from './Playground';
 import { MeasureFlow, PlanFlow } from './PlanFlow';
 import { AddClientFlow } from './AddClientFlow';
+import { ReinScreen } from './Rein';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -159,7 +160,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       screen = <PlaygroundSoon {...props} tool="x" />;
       break;
     case 'rein':
-      screen = <PlaygroundSoon {...props} tool="rein" />;
+      screen = <ReinScreen {...props} />;
       break;
     default:
       screen = <Notifications {...props} />;

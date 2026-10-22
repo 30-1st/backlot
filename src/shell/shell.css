@@ -1825,3 +1825,24 @@ a.bl-card:hover,
 .bl-switch input { width: 22px; height: 22px; accent-color: var(--accent-text); }
 .bl-price { display: flex; align-items: baseline; gap: 10px; }
 .bl-flow-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }
+
+/* ---------- Rein ---------- */
+.bl-rein-hero { display: flex; flex-direction: column; align-items: center; margin-top: 4px; }
+.bl-rein-hero .bl-home-pool { margin-bottom: 0; }
+.bl-pips { display: flex; gap: 6px; }
+.bl-pips i { width: 22px; height: 6px; border-radius: 3px; background: var(--mist); box-shadow: inset 0 0 0 1px var(--line); transition: background var(--t-med) var(--ease); }
+.bl-pips i.on { background: var(--ink); box-shadow: none; }
+.bl-trends { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.bl-trend-topic { font-size: 17px; line-height: 1.3; }
+.bl-rein-wait { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 12px 0; }
+.bl-radar { position: relative; width: 120px; height: 120px; border-radius: 60px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 0 0 1px var(--line), 0 0 40px -8px rgba(255, 250, 236, 0.9); }
+.bl-radar i { position: absolute; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); }
+.bl-radar i:nth-child(1) { inset: 20px; }
+.bl-radar i:nth-child(2) { inset: 42px; }
+.bl-radar b { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, color-mix(in srgb, var(--ink) 30%, transparent), transparent 25%, transparent 100%); animation: bl-spin 2.4s linear infinite; }
+.bl-plan { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 0; border-radius: 16px; font: inherit; color: var(--ink); background: linear-gradient(165deg, var(--deck-a), var(--deck-b)); box-shadow: inset 0 0 0 1px var(--deck-edge-b); }
+.bl-plan.pick { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 24px -10px rgba(var(--glow), 0.7); }
+.bl-radio { width: 22px; height: 22px; border-radius: 11px; flex-shrink: 0; box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.bl-plan.pick .bl-radio { box-shadow: inset 0 0 0 6px var(--accent); }
+.bl-root[data-theme='night'] .bl-chip-ink.next { background: var(--ink); color: var(--bg); }
+.bl-root[data-theme='night'] .bl-chip-ink.bad { background: var(--danger-wash); color: var(--danger); }

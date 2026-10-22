@@ -10,6 +10,12 @@
 //   invite_create    { role, clientId? }             a one-time code, shown once         team
 //   password_reset   { userId }                      a temporary password, shown once    team
 //   password_set     { password, currentPassword? }  change your own password            everyone
+//   rein_search      { niche, region? }              what is rising in a niche           everyone
+//   rein_history     {}                              your last searches and free left    everyone
+//
+// Rein: a search that reuses a brief from the last 6 hours is free and never counts.
+// Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
+// payments are wired the server stops there. The team searches inside the AI budget.
 //
 // Nothing here is paid. Codes and temporary passwords are never stored in plain text and
 // never logged.
@@ -21,6 +27,9 @@ import { AccessError, memberOf, requireOwnPassword, requireTeam } from '../_shar
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
+import { reusableBrief } from '../_shared/toolbox.ts';
+import { callRein } from '../_shared/rein-client.ts';
+import { Region } from '../_shared/schemas/rein.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -46,6 +55,28 @@ function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
   const r = schema.safeParse(body);
   if (!r.success) throw new InputError(r.error.issues.slice(0, 3).map((i) => `${i.path.join('.') || 'request'}: ${i.message}`).join('; '));
   return r.data;
+}
+
+const ReinSearch = z.object({ niche: z.string().trim().min(2, 'Type a niche or topic').max(200), region: Region.default('worldwide') });
+const FREE_SEARCHES = 3;
+
+/** What the app shows of a brief: topics, why they move, and links. Never people. */
+function briefForApp(b: any) {
+  return {
+    briefId: String(b?.briefId ?? ''),
+    niche: String(b?.niche ?? ''),
+    createdAt: String(b?.createdAt ?? ''),
+    notFound: b?.notFound ? String(b.notFound) : null,
+    trends: (Array.isArray(b?.trends) ? b.trends : []).slice(0, 10).map((t: any) => ({
+      topic: String(t.topic ?? ''),
+      summary: String(t.summary ?? ''),
+      whyNow: String(t.whyNow ?? ''),
+      momentum: String(t.momentum ?? ''),
+      hashtags: Array.isArray(t.hashtags) ? t.hashtags.slice(0, 5).map(String) : [],
+      touchesFinance: Boolean(t.touchesFinance),
+      sources: (Array.isArray(t.sources) ? t.sources : []).slice(0, 3).map((c: any) => ({ url: String(c.url ?? ''), title: c.title ? String(c.title) : null })).filter((c: any) => /^https:\/\//.test(c.url)),
+    })),
+  };
 }
 
 const InviteRequest = z.object({ role: z.enum(['team', 'client']), clientId: id.optional() });
@@ -198,8 +229,62 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, { ok: true });
       }
 
+      case 'rein_search': {
+        const r = parse(ReinSearch, input);
+        // A brief from the last 6 hours costs nothing, for anyone.
+        const reused = await reusableBrief(r.niche, r.region);
+        if (reused) {
+          await db.from('rein_searches').insert({ user_id: userId, workspace_id: member.workspaceId, niche: r.niche, region: r.region, brief_id: reused.brief.briefId, reused: true });
+          return reply(200, { brief: briefForApp(reused.brief), reused: true });
+        }
+        let rowId: string | null = null;
+        if (member.role === 'client') {
+          const { data, error } = await db.rpc('rein_claim_free', { p_user: userId, p_workspace: member.workspaceId, p_niche: r.niche, p_region: r.region });
+          if (error) throw new Error(`Could not check free searches: ${error.message}`);
+          if (!data) return reply(402, { error: 'You have used your 3 free searches. Paid searches open soon: $5 a search or $15 a month.', pay: true });
+          rowId = String(data);
+        } else {
+          const { data, error } = await db.from('rein_searches').insert({ user_id: userId, workspace_id: member.workspaceId, niche: r.niche, region: r.region }).select('id').single();
+          if (error) throw new Error(`Could not record the search: ${error.message}`);
+          rowId = data.id;
+        }
+        const res = await callRein({ niche: r.niche, region: r.region });
+        if (res.status !== 200 || !res.body?.brief) {
+          // Nothing was found or Rein failed: give the free search back.
+          await db.from('rein_searches').delete().eq('id', rowId);
+          if (res.status === 409) throw new InputError('Someone is searching this niche right now. Try again in a minute.', 409);
+          if (res.status === 402) throw new InputError('This month\'s AI budget is used up. It resets on the 1st.', 402);
+          throw new Error(`Rein failed: ${String(res.body?.error ?? res.status).slice(0, 200)}`);
+        }
+        const brief = res.body.brief;
+        await db.from('rein_searches').update({ brief_id: brief.briefId, reused: Boolean(res.body?.diagnostics?.reused) }).eq('id', rowId);
+        return reply(200, { brief: briefForApp(brief), reused: Boolean(res.body?.diagnostics?.reused) });
+      }
+
+      case 'rein_history': {
+        const { data: rows, error } = await db
+          .from('rein_searches')
+          .select('id, niche, region, brief_id, reused, free, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (error) throw new Error(`Could not read your searches: ${error.message}`);
+        const usedFree = (rows ?? []).filter((x) => x.free && !x.reused).length;
+        const last = (rows ?? []).find((x) => x.brief_id);
+        let lastBrief = null;
+        if (last) {
+          const { data: nb } = await db.from('niche_briefs').select('brief').eq('id', last.brief_id).maybeSingle();
+          if (nb) lastBrief = briefForApp(nb.brief);
+        }
+        return reply(200, {
+          freeLeft: member.role === 'client' ? Math.max(0, FREE_SEARCHES - usedFree) : null,
+          searches: (rows ?? []).slice(0, 8).map((x) => ({ niche: x.niche, region: x.region, at: x.created_at })),
+          last: lastBrief,
+        });
+      }
+
       default:
-        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset or password_set.' });
+        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search or rein_history.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

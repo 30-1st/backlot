@@ -26,20 +26,13 @@ export function PlaygroundScreen({ go }: ScreenProps) {
   );
 }
 
-/** Honest holding screens for the two tools whose builds come in the Playground step. */
-export function PlaygroundSoon({ go, tool }: ScreenProps & { tool: 'x' | 'rein' }) {
-  const copy =
-    tool === 'x'
-      ? {
-          icon: <Bubble size={52} />,
-          title: 'X narration',
-          body: 'The X profile page is being built next. It opens here as soon as it is ready, unlocked for everyone.',
-        }
-      : {
-          icon: <Radar size={52} />,
-          title: 'Rein',
-          body: 'Rein searches what is rising in any niche. 3 searches are free, then $5 a search or $15 a month. Her search screen is being built next.',
-        };
+/** An honest holding screen for X narration until its profile page is built. */
+export function PlaygroundSoon({ go }: ScreenProps & { tool: 'x' }) {
+  const copy = {
+    icon: <Bubble size={52} />,
+    title: 'X narration',
+    body: 'The X profile page is being built next. It opens here as soon as it is ready, unlocked for everyone.',
+  };
   return (
     <main className="bl-play">
       <div className="bl-play-head">
