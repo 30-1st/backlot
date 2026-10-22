@@ -1,5 +1,6 @@
 // Removes logins that have not opened Backlot for 60 days, along with their
-// accounts, narrations and media, and clears out chats nobody is in any more.
+// accounts, narrations and media, clears out chats nobody is in any more, and deletes
+// Library files that were removed more than 7 days ago.
 // Runs once a day from pg_cron.
 //
 // Anyone in the team workspace (owner, team or client) is never removed: deleting the
@@ -15,6 +16,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 
 const IDLE_DAYS = 60;
 const BATCH = 200;
+const LIBRARY_KEEP_DAYS = 7;
 
 function reply(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -92,6 +94,27 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Library files someone removed more than 7 days ago: delete the file, then its row.
+  // Until then they could still be restored from the app.
+  let libraryFiles = 0;
+  const { data: gone, error: goneError } = await db
+    .from('library_items')
+    .select('id, path')
+    .lt('removed_at', new Date(Date.now() - LIBRARY_KEEP_DAYS * 86_400_000).toISOString())
+    .limit(500);
+  if (goneError) {
+    console.error('finding removed library files failed', goneError.message);
+  } else if (gone && gone.length > 0) {
+    const { error: storageError } = await db.storage.from('library').remove(gone.map((g) => g.path));
+    if (storageError) {
+      console.error('deleting removed library files failed', storageError.message);
+    } else {
+      const { error } = await db.from('library_items').delete().in('id', gone.map((g) => g.id));
+      if (error) console.error('deleting removed library rows failed', error.message);
+      else libraryFiles = gone.length;
+    }
+  }
+
   // The sign-up log only needs the last hour. Keep a day and drop the rest.
   await db.from('signup_log').delete().lt('created_at', new Date(Date.now() - 86_400_000).toISOString());
 
@@ -111,5 +134,5 @@ Deno.serve(async (req: Request) => {
     else chats = empty.length;
   }
 
-  return reply(200, { ok: true, logins, files, chats, failed: failed.length });
+  return reply(200, { ok: true, logins, files, libraryFiles, chats, failed: failed.length });
 });

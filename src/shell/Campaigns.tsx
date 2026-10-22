@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { bil, type Decision } from '../lib/team';
+import { supabase } from '../lib/supabase';
+import { signedUrls } from '../lib/clientMedia';
 import type { Campaign, Post } from './data';
 import { Back } from './icons';
 import { campaignTitle } from './Notifications';
@@ -321,9 +323,10 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
         </span>
         <span className={`bl-chip ${s.cls}`}>{s.word}</span>
       </div>
+      {typeof post.post.mediaId === 'string' && <PostMedia id={post.post.mediaId} />}
       {post.post.mediaIdea && (
         <div className="bl-wash" style={{ fontSize: 14, lineHeight: 1.45 }}>
-          <span className="bl-label accent">Media · </span>
+          <span className="bl-label accent">{post.post.mediaId ? 'How to post it · ' : 'Media · '}</span>
           {String(post.post.mediaIdea)}
         </div>
       )}
@@ -349,5 +352,34 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
         {copied ? 'Copied' : 'Copy the text'}
       </button>
     </article>
+  );
+}
+
+/** The client's own photo or video that Bil matched to this post. */
+function PostMedia({ id }: { id: string }) {
+  const [file, setFile] = useState<{ kind: string; url: string } | null>(null);
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      if (!supabase) return;
+      const { data } = await supabase.from('library_items').select('path, kind, removed_at').eq('id', id).maybeSingle();
+      if (!data || data.removed_at) {
+        if (alive) setGone(true);
+        return;
+      }
+      const urls = await signedUrls([data.path]);
+      if (alive && urls[data.path]) setFile({ kind: data.kind, url: urls[data.path] });
+    })().catch(() => alive && setGone(true));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  if (gone) return <div className="bl-small">The file Bil picked for this post was removed from Media.</div>;
+  if (!file) return <div className="bl-post-media" aria-busy="true" />;
+  return (
+    <div className="bl-post-media">
+      {file.kind === 'video' ? <video src={`${file.url}#t=0.1`} controls playsInline preload="metadata" /> : <img src={file.url} alt="The photo for this post" />}
+    </div>
   );
 }

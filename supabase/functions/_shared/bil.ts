@@ -267,6 +267,27 @@ export async function loadKit(db: SupabaseClient, clientId: string, ownerId: str
   };
 }
 
+export type LibraryFile = { id: string; kind: 'photo' | 'video'; tags: string[]; note: string | null; seconds: number | null };
+
+/** The client's tagged Library files, newest first. Bil only ever sees tags and notes, never images. */
+export async function loadLibraryFiles(db: SupabaseClient, clientId: string, ownerId: string, ids?: string[]): Promise<LibraryFile[]> {
+  let q = db
+    .from('library_items')
+    .select('id, kind, tags, note, duration_s')
+    .eq('client_id', clientId)
+    .eq('workspace_id', ownerId)
+    .is('removed_at', null);
+  if (ids) {
+    if (ids.length === 0) return [];
+    q = q.in('id', ids);
+  }
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
+  if (error) throw new Error(`Could not read the Library: ${error.message}`);
+  return (data ?? [])
+    .filter((r: any) => Array.isArray(r.tags) && r.tags.length > 0)
+    .map((r: any) => ({ id: r.id, kind: r.kind === 'video' ? 'video' : 'photo', tags: r.tags, note: r.note ?? null, seconds: r.duration_s == null ? null : Number(r.duration_s) }));
+}
+
 /**
  * The client as Grok sees them. Built the same way for every step of a campaign, so it
  * stays part of the cached opening. Times are left out: they change nothing Bil decides.
@@ -1003,6 +1024,7 @@ ${r.notes ? `Client notes: ${r.notes}\n` : ''}${reward}
 - Spread posts out: the client can post about ${kit.profile.postsPerWeek} times a week by hand. Avoid several posts close together on one day.
 - postWindow is local time in ${kit.profile.timezone}. Windows are starting guesses; say so in notes.
 - Mix funnel stages to fit the goal. Use a trend only if it is in the trends you approved above, and only within its time window.
+- media: give each post that should carry a photo or video one file from their media library, by its ref, whose tags fit the post. Use each file once at most. Leave media out for text posts or when nothing fits, and never invent a ref.
 - kpis: one main measure and one or two supporting ones they can see in X's analytics or their own records.`;
 }
 
@@ -1011,6 +1033,9 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
   const posts = r.posts;
   const library = kit.library!;
   const algorithm = await algorithmContext();
+  const files = await loadLibraryFiles(db, kit.clientId, kit.ownerId);
+  const refs = new Map(files.map((f, i) => [`m${i + 1}`, f.id]));
+  const usedMedia = new Set<string>();
   const trends: Array<{ topic: string; summary: string; actWithinHours?: number; hashtags: string[]; touchesFinance: boolean }> =
     Array.isArray(step.payload.trends) ? step.payload.trends : [];
   const evergreen: string[] = Array.isArray(step.payload.evergreen) ? step.payload.evergreen : Array.isArray(step.payload.steady) ? step.payload.steady : [];
@@ -1024,6 +1049,10 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     trends.length ? JSON.stringify(trends) : `(none${step.payload.note ? `: ${step.payload.note}` : ''})`,
     '# Evergreen ideas',
     evergreen.length ? evergreen.join('; ') : '(none)',
+    '# Their media library (tags and notes only)',
+    files.length
+      ? files.map((f, i) => JSON.stringify({ ref: `m${i + 1}`, kind: f.kind, tags: f.tags, ...(f.note ? { note: f.note } : {}), ...(f.seconds ? { seconds: f.seconds } : {}) })).join('\n')
+      : '(none tagged yet: describe the media to shoot in mediaIdea instead)',
     planTask(c, kit, posts),
   ].join('\n');
 
@@ -1063,6 +1092,14 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     let pillar = slugify(s.pillar);
     if (!pillars.some((p) => p.slug === pillar)) pillar = pillars[0].slug;
     const trendTopic = s.trendTopic && usedTopics.has(s.trendTopic.trim().toLowerCase()) ? cut(s.trendTopic, 120) : undefined;
+    const ref = s.media ? String(s.media).trim().toLowerCase() : '';
+    let mediaId = ref ? refs.get(ref) : undefined;
+    if (ref && !mediaId) adjustments.push(`Post ${slots.length + 1}: media "${ref.slice(0, 20)}" is not in their Library, so it was left out.`);
+    if (mediaId && usedMedia.has(mediaId)) {
+      adjustments.push(`Post ${slots.length + 1}: a file was picked twice, so the second use was left out.`);
+      mediaId = undefined;
+    }
+    if (mediaId) usedMedia.add(mediaId);
     slots.push({
       slot: slots.length + 1,
       dayOffset: clampInt(s.dayOffset, 0, r.lengthDays - 1, 0),
@@ -1072,6 +1109,7 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
       stage: s.stage,
       idea: cut(s.idea, 300) ?? 'Post idea pending.',
       trendTopic,
+      mediaId,
     });
   }
   if (slots.length === 0) throw new Error('The plan had no posts');
@@ -1131,12 +1169,15 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
 
 // ---------- step: batch ----------
 
-function batchTask(slots: PlanSlot[], redo: Record<string, string[]>, hooks: string[], kit: Kit, plan: CampaignPlan): string {
+function batchTask(slots: PlanSlot[], redo: Record<string, string[]>, hooks: string[], kit: Kit, plan: CampaignPlan, media: Map<string, LibraryFile>): string {
   const limit = kit.profile.xPremium ? 'Long posts are allowed (X Premium), but most should still be short.' : 'Every post must fit 280 characters as X counts them (a link counts as 23, an emoji as 2).';
   const tags = [...new Set([...kit.profile.allowedHashtags, ...plan.trendHashtags])];
   const list = slots.map((s) => {
     const fix = redo[String(s.slot)];
-    return JSON.stringify(fix ? { ...s, fixFromLastTry: fix } : s);
+    const { mediaId, ...rest } = s;
+    const file = mediaId ? media.get(mediaId) : undefined;
+    const shown = file ? { ...rest, media: { kind: file.kind, tags: file.tags, ...(file.note ? { note: file.note } : {}) } } : rest;
+    return JSON.stringify(fix ? { ...shown, fixFromLastTry: fix } : shown);
   });
   return `# Your task: write these posts
 Write exactly these ${slots.length} posts, one per slot, using each slot number as given.
@@ -1147,6 +1188,7 @@ ${list.join('\n')}
 - Paid, gifted or rewarded posts start with #ad. Giveaway posts carry the reward's tag${plan.reward?.disclosureTag ? ` (${plan.reward.disclosureTag})` : ''}. Anything that could read as financial advice ends with "Education only, not financial advice."
 - Do not open the same way as these hooks already used: ${hooks.length ? hooks.map((h) => JSON.stringify(h)).join(' | ') : '(none yet)'}
 - algorithmScore and signals use the X ranking settings above. voiceMatch and drift check the draft against the voice card honestly.
+- When a slot has media, write the post for that exact photo or video (its tags say what is in it), and use mediaIdea to say how to post it (crop, first frame, caption placement). Without media, mediaIdea describes what to shoot.
 - If a post cannot be written within the rules, still return the slot with the reason in compliance.blockedReasons.`;
 }
 
@@ -1171,7 +1213,9 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     .filter(Boolean);
   await setStep(db, c.id, { step: `Drafting posts ${slots[0].slot} to ${slots[slots.length - 1].slot}` });
 
-  const planForPrompt = { ...plan, algorithm: undefined, adjustments: undefined };
+  const picked = slots.map((sl) => sl.mediaId).filter((m): m is string => Boolean(m));
+  const mediaFiles = new Map((await loadLibraryFiles(db, kit.clientId, kit.ownerId, picked)).map((f) => [f.id, f]));
+  const planForPrompt = { ...plan, slots: plan.slots.map(({ mediaId: _m, ...rest }) => rest), algorithm: undefined, adjustments: undefined };
   const prompt = [
     snapshotText(kit),
     `# X ranking settings (published defaults, xai-org/x-algorithm at ${plan.algorithm.repoCommit.slice(0, 7)})`,
@@ -1179,7 +1223,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     ...plan.algorithm.excerpts.map((e) => `## ${e.file} lines ${e.lines}\n${e.text}`),
     '# The approved campaign plan',
     JSON.stringify(planForPrompt),
-    batchTask(slots, redo, hooks, kit, plan),
+    batchTask(slots, redo, hooks, kit, plan, mediaFiles),
   ].join('\n');
 
   const ctx: CheckContext = {
@@ -1194,7 +1238,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
   const inBatch = new Set(slots.map((s) => String(s.slot)));
   const nextRedo: Record<string, string[]> = Object.fromEntries(Object.entries(redo).filter(([k]) => !inBatch.has(k)));
   const blockRow = (s: PlanSlot, reasons: string[]) =>
-    newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: { order: s.slot, dayOffset: s.dayOffset, postWindow: s.postWindow, postType: s.postType, pillar: s.pillar, stage: s.stage, idea: s.idea, blockedReasons: reasons.slice(0, 10) } });
+    newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: { order: s.slot, dayOffset: s.dayOffset, postWindow: s.postWindow, postType: s.postType, pillar: s.pillar, stage: s.stage, idea: s.idea, ...(s.mediaId ? { mediaId: s.mediaId } : {}), blockedReasons: reasons.slice(0, 10) } });
 
   let ms = 0;
   try {
@@ -1240,6 +1284,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
         draft,
         callToAction: cut(p.callToAction, 200),
         mediaIdea: cut(p.mediaIdea, 400),
+        mediaId: s.mediaId && mediaFiles.has(s.mediaId) ? s.mediaId : undefined,
         engagementPlan: cut(p.engagementPlan, 400),
         algorithm: {
           score: clampInt(p.algorithmScore, 0, 100, 50),

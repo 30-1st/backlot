@@ -113,6 +113,7 @@ export const PlanDraft = z.object({
         stage: FunnelStage,
         idea: str('What this post does and its angle. Under 300 characters.'),
         trendTopic: z.string().optional().describe('Only when it uses a trend you marked "use", exactly as named.'),
+        media: z.string().optional().describe('The ref of one file from their media library (like "m3") whose tags fit this post. Leave out for text posts or when nothing fits. Never invent a ref.'),
       }),
     )
     .max(60),
@@ -163,6 +164,8 @@ export const PlanSlot = z.object({
   stage: FunnelStage,
   idea: shortText(300),
   trendTopic: shortText(120).optional(),
+  /** A Library file Bil matched to this post by its tags. */
+  mediaId: id.optional(),
 });
 export type PlanSlot = z.infer<typeof PlanSlot>;
 

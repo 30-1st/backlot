@@ -132,6 +132,7 @@ export const CampaignPost = z.object({
   draft: text().describe('The full post, ready to copy. Includes any required #ad or disclaimer.'),
   callToAction: shortText(200).optional(),
   mediaIdea: shortText(400).optional().describe('A description only. Agents never make images of real people.'),
+  mediaId: id.optional().describe('The client\'s own Library file this post uses, matched by its tags.'),
   engagementPlan: shortText(400).optional().describe('What the client does by hand after posting, e.g. reply to early comments.'),
   algorithm: AlgorithmScore,
   voice: VoiceCheck,

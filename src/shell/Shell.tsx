@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { team, type Me } from '../lib/team';
 import { useWorkspace } from './data';
-import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel } from './icons';
+import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel, Vault } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
 import { CreateScreen } from './Create';
@@ -17,7 +17,7 @@ import { PlaygroundScreen, PlaygroundSoon } from './Playground';
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
 //   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #create
-//   Client                    the same #today and #campaigns for a client; the team previews
+//   Client                    #today, #campaigns and #library (Media) for a client; the team previews
 //                             a client's view under #client, #client.campaigns[.id]
 //   Playground (everyone)     #playground  #instagram (narration studio)  #narrate-x  #rein
 //   Account (from the avatar) #account
@@ -194,6 +194,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       <nav aria-label="Your posts" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+        {tab('library', 'Media', <Vault size={22} />, head === 'library')}
         {tab('playground', 'Playground', <Reel size={22} />, false)}
       </nav>
     );
@@ -207,6 +208,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   }
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
+  // Screens about exactly one client pick one; there is no "All clients" there.
+  const one = room === 'preview' || ['library', 'insights'].includes(head);
 
   return wrap(
     <>
@@ -246,14 +249,14 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
               {showPicker && (
                 <label className="bl-ghost" style={{ position: 'relative', paddingRight: 14 }}>
                   <span className="bl-sr">Which client</span>
-                  <span>{room === 'preview' ? `@${clients.find((c) => c.id === single)?.handle ?? ''}` : focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
+                  <span>{one ? `@${clients.find((c) => c.id === single)?.handle ?? ''}` : focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
                   <Chevron />
                   <select
-                    value={room === 'preview' ? single ?? '' : picked}
+                    value={one ? single ?? '' : picked}
                     onChange={(e) => setPicked(e.target.value)}
                     style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
                   >
-                    {room !== 'preview' && <option value="all">All clients</option>}
+                    {!one && <option value="all">All clients</option>}
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         @{c.handle}
