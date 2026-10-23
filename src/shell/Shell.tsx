@@ -171,7 +171,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       ) : sub === 'client' ? (
         <AddClientFlow {...props} />
       ) : (
-        <CreateScreen {...props} />
+        <CreateScreen {...props} pick={setPicked} />
       );
       break;
     case 'account':

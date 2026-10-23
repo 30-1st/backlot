@@ -38,7 +38,21 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
   const client = ws.data?.clients.find((c) => c.id === single) ?? null;
   const voice = ws.data?.voices.find((v) => v.clientId === single);
   const [step, setStep] = useState<Step>('goal');
-  const [goal, setGoal] = useState('');
+  // A goal handed over from the agent bar, used once.
+  const [goal, setGoal] = useState(() => {
+    try {
+      return (sessionStorage.getItem('backlot.plan.goal') ?? '').slice(0, 280);
+    } catch {
+      return '';
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('backlot.plan.goal');
+    } catch {
+      // Nothing to clear.
+    }
+  }, []);
   const [days, setDays] = useState<3 | 7 | 14>(7);
   const [perDay, setPerDay] = useState<1 | 2 | 3>(2);
   const [start, setStart] = useState(tomorrow());

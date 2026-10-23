@@ -23,6 +23,15 @@ export type Me = {
 };
 
 export type ReinRegion = 'worldwide' | 'us' | 'uk' | 'canada';
+/** The one next step Bil offers from the agent bar. Nothing runs until the person confirms. */
+export type AskAction = { clientId: string; handle: string } & (
+  | { type: 'trends'; region: ReinRegion }
+  | { type: 'report'; month: string }
+  | { type: 'desk' }
+  | { type: 'measure' }
+  | { type: 'plan'; goal: string }
+  | { type: 'open'; screen: 'brand' | 'board' | 'library' | 'approvals' | 'reports' | 'desk' | 'insights' | 'campaigns' }
+);
 export type ReinTrend = {
   topic: string;
   summary: string;
@@ -142,6 +151,9 @@ export const bil = {
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),
+  /** The agent bar: Bil answers and may offer one next step, which the person confirms. */
+  ask: (text: string, clientId: string | null) =>
+    call<{ reply: string; action: AskAction | null; costUsd: number }>('bil', 'ask', { requestId: crypto.randomUUID(), text, ...(clientId ? { clientId } : {}) }),
   /** Fills a client's engagement desk: trend posts (free) and, with replies, who replied to them (paid). */
   desk: (clientId: string, replies: boolean) =>
     call<{ replies: number; conversations: number; costUsd: number; adult: boolean }>('bil', 'desk', { requestId: crypto.randomUUID(), clientId, replies }),

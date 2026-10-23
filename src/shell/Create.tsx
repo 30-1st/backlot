@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, Chevron } from './icons';
 import type { ScreenProps } from './Shell';
+import { AgentBar } from './AgentBar';
 
 // Ask Bil: what he can do for the team, each with its price shown before anything runs.
 
@@ -26,7 +27,7 @@ function useTaggedCount(clientId: string | null): number | null {
   return n;
 }
 
-export function CreateScreen({ ws, go, single }: ScreenProps) {
+export function CreateScreen({ ws, go, single, pick }: ScreenProps & { pick?: (id: string) => void }) {
   const client = ws.data?.clients.find((c) => c.id === single) ?? null;
   const voice = ws.data?.voices.find((v) => v.clientId === single);
   const measured = Boolean(voice?.card?.whatWorks?.measuredAt);
@@ -56,6 +57,8 @@ export function CreateScreen({ ws, go, single }: ScreenProps) {
       <p className="bl-p bl-muted" style={{ margin: '-10px 0 0' }}>
         You see the price before anything runs.
       </p>
+
+      <AgentBar clientId={single} clients={ws.data?.clients ?? []} go={go} pick={pick} />
 
       <ul className="bl-rows">
         {actions.map((a, i) => (

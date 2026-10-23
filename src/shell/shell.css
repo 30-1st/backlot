@@ -1974,3 +1974,11 @@ a.bl-card:hover,
 .bl-desk-item + .bl-desk-item { border-top: 1px solid var(--deck-edge-b); }
 .bl-desk-text { margin: 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
 .bl-desk-meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+/* ---------- Agent bar ---------- */
+.bl-agentbar { display: flex; flex-direction: column; gap: 12px; }
+.bl-agentbar-form { display: flex; flex-direction: column; gap: 8px; }
+.bl-agentbar-form textarea { resize: vertical; min-height: 64px; }
+.bl-agentbar-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.bl-agentbar-answer { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: linear-gradient(165deg, var(--deck-a), var(--deck-b)); box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b); }
+.bl-agentbar-offer { display: flex; flex-direction: column; gap: 8px; }
