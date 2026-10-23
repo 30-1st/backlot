@@ -90,13 +90,13 @@ export function DetailBox({ campaignId, slot, post, onDone }: { campaignId: stri
   );
 }
 
-export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => void }) {
+export function DayView({ ws, go, focus, onAll, onMonth, startDay }: ScreenProps & { onAll: () => void; onMonth?: () => void; startDay?: string | null }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const days = useMemo(() => [...new Set(all.map((t) => t.day))].sort(), [all]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
   const firstDay = days.includes(today) ? today : days.find((d) => d > today) ?? days[days.length - 1];
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(startDay ?? null);
   const day = picked && days.includes(picked) ? picked : firstDay;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -125,6 +125,13 @@ export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => v
   return (
     <main className="bl-sched">
       <h1 className="bl-sr">Schedule</h1>
+      {onMonth && (
+        <div className="bl-sched-switch">
+          <button type="button" className="bl-ghost" onClick={onMonth}>
+            Month
+          </button>
+        </div>
+      )}
       <div className="bl-days" role="group" aria-label="Day">
         {days.map((d) => {
           const p = dayParts(d);
@@ -205,6 +212,109 @@ export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => v
 
       <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={onAll}>
         All campaigns
+      </button>
+    </main>
+  );
+}
+
+type Mark = 'needs' | 'approved' | 'posted' | 'held';
+
+function markOf(t: Timed): Mark {
+  if (t.post.status === 'blocked') return 'held';
+  if (t.post.review === 'posted') return 'posted';
+  if (t.post.review === 'approved') return 'approved';
+  return 'needs';
+}
+
+const MARK_WORDS: Record<Mark, string> = { needs: 'waiting for OK', approved: 'approved', posted: 'posted', held: 'needs a detail' };
+
+/** Month view: every day of one month, with a dot per post coloured by where it stands. */
+export function MonthView({ ws, focus, isTeam, go, onDay, onDayView }: ScreenProps & { onDay: (day: string) => void; onDayView: () => void }) {
+  const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
+  const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const today = todayIn(tz);
+  const firstPlanned = all.find((t) => t.day >= today)?.day ?? all[all.length - 1]?.day ?? today;
+  const [month, setMonth] = useState(firstPlanned.slice(0, 7));
+
+  const byDay = useMemo(() => {
+    const m = new Map<string, Timed[]>();
+    for (const t of all) m.set(t.day, [...(m.get(t.day) ?? []), t]);
+    return m;
+  }, [all]);
+
+  const [y, mo] = month.split('-').map(Number);
+  const first = new Date(Date.UTC(y, mo - 1, 1));
+  const days = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const lead = first.getUTCDay();
+  const cells: Array<string | null> = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)];
+  while (cells.length % 7) cells.push(null);
+  const shift = (n: number) => {
+    const d = new Date(Date.UTC(y, mo - 1 + n, 1));
+    setMonth(d.toISOString().slice(0, 7));
+  };
+  const inMonth = all.filter((t) => t.day.startsWith(month));
+  const count = (k: Mark) => inMonth.filter((t) => markOf(t) === k).length;
+  const weekdays = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2026, 1, 1 + i)).toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' }));
+
+  return (
+    <main className="bl-sched">
+      <h1 className="bl-sr">Schedule, month</h1>
+      <div className="bl-sched-switch">
+        <button type="button" className="bl-ghost" onClick={onDayView}>
+          Day
+        </button>
+      </div>
+      <div className="bl-month-head">
+        <button type="button" className="bl-ghost bl-round" aria-label="Previous month" onClick={() => shift(-1)}>
+          &#8249;
+        </button>
+        <b>{first.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}</b>
+        <button type="button" className="bl-ghost bl-round" aria-label="Next month" onClick={() => shift(1)}>
+          &#8250;
+        </button>
+      </div>
+      <div className="bl-month" role="grid" aria-label="Posts by day">
+        {weekdays.map((w, i) => (
+          <span key={`w${i}`} className="bl-month-wd" aria-hidden="true">
+            {w}
+          </span>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`e${i}`} className="bl-month-cell is-empty" />;
+          const list = byDay.get(d) ?? [];
+          const label = `${new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })}${
+            list.length ? `, ${list.length} ${list.length === 1 ? 'post' : 'posts'}: ${(['needs', 'held', 'approved', 'posted'] as Mark[])
+              .map((k) => [k, list.filter((t) => markOf(t) === k).length] as const)
+              .filter(([, n]) => n)
+              .map(([k, n]) => `${n} ${MARK_WORDS[k]}`)
+              .join(', ')}`
+              : ', nothing planned'
+          }`;
+          return (
+            <button key={d} type="button" className={`bl-month-cell${d === today ? ' is-today' : ''}`} aria-label={label} disabled={!list.length} onClick={() => onDay(d)}>
+              <span className="num">{Number(d.slice(8))}</span>
+              {list.length > 0 && (
+                <span className="bl-month-dots" aria-hidden="true">
+                  {list.slice(0, 4).map((t) => (
+                    <i key={`${t.campaign.id}:${t.post.slot}`} className={`m-${markOf(t)}`} />
+                  ))}
+                  {list.length > 4 && <em>+{list.length - 4}</em>}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <ul className="bl-month-key" aria-label="This month">
+        {(['needs', 'held', 'approved', 'posted'] as Mark[]).map((k) => (
+          <li key={k}>
+            <i className={`m-${k}`} aria-hidden="true" />
+            <span className="num">{count(k)}</span> {MARK_WORDS[k]}
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => go('approvals')}>
+        {isTeam ? 'Approvals log' : 'Your approvals log'}
       </button>
     </main>
   );

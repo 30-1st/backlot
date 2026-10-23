@@ -598,6 +598,41 @@ export async function learnWhatWorks(userDb: SupabaseClient, ownerId: string, re
   });
 }
 
+// ---------- the approvals log ----------
+
+type LogLine = {
+  workspaceId: string;
+  clientId: string;
+  kind: 'post' | 'voice' | 'brand';
+  decision: 'approved' | 'changes' | 'posted' | 'undone' | 'saved' | 'suggested' | 'dropped';
+  campaignId?: string;
+  slot?: number;
+  subject?: string | null;
+  note?: string | null;
+  actor: Member | { userId: string | null; role: 'team' | 'client' };
+};
+
+/**
+ * Adds one line to the client's approvals log, after the decision itself is saved.
+ * A failure here is reported in the function logs and never undoes the decision.
+ */
+async function logApproval(db: SupabaseClient, l: LogLine) {
+  const role = 'workspaceId' in l.actor ? (isTeam(l.actor) ? 'team' : 'client') : l.actor.role;
+  const { error } = await db.from('approval_log').insert({
+    workspace_id: l.workspaceId,
+    client_id: l.clientId,
+    kind: l.kind,
+    decision: l.decision,
+    campaign_id: l.campaignId ?? null,
+    slot: l.slot ?? null,
+    subject: l.subject ? l.subject.slice(0, 160) : null,
+    note: l.note ? l.note.slice(0, 500) : null,
+    actor_id: l.actor.userId,
+    actor_role: role,
+  });
+  if (error) console.error('approval log write failed', error.message);
+}
+
 // ---------- brand kit ----------
 
 /** What the brand kit page may change. Who they are, goals, posting, words, adult settings. */
@@ -621,6 +656,11 @@ export const BrandEdits = ClientProfileBase.pick({
 
 export const BrandSaveRequest = z.object({ clientId: id, edits: BrandEdits });
 export const BrandReviewRequest = z.object({ clientId: id, approve: z.boolean() });
+
+/** "niche, goals" from a set of brand kit edits, for the log. */
+function changedFields(edits: Record<string, unknown>): string {
+  return Object.keys(edits).join(', ').slice(0, 160);
+}
 
 function mergeProfile(current: unknown, edits: Record<string, unknown>) {
   const merged = ClientProfile.safeParse({ ...(current as object), ...edits, updatedAt: new Date().toISOString() });
@@ -647,6 +687,7 @@ export async function saveBrand(m: Member, req: z.infer<typeof BrandSaveRequest>
       .eq('id', req.clientId)
       .eq('owner_id', m.workspaceId);
     if (e) throw new Error(`Could not save the brand kit: ${e.message}`);
+    await logApproval(db, { workspaceId: m.workspaceId, clientId: req.clientId, kind: 'brand', decision: 'saved', subject: changedFields(edits), actor: m });
     return { saved: true, waiting: false };
   }
   // A client's edits are checked now, so the team only ever sees a valid suggestion.
@@ -659,6 +700,7 @@ export async function saveBrand(m: Member, req: z.infer<typeof BrandSaveRequest>
     .eq('id', req.clientId)
     .eq('owner_id', m.workspaceId);
   if (e) throw new Error(`Could not save the suggestion: ${e.message}`);
+  await logApproval(db, { workspaceId: m.workspaceId, clientId: req.clientId, kind: 'brand', decision: 'suggested', subject: changedFields(edits), actor: m });
   return { saved: true, waiting: true };
 }
 
@@ -674,6 +716,14 @@ export async function reviewBrand(m: Member, req: z.infer<typeof BrandReviewRequ
   if (req.approve) update.profile = mergeProfile(client.profile, client.profile_pending as Record<string, unknown>);
   const { error: e } = await db.from('clients').update(update).eq('id', req.clientId).eq('owner_id', m.workspaceId);
   if (e) throw new Error(`Could not save the review: ${e.message}`);
+  await logApproval(db, {
+    workspaceId: m.workspaceId,
+    clientId: req.clientId,
+    kind: 'brand',
+    decision: req.approve ? 'approved' : 'dropped',
+    subject: changedFields(client.profile_pending as Record<string, unknown>),
+    actor: m,
+  });
   return { approved: req.approve };
 }
 
@@ -693,7 +743,7 @@ export const ApproveVoiceRequest = z.object({
 });
 
 /** The client approves their card, with or without edits. Edits make a new version. */
-export async function approveVoice(ownerId: string, req: z.infer<typeof ApproveVoiceRequest>) {
+export async function approveVoice(ownerId: string, req: z.infer<typeof ApproveVoiceRequest>, actor?: Member) {
   const db = serviceClient();
   const kit = await loadKit(db, req.clientId, ownerId);
   if (!kit.card) throw new BilInputError('This client has no voice card yet. Onboard them first.', 409);
@@ -713,6 +763,9 @@ export async function approveVoice(ownerId: string, req: z.infer<typeof ApproveV
     .eq('client_id', req.clientId)
     .eq('owner_id', ownerId);
   if (error) throw new Error(`Could not save the approval: ${error.message}`);
+  if (actor) {
+    await logApproval(db, { workspaceId: ownerId, clientId: req.clientId, kind: 'voice', decision: 'approved', subject: `Voice card version ${card.version}${edited ? ', with edits' : ''}`, actor });
+  }
   return { clientId: req.clientId, card };
 }
 
@@ -738,7 +791,7 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   requireClientAccess(m, c.client_id);
 
   const { data: post, error: pError } = await db
-    .from('campaign_posts').select('status, review').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
+    .from('campaign_posts').select('status, review, post').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
   if (pError) throw new Error(`Could not read the post: ${pError.message}`);
   if (!post) throw new BilInputError('No such post in this campaign.', 404);
   if (post.status !== 'ok' && (req.decision === 'approved' || req.decision === 'posted')) {
@@ -762,6 +815,18 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
     .eq('campaign_id', req.campaignId)
     .eq('slot', req.slot);
   if (error) throw new Error(`Could not save the decision: ${error.message}`);
+  const first = (post.post as { hook?: unknown; idea?: unknown } | null) ?? {};
+  await logApproval(db, {
+    workspaceId: m.workspaceId,
+    clientId: c.client_id,
+    kind: 'post',
+    decision: req.decision === 'pending' ? 'undone' : req.decision,
+    campaignId: req.campaignId,
+    slot: req.slot,
+    subject: String(first.hook ?? first.idea ?? ''),
+    note: req.decision === 'changes' ? note : null,
+    actor: m,
+  });
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt };
 }
 

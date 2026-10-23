@@ -103,7 +103,7 @@ async function handle(req: Request): Promise<Response> {
       case 'approve_voice': {
         const r = parse(ApproveVoiceRequest, input);
         requireClientAccess(member, r.clientId);
-        return reply(200, await approveVoice(workspaceId, r));
+        return reply(200, await approveVoice(workspaceId, r, member));
       }
       case 'estimate': {
         requireTeam(member);

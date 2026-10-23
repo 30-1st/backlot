@@ -3,6 +3,7 @@ import { isTeamRole, team, type Me } from '../lib/team';
 import { useWorkspace } from './data';
 import { BrandScreen } from './Brand';
 import { BoardScreen } from './Board';
+import { ApprovalsScreen } from './Approvals';
 import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel, Vault } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
@@ -21,14 +22,14 @@ import { ReinScreen } from './Rein';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
-//   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #brand  #board  #create
+//   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #brand  #board  #approvals  #create
 //   Client                    #today, #campaigns and #library (Media) for a client; the team previews
 //                             a client's view under #client, #client.campaigns[.id]
 //   Playground (everyone)     #playground  #instagram and #x (narration studios)  #rein
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -149,6 +150,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'board':
       screen = <BoardScreen {...props} />;
       break;
+    case 'approvals':
+      screen = <ApprovalsScreen {...props} />;
+      break;
     case 'create':
       screen = !isTeam ? (
         <Notifications {...props} />
@@ -208,7 +212,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     dock = (
       <nav aria-label="Team" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
-        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals')}
         {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board'].includes(head))}
         {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
       </nav>
@@ -217,7 +221,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     dock = (
       <nav aria-label="Your posts" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
-        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns')}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals')}
         {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board')}
         {tab('playground', 'Playground', <Reel size={22} />, false)}
       </nav>
@@ -233,7 +237,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights', 'brand', 'board'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
+  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>

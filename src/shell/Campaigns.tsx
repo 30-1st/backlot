@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
-import { DayView, DetailBox } from './Schedule';
+import { DayView, DetailBox, MonthView } from './Schedule';
 import { timedPosts } from './timing';
 import type { Campaign, Post } from './data';
 import { Back } from './icons';
@@ -33,11 +33,25 @@ function dayOf(c: Campaign, p: Post): string {
 
 export function CampaignsScreen(props: ScreenProps & { campaignId: string | null }) {
   const { ws, go, focus, campaignId } = props;
-  const [view, setView] = useState<'day' | 'list'>('day');
+  const [view, setView] = useState<'day' | 'month' | 'list'>('day');
+  const [day, setDay] = useState<string | null>(null);
   if (!ws.data) return <main aria-busy="true" />;
   const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
   if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
-  if (!campaignId && view === 'day' && timedPosts(ws.data, focus).length > 0) return <DayView {...props} onAll={() => setView('list')} />;
+  const timed = timedPosts(ws.data, focus).length > 0;
+  if (!campaignId && view === 'month' && timed) {
+    return (
+      <MonthView
+        {...props}
+        onDayView={() => setView('day')}
+        onDay={(d) => {
+          setDay(d);
+          setView('day');
+        }}
+      />
+    );
+  }
+  if (!campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} startDay={day} onAll={() => setView('list')} onMonth={() => setView('month')} />;
 
   const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);

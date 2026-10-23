@@ -34,7 +34,7 @@ const GOALS: Array<[string, string]> = [
   ['awareness', 'Awareness'],
 ];
 
-const LABELS: Record<keyof Kit, string> = {
+export const LABELS: Record<keyof Kit, string> = {
   displayName: 'Name',
   niche: 'Niche',
   offer: 'What they sell',
