@@ -77,6 +77,8 @@ export default function App() {
   setGuest(login.status === 'out' && guest);
   // A one-time message for the screen being opened, such as "this is a copy".
   const [flash, setFlash] = useState<{ path: string; text: string } | null>(null);
+  // Bumped after guest work moves into the login, so open screens read it again.
+  const [moved, setMoved] = useState(0);
 
   useEffect(() => {
     const onHash = () => setPath(readPath());
@@ -120,8 +122,11 @@ export default function App() {
 
   // In the hosted build, show who is signed in and let them leave.
   // Keying each screen by the login makes sure nothing carries over between people.
-  const who = login.status === 'in' ? login.userId : login.status === 'out' ? 'guest' : 'offline';
+  const who = (login.status === 'in' ? login.userId : login.status === 'out' ? 'guest' : 'offline') + (moved ? `:${moved}` : '');
   const onSignOut = () => {
+    // Signing out goes back to the welcome page, never into an empty trial.
+    rememberGuest(false);
+    setGuestChoice(false);
     go('');
     void signOut();
   };
@@ -131,7 +136,7 @@ export default function App() {
   const account =
     login.status === 'in' ? { username: login.username, onSignOut, ...(inTeamSpace ? { onPeople: () => go('people') } : {}) } : {};
   const bil = login.status === 'in' && isTeamRole(role) ? { onBil: () => go('bil'), onBack: () => go('home') } : {};
-  const moving = login.status === 'in' ? <MoveGuestWork key={who} onMoved={() => go(path)} /> : null;
+  const moving = login.status === 'in' ? <MoveGuestWork key={login.userId} onMoved={() => setMoved((n) => n + 1)} /> : null;
   const withMove = (screen: ReactNode) => (
     <>
       {screen}

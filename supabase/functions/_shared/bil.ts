@@ -659,6 +659,8 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt };
 }
 
+const MAX_DETAIL_TRIES = 5;
+
 export const FillDetailRequest = z.object({
   campaignId: id,
   slot: z.number().int().min(1).max(60),
@@ -680,10 +682,15 @@ export async function fillDetail(m: Member, req: z.infer<typeof FillDetailReques
   const c = campaign as Campaign;
 
   const { data: row, error: pError } = await db
-    .from('campaign_posts').select('status').eq('campaign_id', c.id).eq('slot', req.slot).maybeSingle();
+    .from('campaign_posts').select('status, post').eq('campaign_id', c.id).eq('slot', req.slot).maybeSingle();
   if (pError) throw new Error(`Could not read the post: ${pError.message}`);
   if (!row) throw new BilInputError('No such post in this campaign.', 404);
   if (row.status !== 'blocked') throw new BilInputError('This post is already written.', 409);
+  // Each try is paid, so one held post gets a few tries, not endless ones.
+  const tries = clampInt((row.post as { detailTries?: unknown } | null)?.detailTries, 0, 99, 0);
+  if (tries >= MAX_DETAIL_TRIES) {
+    throw new BilInputError(`Bil has tried this post ${MAX_DETAIL_TRIES} times. Write it by hand, or ask your Backlot team to change the idea.`, 429);
+  }
 
   const plan = CampaignPlan.parse(c.plan);
   const slot = plan.slots.find((x) => x.slot === req.slot);
@@ -735,9 +742,10 @@ export async function fillDetail(m: Member, req: z.infer<typeof FillDetailReques
     }
 
     // Only replace the post if it is still held, so two people answering at once cannot both write it.
+    const post = judged.kind === 'blocked' ? { ...(judged.post as Record<string, unknown>), detailTries: tries + 1 } : judged.post;
     const { data: saved, error } = await db
       .from('campaign_posts')
-      .update({ status: judged.kind, post: judged.post, review: 'pending', review_note: null, reviewed_by: null, reviewed_at: null })
+      .update({ status: judged.kind, post, review: 'pending', review_note: null, reviewed_by: null, reviewed_at: null })
       .eq('campaign_id', c.id)
       .eq('slot', slot.slot)
       .eq('status', 'blocked')

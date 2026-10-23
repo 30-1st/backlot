@@ -195,9 +195,6 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           </span>
           <span className="bl-label bl-ellipsis">Goal: {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
         </div>
-        <button type="button" className="bl-ghost" style={{ marginLeft: 'auto', flexShrink: 0 }} disabled={opening} onClick={() => void seeOnX()}>
-          {opening ? 'Opening' : 'See it on X'}
-        </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -221,6 +218,10 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           )}
         </div>
       </div>
+
+      <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} disabled={opening} onClick={() => void seeOnX()}>
+        {opening ? 'Opening' : 'See it on the X profile'}
+      </button>
 
       {campaign.hold && isTeam && (
         <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

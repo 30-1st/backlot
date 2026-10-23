@@ -76,6 +76,8 @@ export async function moveGuestWork(onStep?: (done: number, total: number) => vo
   for (const account of accounts) {
     const read = await readAccount(account.id);
     if (!read || read.narrations.length === 0 || !isReadyPlatform(read.platform)) continue;
+    let made: string | null = null;
+    const before = moved;
     try {
       // Same file names in the account's folder, so every narration still points at them.
       for (const [id, blob] of read.blobs) {
@@ -86,6 +88,7 @@ export async function moveGuestWork(onStep?: (done: number, total: number) => vo
       }
       const [first, ...rest] = read.narrations;
       const meta = await cloud.createAccount(read.platform, first.sandbox, first.name);
+      made = meta.id;
       if (first.savePoint) await cloud.saveSavePoint(meta.id, first.savePoint);
       moved += 1;
       onStep?.(moved, total);
@@ -104,6 +107,17 @@ export async function moveGuestWork(onStep?: (done: number, total: number) => vo
       });
     } catch (err) {
       console.error('moving guest work failed', err instanceof Error ? err.message : err);
+      // Undo a half-made copy, so trying again cannot leave two of the same account.
+      // The browser copy is untouched; files already uploaded are tidied by the usual cleanup.
+      if (made) {
+        try {
+          const open = await cloud.openNarration(made);
+          if (open) await cloud.deleteAccount(open.account.id);
+        } catch {
+          // Leaving a stray copy is better than losing anything.
+        }
+      }
+      moved = before;
       failed += read.narrations.length;
     }
   }

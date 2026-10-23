@@ -35,7 +35,7 @@ export type LoginProblem =
   | 'server';
 
 export const PROBLEM_TEXT: Record<LoginProblem, string> = {
-  invite_invalid: 'That invite code is not valid. It may be mistyped, used already or older than 7 days. Ask your team for a new one.',
+  invite_invalid: 'That invite code is not valid. It may be mistyped, used already or older than 7 days. Ask your team for a new one, or leave the code empty for a Playground login.',
   username_format: 'Use 3 to 24 lowercase letters, numbers, dots or underscores for the username.',
   username_taken: 'That username is taken. Try another one.',
   password_length: `Use at least ${MIN_PASSWORD} characters for the password.`,

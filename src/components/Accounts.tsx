@@ -54,10 +54,15 @@ export function Accounts({
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [intake, setIntake] = useState(false);
   // Arriving from "See it on X": set up the client's @ and show the campaign on it.
-  const [intent] = useState(() => (platform === 'x' ? takeXIntent() : null));
+  const [intent, setIntent] = useState<{ handle: string; campaignId: string } | null>(null);
   useEffect(() => {
-    if (intent) setIntake(true);
-  }, [intent]);
+    if (platform !== 'x') return;
+    const found = takeXIntent();
+    if (found) {
+      setIntent(found);
+      setIntake(true);
+    }
+  }, [platform]);
   const [failed, setFailed] = useState(false);
   // Sharing exists only where there are logins.
   const [shared, setShared] = useState<NarrationCard[]>([]);

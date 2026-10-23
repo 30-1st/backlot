@@ -96,12 +96,15 @@ export function useCampaignLayer(narrationId: string, enabled: boolean, handle: 
   const [chosen, setChosen] = useState<string | null>(() => remembered(narrationId));
 
   // A detail given or a change asked elsewhere shows up when you come back to this tab.
+  const { refresh } = ws;
   useEffect(() => {
     if (!on) return;
-    const back = () => document.visibilityState === 'visible' && void ws.refresh();
+    const back = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
     document.addEventListener('visibilitychange', back);
     return () => document.removeEventListener('visibilitychange', back);
-  }, [on, ws]);
+  }, [on, refresh]);
 
   const options = useMemo(() => {
     const data = ws.data;
