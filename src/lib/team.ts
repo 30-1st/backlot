@@ -130,6 +130,10 @@ export type Decision = 'approved' | 'changes' | 'posted' | 'pending';
 export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string) =>
     call<{ review: Decision }>('bil', 'review_post', { campaignId, slot, decision, note }),
+  /** Saves brand kit edits: straight in for the team, waiting for the team's OK for a client. */
+  brandSave: (clientId: string, edits: Record<string, unknown>) => call<{ saved: boolean; waiting: boolean }>('bil', 'brand_save', { clientId, edits }),
+  /** The team takes or drops a client's suggested brand kit changes. */
+  brandReview: (clientId: string, approve: boolean) => call<{ approved: boolean }>('bil', 'brand_review', { clientId, approve }),
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),

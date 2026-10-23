@@ -8,7 +8,14 @@ import { supabase } from '../lib/supabase';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = Record<string, any>;
 
-export type Client = { id: string; handle: string; profile: Json };
+export type Client = {
+  id: string;
+  handle: string;
+  profile: Json;
+  /** Brand kit changes the client suggested, waiting for the team's OK. */
+  pending: Json | null;
+  pendingAt: string | null;
+};
 export type Voice = { clientId: string; card: Json; approved: boolean; updatedAt: string };
 export type Campaign = {
   id: string;
@@ -51,7 +58,7 @@ const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], st
 async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
   const [c, v, k, p, s, m] = await Promise.all([
-    supabase.from('clients').select('id, x_handle, profile').order('created_at'),
+    supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
       .from('campaigns')
@@ -65,7 +72,7 @@ async function load(): Promise<Workspace> {
   const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error;
   if (error) throw new Error(error.message);
   return {
-    clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {} })),
+    clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null })),
     voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at })),
     campaigns: (k.data ?? []).map((r: Json) => ({
       id: r.id,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isTeamRole, team, type Me } from '../lib/team';
 import { useWorkspace } from './data';
+import { BrandScreen } from './Brand';
 import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel, Vault } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
@@ -26,7 +27,7 @@ import { ReinScreen } from './Rein';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -141,6 +142,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'library':
       screen = <LibraryScreen {...props} />;
       break;
+    case 'brand':
+      screen = <BrandScreen {...props} />;
+      break;
     case 'create':
       screen = !isTeam ? (
         <Notifications {...props} />
@@ -225,7 +229,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
+  const one = room === 'preview' || ['library', 'insights', 'brand'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>

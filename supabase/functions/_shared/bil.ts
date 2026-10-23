@@ -20,7 +20,7 @@ import { generateText, Output } from 'npm:ai@7.0.142';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { id, isoDate, shortText, text, z } from './schemas/common.ts';
-import { type Member, requireClientAccess } from './workspace.ts';
+import { isTeam, type Member, requireClientAccess, requireTeam } from './workspace.ts';
 import {
   ClientProfile,
   ClientProfileBase,
@@ -569,6 +569,85 @@ export async function learnWhatWorks(userDb: SupabaseClient, ownerId: string, re
     if (error) throw new Error(`Could not save what performs: ${error.message}`);
     return { clientId: req.clientId, whatWorks: card.whatWorks, postsRead: read.postsRead, spentUsd: Math.round(budget.spentUsd * 1e4) / 1e4 };
   });
+}
+
+// ---------- brand kit ----------
+
+/** What the brand kit page may change. Who they are, goals, posting, words, adult settings. */
+export const BrandEdits = ClientProfileBase.pick({
+  displayName: true,
+  niche: true,
+  offer: true,
+  audience: true,
+  positioning: true,
+  goals: true,
+  timezone: true,
+  language: true,
+  xPremium: true,
+  postsPerWeek: true,
+  allowedHashtags: true,
+  nicheKeywords: true,
+  competitors: true,
+  adultContent: true,
+  adultsOnlyConfirmed: true,
+}).partial();
+
+export const BrandSaveRequest = z.object({ clientId: id, edits: BrandEdits });
+export const BrandReviewRequest = z.object({ clientId: id, approve: z.boolean() });
+
+function mergeProfile(current: unknown, edits: Record<string, unknown>) {
+  const merged = ClientProfile.safeParse({ ...(current as object), ...edits, updatedAt: new Date().toISOString() });
+  if (!merged.success) throw new BilInputError(issues(merged.error));
+  return merged.data;
+}
+
+/**
+ * Saves brand kit edits. The team's go straight in; a client's wait for the team's OK,
+ * so nothing Bil plans from changes without someone on the team seeing it first.
+ */
+export async function saveBrand(m: Member, req: z.infer<typeof BrandSaveRequest>) {
+  requireClientAccess(m, req.clientId);
+  const db = serviceClient();
+  const { data: client, error } = await db.from('clients').select('profile, profile_pending').eq('id', req.clientId).eq('owner_id', m.workspaceId).maybeSingle();
+  if (error) throw new Error(`Could not read the client: ${error.message}`);
+  if (!client) throw new BilInputError('No such client.', 404);
+  const edits = Object.fromEntries(Object.entries(req.edits).filter(([, v]) => v !== undefined));
+  if (isTeam(m)) {
+    const profile = mergeProfile(client.profile, edits);
+    const { error: e } = await db
+      .from('clients')
+      .update({ profile, profile_pending: null, profile_pending_by: null, profile_pending_at: null })
+      .eq('id', req.clientId)
+      .eq('owner_id', m.workspaceId);
+    if (e) throw new Error(`Could not save the brand kit: ${e.message}`);
+    return { saved: true, waiting: false };
+  }
+  // A client's edits are checked now, so the team only ever sees a valid suggestion.
+  const base = { ...(client.profile as object), ...((client.profile_pending as object | null) ?? {}) };
+  mergeProfile(base, edits);
+  const pending = { ...((client.profile_pending as object | null) ?? {}), ...edits };
+  const { error: e } = await db
+    .from('clients')
+    .update({ profile_pending: pending, profile_pending_by: m.userId, profile_pending_at: new Date().toISOString() })
+    .eq('id', req.clientId)
+    .eq('owner_id', m.workspaceId);
+  if (e) throw new Error(`Could not save the suggestion: ${e.message}`);
+  return { saved: true, waiting: true };
+}
+
+/** The team takes or drops a client's suggested brand kit changes. */
+export async function reviewBrand(m: Member, req: z.infer<typeof BrandReviewRequest>) {
+  requireTeam(m);
+  const db = serviceClient();
+  const { data: client, error } = await db.from('clients').select('profile, profile_pending').eq('id', req.clientId).eq('owner_id', m.workspaceId).maybeSingle();
+  if (error) throw new Error(`Could not read the client: ${error.message}`);
+  if (!client) throw new BilInputError('No such client.', 404);
+  if (!client.profile_pending) throw new BilInputError('There is nothing waiting for review.', 409);
+  const update: Record<string, unknown> = { profile_pending: null, profile_pending_by: null, profile_pending_at: null };
+  if (req.approve) update.profile = mergeProfile(client.profile, client.profile_pending as Record<string, unknown>);
+  const { error: e } = await db.from('clients').update(update).eq('id', req.clientId).eq('owner_id', m.workspaceId);
+  if (e) throw new Error(`Could not save the review: ${e.message}`);
+  return { approved: req.approve };
 }
 
 // ---------- voice card approval ----------

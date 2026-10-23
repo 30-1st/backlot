@@ -102,6 +102,9 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
             : ''}
           {tz ? `. ${tz.replace(/_/g, ' ')}` : ''}
         </span>
+        <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => go('brand')}>
+          Brand kit{client.pending ? ' · waiting' : ''}
+        </button>
       </div>
 
       {error && (

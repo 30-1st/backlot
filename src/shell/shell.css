@@ -1875,3 +1875,14 @@ a.bl-card:hover,
 .bl-guide-path span { display: inline-flex; align-items: center; gap: 6px; }
 .bl-guide-path i { color: var(--ink-3, var(--ink-2)); font-style: normal; }
 .bl-guide-path em { font-style: normal; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--mist); color: var(--ink); white-space: nowrap; }
+
+/* Brand kit */
+.bl-brand-group { display: flex; flex-direction: column; gap: 12px; }
+.bl-brand-group .bl-section-title { margin: 0; }
+.bl-brand textarea.bl-input { resize: vertical; min-height: 72px; font: inherit; line-height: 1.45; }
+.bl-brand-goal { display: grid; grid-template-columns: 1fr; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.bl-brand-goal:last-of-type { border-bottom: 0; }
+.bl-brand-goal .bl-linkish { justify-self: start; font-size: 13px; }
+.bl-brand-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bl-brand-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; }
+.bl-brand-check input { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--accent-text); }

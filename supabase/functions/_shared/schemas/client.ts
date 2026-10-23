@@ -64,6 +64,16 @@ export const ClientProfileBase = z.object({
       .describe('Hashtags the client is happy to use, without the #. Drafts may use only these, approved trend tags and required tags.'),
     adultContent: z.boolean().describe('Adult niche. Allowed only for adults, everyone 18+ and consenting.'),
     adultsOnlyConfirmed: z.boolean().describe('The client confirmed everyone involved is 18+ and consenting.'),
+    nicheKeywords: z
+      .array(shortText(40))
+      .max(12)
+      .optional()
+      .describe('Words people in their niche search and talk about. Rein and Bil use them for topics.'),
+    competitors: z
+      .array(z.string().regex(/^[A-Za-z0-9_]{1,15}$/))
+      .max(10)
+      .optional()
+      .describe('X accounts the client competes with, without the @. For positioning only; never read or engaged with automatically.'),
     readConsentAt: isoDateTime
       .optional()
       .describe('When the person confirmed they own or manage this X account and allowed Bil to read its public posts. No read happens without it.'),
