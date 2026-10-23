@@ -315,6 +315,22 @@ export async function loadBoard(db: SupabaseClient, clientId: string, ownerId: s
   return (data ?? []).map((r: any) => ({ id: r.id, kind: r.kind === 'shot' ? 'shot' : 'link', verdict: r.verdict === 'not' ? 'not' : 'more', note: String(r.note ?? '').slice(0, 280) }));
 }
 
+/** TikTok hashtags, songs and formats the team or client noted in the last 14 days. */
+export async function loadTikTokNotes(db: SupabaseClient, clientId: string, ownerId: string): Promise<Array<{ kind: string; name: string; note?: string; region: string; noted: string }>> {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const { data, error } = await db
+    .from('tiktok_notes')
+    .select('kind, name, note, region, created_at')
+    .eq('client_id', clientId)
+    .eq('workspace_id', ownerId)
+    .is('removed_at', null)
+    .gt('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw new Error(`Could not read the TikTok notes: ${error.message}`);
+  return (data ?? []).map((r: any) => ({ kind: r.kind, name: String(r.name).slice(0, 80), ...(r.note ? { note: String(r.note).slice(0, 280) } : {}), region: r.region, noted: String(r.created_at).slice(0, 10) }));
+}
+
 /**
  * The client as Grok sees them. Built the same way for every step of a campaign, so it
  * stays part of the cached opening. Times are left out: they change nothing Bil decides.
@@ -1661,6 +1677,7 @@ ${r.notes ? `Client notes: ${r.notes}\n` : ''}${reward}
 - Mix funnel stages to fit the goal. Use a trend only if it is in the trends you approved above, and only within its time window.
 - media: give each post that should carry a photo or video one file from their media library, by its ref, whose tags fit the post. Use each file once at most. Leave media out for text posts or when nothing fits, and never invent a ref.
 - kpis: one main measure and one or two supporting ones they can see in X's analytics or their own records.
+- TikTok notes: use them only as ideas, formats or angles that may carry over to X. Never say something is trending on X because it trends on TikTok, and never use a TikTok song on X.
 - Inspiration board: lean toward the "more like this" notes and steer clear of the "not this" ones. The notes are their words about a post or look, not facts to repeat. In inspiredBy, list the refs (like "b2") of the "more like this" items this plan really leans on; leave it empty if none. Never invent a ref.`;
 }
 
@@ -1672,6 +1689,7 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
   const files = await loadLibraryFiles(db, kit.clientId, kit.ownerId);
   const refs = new Map(files.map((f, i) => [`m${i + 1}`, f.id]));
   const board = await loadBoard(db, kit.clientId, kit.ownerId);
+  const tiktok = await loadTikTokNotes(db, kit.clientId, kit.ownerId);
   const boardRefs = new Map(board.map((b, i) => [`b${i + 1}`, b]));
   const usedMedia = new Set<string>();
   const trends: Array<{ topic: string; summary: string; actWithinHours?: number; hashtags: string[]; touchesFinance: boolean }> =
@@ -1695,6 +1713,8 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     board.length
       ? board.map((b, i) => JSON.stringify({ ref: `b${i + 1}`, verdict: b.verdict === 'more' ? 'more like this' : 'not this', note: b.note })).join('\n')
       : '(empty)',
+    '# TikTok trends the team noted by hand from TikTok Creative Center (ideas for X, not X trends)',
+    tiktok.length ? tiktok.map((t) => JSON.stringify(t)).join('\n') : '(none)',
     planTask(c, kit, posts),
   ].join('\n');
 

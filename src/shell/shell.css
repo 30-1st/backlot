@@ -1982,3 +1982,7 @@ a.bl-card:hover,
 .bl-agentbar-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .bl-agentbar-answer { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 18px; background: linear-gradient(165deg, var(--deck-a), var(--deck-b)); box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b); }
 .bl-agentbar-offer { display: flex; flex-direction: column; gap: 8px; }
+.bl-tiktok-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.45; }
+.bl-tiktok-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-tiktok-list li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.bl-tiktok-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }

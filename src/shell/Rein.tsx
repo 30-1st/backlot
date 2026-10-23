@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { DoorError, team, type ClientBrief, type ReinBrief, type ReinRegion } from '../lib/team';
 import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
@@ -342,6 +343,141 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
           {error}
         </p>
       )}
+      <TikTokNotes clientId={clientId} niche={niche} />
     </section>
+  );
+}
+
+const CREATIVE_CENTER = 'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/';
+type TikTokKind = 'hashtag' | 'song' | 'format';
+type TikTokNote = { id: string; kind: TikTokKind; name: string; note: string | null; region: string; createdAt: string };
+const KIND_WORDS: Record<TikTokKind, string> = { hashtag: 'Hashtag', song: 'Song', format: 'Format' };
+
+/**
+ * TikTok, by hand. TikTok has no trend data API for businesses and Backlot never scrapes,
+ * so a person looks at TikTok Creative Center and notes what fits. Bil reads the last two
+ * weeks of notes as ideas for X. Never creators or other people.
+ */
+function TikTokNotes({ clientId, niche }: { clientId: string; niche: string | null }) {
+  const [notes, setNotes] = useState<TikTokNote[] | null>(null);
+  const [kind, setKind] = useState<TikTokKind>('hashtag');
+  const [name, setName] = useState('');
+  const [why, setWhy] = useState('');
+  const [region, setRegion] = useState('us');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    if (!supabase) return;
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    const { data, error: e } = await supabase
+      .from('tiktok_notes')
+      .select('id, kind, name, note, region, created_at')
+      .eq('client_id', clientId)
+      .is('removed_at', null)
+      .gt('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (e) return setError(e.message);
+    setNotes((data ?? []).map((r) => ({ id: r.id, kind: r.kind, name: r.name, note: r.note ?? null, region: r.region, createdAt: r.created_at })));
+  }, [clientId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function add() {
+    if (!supabase) return;
+    const clean = kind === 'hashtag' ? `#${name.trim().replace(/^#+/, '').replace(/\s+/g, '')}` : name.trim();
+    if (clean.replace('#', '').length < 2) return setError(kind === 'hashtag' ? 'Type the hashtag.' : kind === 'song' ? 'Type the song name.' : 'Name the format, like "day in the life".');
+    setBusy(true);
+    setError('');
+    const { error: e } = await supabase.rpc('tiktok_note_add', { p_client: clientId, p_kind: kind, p_name: clean.slice(0, 80), p_note: why.trim().slice(0, 280) || null, p_region: region });
+    setBusy(false);
+    if (e) return setError(e.message);
+    setName('');
+    setWhy('');
+    await load();
+  }
+
+  async function remove(id: string) {
+    if (!supabase) return;
+    const { error: e } = await supabase.rpc('tiktok_note_remove', { p_id: id });
+    if (e) return setError(e.message);
+    setNotes((list) => (list ?? []).filter((n) => n.id !== id));
+  }
+
+  return (
+    <details className="bl-read bl-tiktok">
+      <summary>
+        <span>TikTok, by hand</span>
+        <span className="bl-read-scores num">{notes?.length ? `${notes.length} noted` : ''}</span>
+      </summary>
+      <p className="bl-small" style={{ margin: 0 }}>
+        TikTok has no trend data for businesses to plug into, and Backlot never scrapes, so you look and note what fits. Bil reads the last two weeks as ideas for X.
+      </p>
+      <ol className="bl-tiktok-steps">
+        <li>
+          Open{' '}
+          <a className="bl-linkish" href={CREATIVE_CENTER} target="_blank" rel="noopener noreferrer">
+            TikTok Creative Center, Trends
+          </a>
+          . Sign in if it asks.
+        </li>
+        <li>Pick Hashtags or Songs, the country, the industry closest to {niche ? `\u201c${niche}\u201d` : 'the client\u2019s niche'}, and the last 7 days.</li>
+        <li>Note up to five that fit the client, with a few words on why. Formats you keep seeing count too. Never note creators.</li>
+      </ol>
+      <div className="bl-seg" role="group" aria-label="What to note">
+        {(Object.keys(KIND_WORDS) as TikTokKind[]).map((k) => (
+          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
+            {KIND_WORDS[k]}
+          </button>
+        ))}
+      </div>
+      <div className="bl-brand-row">
+        <label className="bl-field">
+          <span className="bl-label">{KIND_WORDS[kind]}</span>
+          <input className="bl-input" value={name} maxLength={80} placeholder={kind === 'hashtag' ? '#fallbaking' : kind === 'song' ? 'Song and artist' : 'Day in the life'} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="bl-field">
+          <span className="bl-label">Where</span>
+          <select className="bl-input" value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="us">US</option>
+            <option value="uk">UK</option>
+            <option value="canada">Canada</option>
+            <option value="worldwide">Worldwide</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+      </div>
+      <label className="bl-field">
+        <span className="bl-label">Why it fits (optional)</span>
+        <input className="bl-input" value={why} maxLength={280} placeholder="Gift buyers, fall recipes" onChange={(e) => setWhy(e.target.value)} />
+      </label>
+      <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={() => void add()}>
+        {busy ? 'Adding' : 'Add the note'}
+      </button>
+      {error && (
+        <p className="bl-error" role="alert" style={{ margin: 0 }}>
+          {error}
+        </p>
+      )}
+      {notes && notes.length > 0 && (
+        <ul className="bl-tiktok-list">
+          {notes.map((n) => (
+            <li key={n.id}>
+              <span className="bl-chip-ink">{KIND_WORDS[n.kind]}</span>
+              <span className="bl-tiktok-name">
+                <b>{n.name}</b>
+                {n.note ? <span className="bl-small"> {n.note}</span> : null}
+              </span>
+              <button type="button" className="bl-linkish" aria-label={`Remove ${n.name}`} onClick={() => void remove(n.id)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }

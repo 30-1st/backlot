@@ -140,6 +140,15 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // TikTok notes: removed ones after 7 days, the rest after 90.
+  {
+    const { error } = await db
+      .from('tiktok_notes')
+      .delete()
+      .or(`removed_at.lt.${boardBefore},created_at.lt.${boardOld}`);
+    if (error) console.error('deleting old TikTok notes failed', error.message);
+  }
+
   // The sign-up log only needs the last hour. Keep a day and drop the rest.
   await db.from('signup_log').delete().lt('created_at', new Date(Date.now() - 86_400_000).toISOString());
 
