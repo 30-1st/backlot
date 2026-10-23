@@ -33,6 +33,8 @@ export type ReinTrend = {
   sources: { url: string; title: string | null }[];
 };
 export type ReinBrief = { briefId: string; niche: string; createdAt: string; notFound: string | null; trends: ReinTrend[] };
+/** A brief saved as one client's trends: when, for which region, and whether a campaign or an update made it. */
+export type ClientBrief = ReinBrief & { savedAt: string; region: ReinRegion; source: 'update' | 'campaign' };
 
 /** An error from a door, with the HTTP status and whether payment is what stopped it. */
 export class DoorError extends Error {
@@ -76,6 +78,9 @@ export const team = {
     call<{ code: string; expiresAt: string }>('team', 'invite_create', { role, clientId }),
   resetPassword: (userId: string) => call<{ temporaryPassword: string }>('team', 'password_reset', { userId }),
   reinSearch: (niche: string, region: ReinRegion) => call<{ brief: ReinBrief; reused: boolean }>('team', 'rein_search', { niche, region }),
+  reinClient: (clientId: string, region: ReinRegion) =>
+    call<{ latest: ClientBrief | null; niche?: string | null; preview?: { free: boolean; costUsd: number; checkedAt: string | null } | null }>('team', 'rein_client', { clientId, region }),
+  reinClientUpdate: (clientId: string, region: ReinRegion) => call<{ latest: ClientBrief; reused: boolean }>('team', 'rein_client_update', { clientId, region }),
   reinHistory: () => call<{ freeLeft: number | null; searches: { niche: string; region: string; at: string }[]; last: ReinBrief | null }>('team', 'rein_history'),
   setPassword: (password: string, currentPassword?: string) =>
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),

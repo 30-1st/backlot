@@ -12,6 +12,8 @@
 //   password_set     { password, currentPassword? }  change your own password            everyone
 //   rein_search      { niche, region? }              what is rising in a niche           everyone
 //   rein_history     {}                              your last searches and free left    everyone
+//   rein_client      { clientId, region? }           a client's latest trends (+ update cost)  team, that client
+//   rein_client_update { clientId, region? }         Rein checks the client's niche now  team
 //
 // Rein: a search that reuses a brief from the last 6 hours is free and never counts.
 // Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
@@ -23,12 +25,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { serviceClient } from '../_shared/spend.ts';
-import { AccessError, isTeam, memberOf, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
+import { AccessError, isTeam, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
 import { reusableBrief } from '../_shared/toolbox.ts';
-import { callRein } from '../_shared/rein-client.ts';
+import { callRein, REIN_ESTIMATE_USD } from '../_shared/rein-client.ts';
 import { Region } from '../_shared/schemas/rein.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
@@ -59,6 +61,18 @@ function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
 
 const ReinSearch = z.object({ niche: z.string().trim().min(2, 'Type a niche or topic').max(200), region: Region.default('worldwide') });
 const FREE_SEARCHES = 3;
+const ReinClientGet = z.object({ clientId: id, region: Region.default('worldwide') });
+const ReinClientUpdate = z.object({ clientId: id, region: Region.default('worldwide') });
+
+/** A client's niche from their brand kit, or an error that says how to fix it. */
+async function clientNiche(db: ReturnType<typeof serviceClient>, clientId: string, workspaceId: string): Promise<string> {
+  const { data, error } = await db.from('clients').select('profile').eq('id', clientId).eq('owner_id', workspaceId).maybeSingle();
+  if (error) throw new Error(`Could not read the client: ${error.message}`);
+  if (!data) throw new InputError('No such client.', 404);
+  const niche = String((data.profile as { niche?: unknown } | null)?.niche ?? '').trim();
+  if (niche.length < 2) throw new InputError('Add the client\'s niche in their brand kit first.', 409);
+  return niche.slice(0, 200);
+}
 
 /** What the app shows of a brief: topics, why they move, and links. Never people. */
 function briefForApp(b: any) {
@@ -263,6 +277,61 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, { brief: briefForApp(brief), reused: Boolean(res.body?.diagnostics?.reused) });
       }
 
+      // A client's trends: their latest saved brief, and for the team, what an update costs.
+      case 'rein_client': {
+        const r = parse(ReinClientGet, input);
+        requireClientAccess(member, r.clientId);
+        const { data: line, error } = await db
+          .from('client_briefs')
+          .select('brief_id, region, source, created_at')
+          .eq('client_id', r.clientId)
+          .eq('workspace_id', member.workspaceId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw new Error(`Could not read the client's trends: ${error.message}`);
+        let latest = null;
+        if (line) {
+          const { data: nb } = await db.from('niche_briefs').select('brief').eq('id', line.brief_id).maybeSingle();
+          if (nb) latest = { ...briefForApp(nb.brief), savedAt: line.created_at, region: line.region, source: line.source };
+        }
+        if (!isTeam(member)) return reply(200, { latest });
+        const niche = await clientNiche(db, r.clientId, member.workspaceId).catch(() => null);
+        const reusable = niche ? await reusableBrief(niche, r.region) : null;
+        return reply(200, {
+          latest,
+          niche,
+          preview: niche ? { free: Boolean(reusable), costUsd: reusable ? 0 : REIN_ESTIMATE_USD, checkedAt: reusable?.brief.createdAt ?? null } : null,
+        });
+      }
+
+      // The team asks Rein what is rising in a client's niche now, and saves it as theirs.
+      case 'rein_client_update': {
+        requireTeam(member);
+        const r = parse(ReinClientUpdate, input);
+        const niche = await clientNiche(db, r.clientId, member.workspaceId);
+        const reused = await reusableBrief(niche, r.region);
+        let brief: any;
+        let wasReused = Boolean(reused);
+        if (reused) {
+          brief = reused.brief;
+        } else {
+          const res = await callRein({ niche, region: r.region });
+          if (res.status === 409) throw new InputError('Rein is already checking this niche. Try again in a minute.', 409);
+          if (res.status === 402) throw new InputError('This month\'s AI budget is used up. It resets on the 1st.', 402);
+          if (res.status !== 200 || !res.body?.brief) throw new Error(`Rein failed: ${String(res.body?.error ?? res.status).slice(0, 200)}`);
+          brief = res.body.brief;
+          wasReused = Boolean(res.body?.diagnostics?.reused);
+        }
+        const { data: saved, error } = await db
+          .from('client_briefs')
+          .insert({ workspace_id: member.workspaceId, client_id: r.clientId, brief_id: brief.briefId, region: r.region, source: 'update', reused: wasReused, added_by: userId })
+          .select('created_at')
+          .single();
+        if (error) throw new Error(`Could not save the client's trends: ${error.message}`);
+        return reply(200, { latest: { ...briefForApp(brief), savedAt: saved.created_at, region: r.region, source: 'update' }, reused: wasReused });
+      }
+
       case 'rein_history': {
         const { data: rows, error } = await db
           .from('rein_searches')
@@ -286,7 +355,7 @@ async function handle(req: Request): Promise<Response> {
       }
 
       default:
-        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search or rein_history.' });
+        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search, rein_history, rein_client or rein_client_update.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

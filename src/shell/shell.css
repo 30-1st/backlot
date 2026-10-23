@@ -1953,3 +1953,4 @@ a.bl-card:hover,
 .bl-read-scores { margin-left: auto; color: var(--ink-2); font-weight: 500; }
 .bl-read-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
 .bl-read-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.bl-trends-update { display: flex; flex-direction: column; gap: 10px; }

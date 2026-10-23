@@ -46,7 +46,7 @@ import { grokOptions, privateTelemetry, type Reasoning, xaiClient } from './grok
 import { Budget, serviceClient, SpendLimitError } from './spend.ts';
 import { impl } from './toolbox.ts';
 import { algorithmParams, algorithmSearch, PARAMS_FILE } from './algorithm.ts';
-import { callRein } from './rein-client.ts';
+import { callRein, REIN_ESTIMATE_USD } from './rein-client.ts';
 import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts';
 import { measure, type Performance, postLine, statsText } from './bil-performance.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
@@ -82,7 +82,7 @@ const FAST_BATCH_MS = 50_000;
 /** The Rein call's own timeout inside a brief step. Rein keeps going and saves her brief even if this side gives up. */
 const REIN_WAIT_MS = 120_000;
 /** Rein's usual cost per brief, for the estimate shown before a campaign starts. */
-const REIN_ESTIMATE = 0.1;
+const REIN_ESTIMATE = REIN_ESTIMATE_USD;
 
 // ---------- errors ----------
 
@@ -1173,6 +1173,18 @@ async function briefStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step):
   }
   if (res.status === 200) {
     const brief = res.body?.brief;
+    if (brief?.briefId) {
+      // Saved as this client's latest trends too, so the team and client can see them.
+      const { error: e } = await db.from('client_briefs').insert({
+        workspace_id: kit.ownerId,
+        client_id: kit.clientId,
+        brief_id: brief.briefId,
+        region: c.request.region ?? 'worldwide',
+        source: 'campaign',
+        reused: Boolean(res.body?.diagnostics?.reused),
+      });
+      if (e) console.error('saving the client brief failed', e.message);
+    }
     const steady = (res.body?.diagnostics?.dropped ?? [])
       .filter((d: any) => typeof d?.reason === 'string' && d.reason.startsWith('steady'))
       .map((d: any) => String(d.topic).slice(0, 120))

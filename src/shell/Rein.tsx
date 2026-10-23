@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
-import { DoorError, team, type ReinBrief, type ReinRegion } from '../lib/team';
+import { DoorError, team, type ClientBrief, type ReinBrief, type ReinRegion } from '../lib/team';
 import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
 
@@ -230,5 +230,118 @@ export function ReinScreen({ isTeam }: ScreenProps) {
 
       {paywall && <Paywall niche={niche.trim()} onClose={() => setPaywall(false)} />}
     </main>
+  );
+}
+
+/**
+ * One client's trends, on their Insights page. Everyone sees the latest saved brief; the
+ * team can ask Rein to check again, and sees what that costs before it runs.
+ */
+export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: boolean }) {
+  const [region, setRegion] = useState<ReinRegion>('worldwide');
+  const [latest, setLatest] = useState<ClientBrief | null>(null);
+  const [preview, setPreview] = useState<{ free: boolean; costUsd: number; checkedAt: string | null } | null>(null);
+  const [niche, setNiche] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    setLoaded(false);
+    team.reinClient(clientId, region).then(
+      (r) => {
+        if (!live) return;
+        setLatest((cur) => cur ?? r.latest);
+        setPreview(r.preview ?? null);
+        setNiche(r.niche ?? null);
+        setLoaded(true);
+      },
+      (e: Error) => live && (setError(e.message), setLoaded(true)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [clientId, region]);
+
+  async function update() {
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      const r = await team.reinClientUpdate(clientId, region);
+      setLatest(r.latest);
+      setPreview({ free: true, costUsd: 0, checkedAt: r.latest.createdAt });
+      setNote(r.reused ? 'Rein had checked this niche in the last 6 hours, so this cost nothing.' : 'Rein checked the niche just now.');
+      setConfirming(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rein could not check the niche right now.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  return (
+    <section className="bl-card bl-trends-card" aria-labelledby="rising-t" style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 id="rising-t" className="bl-h2">
+          What&rsquo;s rising
+        </h2>
+        {latest && <span className="bl-small">Saved {when(latest.savedAt)}</span>}
+      </div>
+      <p className="bl-small" style={{ margin: 0 }}>
+        {niche ? `Rein's read on ${niche}. ` : ''}Topics only, never people. Bil asks Rein again when he plans a campaign, free if her last check is under 6 hours old.
+      </p>
+      {latest ? <Results brief={latest} /> : loaded && <p className="bl-small">{isTeam ? 'No trends saved for this client yet.' : 'Your team has not checked your niche yet.'}</p>}
+
+      {isTeam && (
+        <div className="bl-trends-update">
+          <div className="bl-seg" role="radiogroup" aria-label="Where">
+            {REGIONS.map(([v, l]) => (
+              <button key={v} type="button" role="radio" aria-checked={region === v} aria-pressed={region === v} onClick={() => (setRegion(v), setConfirming(false))}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {!niche && loaded ? (
+            <p className="bl-small">Add the client&rsquo;s niche in their brand kit first.</p>
+          ) : confirming && preview ? (
+            <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <span>
+                {preview.free
+                  ? `Free: Rein checked this niche ${preview.checkedAt ? `at ${when(preview.checkedAt)}` : 'in the last 6 hours'}, so the update reuses it.`
+                  : `Up to $${preview.costUsd.toFixed(2)} from this month's AI budget. It takes about a minute.`}
+              </span>
+              <div className="bl-row-actions">
+                <button type="button" className="bl-ghost" disabled={busy} onClick={() => setConfirming(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="bl-btn" disabled={busy} onClick={() => void update()}>
+                  {busy ? 'Rein is checking' : preview.free ? 'Update, free' : 'Update'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="bl-ghost bl-start" disabled={!preview} onClick={() => setConfirming(true)}>
+              {preview ? (preview.free ? 'Update (free right now)' : `Update (up to $${preview.costUsd.toFixed(2)})`) : 'Update'}
+            </button>
+          )}
+        </div>
+      )}
+      {note && (
+        <p className="bl-small" role="status" style={{ margin: 0 }}>
+          {note}
+        </p>
+      )}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

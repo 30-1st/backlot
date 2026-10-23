@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
+import { ClientTrends } from './Rein';
 
 // Insights: what performs on the client's own page (the 24 hour dial, media against text,
 // Bil's do and skip tips) and the voice Bil writes in. Measured by Bil from the client's
@@ -243,6 +244,8 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
           )}
         </>
       )}
+
+      <ClientTrends key={client.id} clientId={client.id} isTeam={isTeam} />
 
       <section className="bl-card" style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

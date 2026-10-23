@@ -4,6 +4,9 @@
 import { serverKey } from './spend.ts';
 import type { ReinRequest } from './schemas/rein.ts';
 
+/** What one fresh Rein brief costs at most, for previews and estimates. A reused brief is free. */
+export const REIN_ESTIMATE_USD = 0.1;
+
 /** Just under Supabase's 150 s request limit. */
 const REIN_CALL_TIMEOUT_MS = 145_000;
 
