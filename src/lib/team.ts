@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { FunctionsFetchError, FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
@@ -76,6 +77,50 @@ export const team = {
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),
 };
 
+/** A public X profile as Backlot reads it through X's official API. Photo and banner are data URLs. */
+export type XProfile = {
+  handle: string;
+  name: string;
+  bio?: string;
+  followers: number;
+  following: number;
+  posts: number;
+  verified: boolean;
+  premiumGuess: boolean;
+  location?: string;
+  link?: string;
+  photo?: string;
+  banner?: string;
+};
+
+/** A data URL from the server as a File the media store can keep. */
+export function fileFromDataUrl(dataUrl: string, name: string): File | null {
+  const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,(.+)$/.exec(dataUrl);
+  if (!m) return null;
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const ext = m[1].split('/')[1].replace('jpeg', 'jpg');
+  return new File([bytes], `${name}.${ext}`, { type: m[1] });
+}
+
+/** True when the signed-in person is on the team, so paid lookups are theirs to make. */
+export function useCanLookup(enabled = true): boolean {
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    if (!supabase || !enabled) return;
+    let live = true;
+    team.me().then(
+      (m) => live && setOk(m.role !== 'client'),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [enabled]);
+  return ok && enabled;
+}
+
 export type Decision = 'approved' | 'changes' | 'posted' | 'pending';
 
 export const bil = {
@@ -88,8 +133,8 @@ export const bil = {
     call<Record<string, unknown>>('bil', 'learn', { requestId: crypto.randomUUID(), clientId }),
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
   resume: (campaignId: string) => call<{ resumed: boolean }>('bil', 'resume', { campaignId }),
-  lookup: (handle: string) =>
-    call<{ handle: string; name: string; followers: number; posts: number; verified: boolean; bio?: string; premiumGuess: boolean }>('bil', 'lookup', { handle }),
+  lookup: (handle: string, images = false) =>
+    call<XProfile>('bil', 'lookup', { handle, images }),
   onboard: (body: Record<string, unknown>) => call<Record<string, unknown>>('bil', 'onboard', body),
   estimate: (clientId: string, posts: number, useTrends: boolean) =>
     call<{ campaignUsd: number; reinUsd: number; totalUsd: number }>('bil', 'estimate', { clientId, posts, useTrends }),

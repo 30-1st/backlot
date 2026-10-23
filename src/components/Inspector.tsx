@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Highlight, Post, PostStatus } from '../types';
 import { MAX_CAROUSEL, MAX_PINNED, patchForStatus, statusOf, useStage } from '../state';
 import { storeFiles } from '../lib/media';
+import { bil, useCanLookup } from '../lib/team';
 import { dateTime, fromInput, toInput } from '../lib/format';
 import { ConfirmButton, Field, FileButton, Icon, MediaView, Modal, NumberInput, Segmented, cx } from './ui';
 
@@ -80,6 +81,21 @@ function ProfileEditor() {
   const { profile, media, settings, posts } = sandbox;
   const isX = platform === 'x';
   const maxBio = isX ? 160 : 150;
+  const canLookup = useCanLookup(isX);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refreshCounts() {
+    setRefreshing(true);
+    try {
+      const p = await bil.lookup(profile.username);
+      set({ followers: p.followers, following: p.following, postCount: p.posts });
+      say(`Counts updated from @${p.handle} on X.`);
+    } catch (e) {
+      say(e instanceof Error ? e.message : 'X could not be reached right now.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
   const set = (patch: Partial<typeof profile>) => dispatch({ type: 'profile', patch });
   const visible = posts.filter((p) => !p.draft && p.date <= asOf).length;
 
@@ -185,6 +201,14 @@ function ProfileEditor() {
           onChange={(v) => set({ postCount: v })}
         />
       </Field>
+      {canLookup && /^[A-Za-z0-9_]{1,15}$/.test(profile.username) && (
+        <div className="fill-x">
+          <button type="button" className="btn sm" disabled={refreshing} onClick={() => void refreshCounts()}>
+            <Icon name="swap" /> {refreshing ? 'Reading X' : 'Refresh counts from X'}
+          </button>
+          <span className="field-hint">Today's followers, following and posts for @{profile.username}. About $0.01.</span>
+        </div>
+      )}
 
       <hr />
 

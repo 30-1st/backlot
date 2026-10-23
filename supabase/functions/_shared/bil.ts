@@ -322,14 +322,38 @@ function traced<T>(name: string, attrs: { sessionId?: string; userId?: string; t
 // Onboarding
 // =====================================================================================
 
-export const LookupRequest = z.object({ handle: z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/).transform((h) => h.replace(/^@/, '')) });
+export const LookupRequest = z.object({
+  handle: z.string().regex(/^@?[A-Za-z0-9_]{1,15}$/).transform((h) => h.replace(/^@/, '')),
+  /** Also bring the profile photo and header, for setting up an X narration. */
+  images: z.boolean().default(false),
+});
 
-/** Public profile facts to pre-fill the intake form. $0.01, once per handle per UTC day. */
-export async function lookupHandle(handle: string) {
+const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+/** One image from X's image server as a data URL, or undefined when it cannot be read. */
+async function imageData(url: string | undefined): Promise<string | undefined> {
+  if (!url) return undefined;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000), redirect: 'error' });
+    const type = res.headers.get('content-type')?.split(';')[0] ?? '';
+    if (!res.ok || !/^image\/(jpeg|png|webp|gif)$/.test(type)) return undefined;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > IMAGE_MAX_BYTES) return undefined;
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `data:${type};base64,${btoa(bin)}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Public profile facts to pre-fill a form. $0.01, once per handle per UTC day. Images cost nothing. */
+export async function lookupHandle(req: z.infer<typeof LookupRequest>) {
   return await traced('bil-lookup', { tags: ['onboard'] }, async () => {
     const budget = new Budget('onboard', { perCallCap: PER_CALL_CAP });
-    const p = await impl.x_profile_lookup({ budget }, { handle });
-    return { ...p, premiumGuess: p.verified, spentUsd: budget.spentUsd };
+    const { photoUrl, bannerUrl, ...p } = await impl.x_profile_lookup({ budget }, { handle: req.handle });
+    const [photo, banner] = req.images ? await Promise.all([imageData(photoUrl), imageData(bannerUrl)]) : [undefined, undefined];
+    return { ...p, ...(photo ? { photo } : {}), ...(banner ? { banner } : {}), premiumGuess: p.verified, spentUsd: budget.spentUsd };
   });
 }
 

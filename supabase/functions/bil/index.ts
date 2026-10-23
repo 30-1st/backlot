@@ -89,7 +89,7 @@ async function handle(req: Request): Promise<Response> {
     switch (action) {
       case 'lookup':
         requireTeam(member);
-        return reply(200, await lookupHandle(parse(LookupRequest, input).handle));
+        return reply(200, await lookupHandle(parse(LookupRequest, input)));
       case 'onboard':
         requireTeam(member);
         return reply(200, await onboardClient(user.userDb, workspaceId, parse(OnboardRequest, input)));

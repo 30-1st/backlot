@@ -3473,3 +3473,14 @@ button.x-post:hover {
   max-width: 624px;
   margin-inline: auto;
 }
+
+/* "Fill in from X" and "Refresh counts from X": a button with its cost beside it. */
+.fill-x {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.fill-x .field-hint {
+  flex: 1 1 180px;
+}

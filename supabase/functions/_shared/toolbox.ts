@@ -111,10 +111,28 @@ export function excerptOf(text: string): string {
 type In<N extends ToolName> = z.infer<(typeof TOOLS)[N]['input']>;
 type Out<N extends ToolName> = z.infer<(typeof TOOLS)[N]['output']>;
 
+/** Only X's own image server: anything else is dropped, so nothing else is ever fetched. */
+function xImage(u: unknown): string | undefined {
+  if (typeof u !== 'string') return undefined;
+  try {
+    const url = new URL(u);
+    return url.protocol === 'https:' && url.hostname === 'pbs.twimg.com' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The website on a profile, as X displays it (t.co links expanded by X itself). */
+function profileLink(d: any): string | undefined {
+  const u = d?.entities?.url?.urls?.[0];
+  const shown = typeof u?.display_url === 'string' ? u.display_url : typeof u?.expanded_url === 'string' ? u.expanded_url.replace(/^https?:\/\//, '') : undefined;
+  return shown ? shown.slice(0, 200) : undefined;
+}
+
 export const impl = {
   async x_profile_lookup(ctx: ToolContext, { handle }: In<'x_profile_lookup'>): Promise<Out<'x_profile_lookup'>> {
     const url = new URL(`${X_API}/users/by/username/${encodeURIComponent(handle)}`);
-    url.searchParams.set('user.fields', 'public_metrics,verified,description');
+    url.searchParams.set('user.fields', 'public_metrics,verified,description,location,url,entities,profile_image_url,profile_banner_url');
     const body = await xGet(ctx.budget, 'x_user_lookup', url, X_PRICES.userLookup, () => X_PRICES.userLookup, `x_user:${handle.toLowerCase()}`);
     const d = body.data;
     if (!d) throw new Error(`X API: no such account @${handle}`);
@@ -127,6 +145,10 @@ export const impl = {
       following: d.public_metrics?.following_count ?? 0,
       posts: d.public_metrics?.tweet_count ?? 0,
       verified: Boolean(d.verified),
+      location: typeof d.location === 'string' && d.location.trim() ? d.location.trim().slice(0, 100) : undefined,
+      link: profileLink(d),
+      photoUrl: xImage(d.profile_image_url)?.replace(/_normal(\.\w+)$/, '_400x400$1'),
+      bannerUrl: xImage(d.profile_banner_url),
     };
   },
 

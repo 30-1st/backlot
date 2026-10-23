@@ -32,6 +32,10 @@ export const TOOLS = {
       following: z.number().int().min(0),
       posts: z.number().int().min(0),
       verified: z.boolean(),
+      location: shortText(100).optional(),
+      link: shortText(200).optional().describe('The website on the profile, as X shows it.'),
+      photoUrl: z.string().url().optional().describe('Profile photo on X\'s image server.'),
+      bannerUrl: z.string().url().optional().describe('Header image on X\'s image server.'),
     }),
   ),
 

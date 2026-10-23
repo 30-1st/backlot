@@ -4,6 +4,7 @@ import type { Platform } from '../platforms';
 import { MediaError, isMediaFile, storeFile } from '../lib/media';
 import { newPost } from '../state';
 import { hosted } from '../lib/supabase';
+import { bil, fileFromDataUrl, useCanLookup } from '../lib/team';
 import { ImportGuide } from './ImportGuide';
 import { FileButton, Icon, Modal, NumberInput, cx } from './ui';
 
@@ -40,6 +41,41 @@ export function Intake({
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Filled from X when the team looks the handle up; all of it stays editable afterwards.
+  const [link, setLink] = useState('');
+  const [place, setPlace] = useState('');
+  const [postCount, setPostCount] = useState<number | null>(null);
+  const [filling, setFilling] = useState(false);
+  const [filled, setFilled] = useState('');
+  const canLookup = useCanLookup(isX);
+
+  async function fillFromX() {
+    const handle = username.trim();
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) return setError('Type the handle first.');
+    setFilling(true);
+    setError('');
+    setFilled('');
+    try {
+      const p = await bil.lookup(handle, true);
+      setUsername(p.handle);
+      setName(p.name.slice(0, 50));
+      setBio((p.bio ?? '').slice(0, 160));
+      setFollowers(p.followers);
+      setFollowing(p.following);
+      setPostCount(p.posts);
+      setLink(p.link ?? '');
+      setPlace(p.location ?? '');
+      const photo = p.photo ? fileFromDataUrl(p.photo, `${p.handle}-photo`) : null;
+      const header = p.banner ? fileFromDataUrl(p.banner, `${p.handle}-header`) : null;
+      if (photo) setAvatar(photo);
+      if (header) setBanner(header);
+      setFilled(`Filled from @${p.handle} on X. Change anything you like before building.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'X could not be reached. Type the basics instead.');
+    } finally {
+      setFilling(false);
+    }
+  }
 
   const avatarUrl = useMemo(() => (avatar ? URL.createObjectURL(avatar) : ''), [avatar]);
   const bannerUrl = useMemo(() => (banner ? URL.createObjectURL(banner) : ''), [banner]);
@@ -87,13 +123,13 @@ export function Intake({
           profile: {
             username: username.trim(),
             name: name.trim(),
-            category: '',
+            category: isX ? place.trim() : '',
             bio,
-            link: '',
+            link: isX ? link.trim() : '',
             avatar: avatarItem?.id ?? null,
             followers: followers ?? 0,
             following: following ?? 0,
-            postCount: null,
+            postCount: isX ? postCount : null,
             ...(bannerItem ? { banner: bannerItem.id } : {}),
           },
           highlights: [],
@@ -176,6 +212,17 @@ export function Intake({
               <input id="in-name" value={name} maxLength={isX ? 50 : 64} onChange={(e) => setName(e.target.value)} />
             </label>
           </div>
+
+          {canLookup && (
+            <div className="fill-x">
+              <button type="button" className="btn sm" disabled={filling || !username.trim()} onClick={() => void fillFromX()}>
+                {filling ? 'Reading X' : 'Fill in from X'}
+              </button>
+              <span className="field-hint">
+                {filled || "Brings in the photo, header, name, bio and counts through X's official API. About $0.01."}
+              </span>
+            </div>
+          )}
 
           <label className="field">
             <span className="field-label">Bio</span>
