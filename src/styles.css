@@ -34,6 +34,7 @@
   --s-fill: #eff1f0;
   --s-solid: #0c0f0e;
   --s-solid-ink: #ffffff;
+  --s-warn: #b2402c;
   color-scheme: light;
 }
 .lit[data-lighting='dark'] {
@@ -44,6 +45,7 @@
   --s-fill: #23272a;
   --s-solid: #f4f5f4;
   --s-solid-ink: #0c0f0e;
+  --s-warn: #f09a8a;
   color-scheme: dark;
 }
 
@@ -3718,4 +3720,63 @@ button.x-post:hover {
 }
 .feed-switch {
   margin-left: auto;
+}
+
+/* Adult content on X: media behind a content warning, and reminders of X's rules. */
+.x-sensitive {
+  position: relative;
+  margin-top: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.x-sensitive-blur {
+  filter: blur(28px) saturate(0.6);
+  transform: scale(1.08);
+  pointer-events: none;
+}
+.x-sensitive-blur .x-media {
+  margin-top: 0;
+}
+.x-sensitive-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+}
+.x-sensitive-note .x-pill {
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0c0f0e;
+  box-shadow: none;
+}
+.x-warn {
+  display: block;
+  margin-top: 6px;
+  color: var(--s-warn);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.x-warn-block {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--s-line);
+}
+.x-tag {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--s-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.field-hint.warn-hint {
+  color: var(--danger);
 }

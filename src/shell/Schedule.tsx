@@ -174,6 +174,9 @@ export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => v
                     <span className={`bl-chip-ink${isNext ? ' next' : ''}${s.cls ? ` ${s.cls}` : ''}`}>{isNext && s.word === 'Waiting for OK' ? 'Next, waiting' : isNext ? `Next, ${s.word.toLowerCase()}` : s.word}</span>
                   </div>
                   <p className="bl-slot-text">{text}</p>
+                  {t.post.status === 'ok' && Boolean((t.post.post.compliance as { adultContent?: unknown } | undefined)?.adultContent) && (
+                    <span className="bl-chip-ink bad">Adult: mark media sensitive on X</span>
+                  )}
                 </div>
               </div>
               <div className="bl-row-actions">

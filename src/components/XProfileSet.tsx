@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { MediaItem, Post } from '../types';
 import { isPublic, orderPosts, statusOf, useStage } from '../state';
 import { compact, plural, shortDate } from '../lib/format';
@@ -21,6 +21,29 @@ function age(ms: number, now: number): string {
   const d = new Date(ms);
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
   return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Media marked sensitive, as a visitor meets it on X: blurred behind a content warning
+ * until they choose to see it. The creator always sees it plainly.
+ */
+function SensitiveCover({ on, children }: { on: boolean; children: ReactNode }) {
+  const [shown, setShown] = useState(false);
+  if (!on || shown) return <>{children}</>;
+  return (
+    <div className="x-sensitive">
+      <div className="x-sensitive-blur" aria-hidden="true">
+        {children}
+      </div>
+      <div className="x-sensitive-note">
+        <b>Content warning</b>
+        <span>The account marked this media as sensitive.</span>
+        <button type="button" className="app-btn x-pill" onClick={() => setShown(true)}>
+          Show
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function MediaGrid({ items }: { items: Array<MediaItem | undefined> }) {
@@ -79,7 +102,13 @@ function XPost({ post }: { post: Post }) {
           )}
         </span>
         {post.caption ? <span className="x-text">{post.caption}</span> : editing && post.media.length === 0 ? <span className="x-text x-muted">Tap to write this post.</span> : null}
-        <MediaGrid items={post.media.map((id) => media[id])} />
+        {creator && post.media.length > 0 && profile.adult && !post.sensitive && (
+          <span className="x-warn">Adult account: X requires this post's media to be marked sensitive.</span>
+        )}
+        {creator && post.media.length > 0 && post.sensitive && <span className="x-tag">Marked sensitive</span>}
+        <SensitiveCover on={!creator && Boolean(post.sensitive)}>
+          <MediaGrid items={post.media.map((id) => media[id])} />
+        </SensitiveCover>
         <span className="x-actions">
           {counts.map(([icon, n, label]) => (
             <span key={label} className="x-act" aria-label={`${n} ${label}`}>
@@ -152,7 +181,12 @@ function LayerPostView({ post, layer }: { post: LayerPost; layer: Layer }) {
         ) : (
           <span className="x-text">{post.text}</span>
         )}
-        {post.mediaId && !post.held && <LayerMedia id={post.mediaId} />}
+        {creator && post.adult && !post.held && <span className="x-warn">Adult post: mark its media sensitive when you post it on X.</span>}
+        {post.mediaId && !post.held && (
+          <SensitiveCover on={!creator && post.adult}>
+            <LayerMedia id={post.mediaId} />
+          </SensitiveCover>
+        )}
         <span className="x-actions" aria-hidden="true">
           {(['comment', 'repost', 'heart', 'views'] as const).map((icon) => (
             <span key={icon} className="x-act">
@@ -258,6 +292,12 @@ export function XProfileSet({ layer = null }: { layer?: Layer | null }) {
           </span>
         </div>
       </header>
+
+      {creator && profile.adult && (
+        <p className="x-warn x-warn-block">
+          Adult account: X does not allow adult content in a profile photo or header. Keep both safe for everyone.
+        </p>
+      )}
 
       <div className="tabs x-tabs" role="tablist" aria-label="Profile sections">
         <button type="button" role="tab" aria-selected={tab === 'posts'} onClick={() => setTab('posts')}>

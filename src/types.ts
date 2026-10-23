@@ -24,6 +24,8 @@ export interface Post {
   /** X only: reposts and views. Missing on older narrations, read as 0. */
   reposts?: number;
   views?: number;
+  /** X only: the media is marked sensitive, so visitors see it behind a content warning. */
+  sensitive?: boolean;
 }
 
 export interface Highlight {
@@ -45,6 +47,8 @@ export interface Profile {
   postCount: number | null;
   /** X only: the header image across the top of the profile. */
   banner?: string | null;
+  /** X only: the account posts adult content, so its media must be marked sensitive. */
+  adult?: boolean;
 }
 
 export interface Settings {

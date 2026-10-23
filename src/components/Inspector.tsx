@@ -147,6 +147,20 @@ function ProfileEditor() {
         </div>
       )}
 
+      {isX && (
+        <div className="field">
+          <label className="check">
+            <input id="pf-adult" type="checkbox" checked={Boolean(profile.adult)} onChange={(e) => set({ adult: e.target.checked })} />
+            <span>This account posts adult content</span>
+          </label>
+          {profile.adult && (
+            <span className="field-hint warn-hint">
+              X does not allow adult content in a profile photo or header. Every post with photos or videos must be marked sensitive.
+            </span>
+          )}
+        </div>
+      )}
+
       <Field label={isX ? 'Handle' : 'Username'}>
         <input
           id="pf-username"
@@ -393,6 +407,19 @@ function PostEditor({ post }: { post: Post }) {
       </Field>
       {isX ? (
         <>
+          {post.media.length > 0 && (
+            <div className="field">
+              <label className="check">
+                <input id="post-sensitive" type="checkbox" checked={Boolean(post.sensitive)} onChange={(e) => set({ sensitive: e.target.checked })} />
+                <span>Media marked sensitive</span>
+              </label>
+              <span className={cx('field-hint', sandbox.profile.adult && !post.sensitive && 'warn-hint')}>
+                {sandbox.profile.adult && !post.sensitive
+                  ? 'This is an adult account: X requires this post to be marked sensitive.'
+                  : 'Visitors see the photos and videos behind a content warning, as on X.'}
+              </span>
+            </div>
+          )}
           <div className="row2">
             <Field label="Replies">
               <NumberInput id="post-comments" value={post.comments} onChange={(v) => set({ comments: v ?? 0 })} />

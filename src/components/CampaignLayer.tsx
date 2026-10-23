@@ -35,6 +35,8 @@ export type LayerPost = {
   missing: string[];
   mediaId: string | null;
   stage: Stage | null;
+  /** Bil judged it adult: its media must be marked sensitive on X. */
+  adult: boolean;
 };
 
 export type Layer = {
@@ -143,6 +145,7 @@ export function useCampaignLayer(narrationId: string, enabled: boolean, handle: 
         missing: reasons.map(String).filter((r) => r && !/^Still breaks a rule/.test(r)).slice(0, 3),
         mediaId: typeof p.mediaId === 'string' ? p.mediaId : null,
         stage: stageOf(p.stage)?.id ?? null,
+        adult: Boolean((c as { adultContent?: unknown } | undefined)?.adultContent),
       };
     });
     const start = String(campaign.request?.startDate ?? posts[0]?.day ?? '');

@@ -374,6 +374,11 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
         </div>
       )}
       <p className="bl-post-text">{String(post.post.draft ?? '')}</p>
+      {post.post.compliance?.adultContent && (
+        <div className="bl-error">
+          Adult post. On X, mark its photos and videos as sensitive before posting, and never use them as a profile photo or header.
+        </div>
+      )}
       {post.post.engagementPlan && (
         <div className="bl-why">
           <span className="bl-label accent" style={{ paddingTop: 2 }}>
