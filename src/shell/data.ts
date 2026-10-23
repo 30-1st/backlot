@@ -42,6 +42,11 @@ export type Post = {
 export type OnboardingStep = 'delegate' | 'first_call' | 'contract';
 export type StepDone = { clientId: string; step: OnboardingStep; doneAt: string };
 
+/** Something a person did that the other side may want to know about. */
+export type Activity =
+  | { kind: 'log'; clientId: string; at: string; actorId: string | null; actorRole: 'team' | 'client'; what: 'post' | 'voice' | 'brand'; decision: string; campaignId: string | null; slot: number | null }
+  | { kind: 'media' | 'board'; clientId: string; at: string; actorId: string | null };
+
 export type Workspace = {
   clients: Client[];
   voices: Voice[];
@@ -51,13 +56,19 @@ export type Workspace = {
   steps: StepDone[];
   /** How many Media files each client has, not counting removed ones. */
   mediaCounts: Record<string, number>;
+  /** The last 14 days of decisions, uploads and board items, newest first. */
+  activity: Activity[];
+  /** When this person last looked at what is new, or null if never. */
+  seenAt: string | null;
 };
 
-const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], steps: [], mediaCounts: {} };
+const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null };
+const ACTIVITY_DAYS = 14;
 
 async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
-  const [c, v, k, p, s, m] = await Promise.all([
+  const since = new Date(Date.now() - ACTIVITY_DAYS * 86_400_000).toISOString();
+  const [c, v, k, p, s, m, lg, md, bd, sn] = await Promise.all([
     supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
@@ -68,8 +79,17 @@ async function load(): Promise<Workspace> {
     supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at').order('slot').limit(1000),
     supabase.from('onboarding_steps').select('client_id, step, done_at'),
     supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
+    supabase
+      .from('approval_log')
+      .select('client_id, kind, decision, campaign_id, slot, actor_id, actor_role, created_at')
+      .gt('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(200),
+    supabase.from('library_items').select('client_id, added_by, created_at').gt('created_at', since).is('removed_at', null).order('created_at', { ascending: false }).limit(300),
+    supabase.from('inspiration_items').select('client_id, added_by, created_at').gt('created_at', since).is('removed_at', null).order('created_at', { ascending: false }).limit(200),
+    supabase.from('notice_seen').select('seen_at').maybeSingle(),
   ]);
-  const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error;
+  const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error ?? lg.error ?? md.error ?? bd.error ?? sn.error;
   if (error) throw new Error(error.message);
   return {
     clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null })),
@@ -87,6 +107,24 @@ async function load(): Promise<Workspace> {
       updatedAt: r.updated_at,
     })),
     steps: (s.data ?? []).map((r: Json) => ({ clientId: r.client_id, step: r.step, doneAt: r.done_at })),
+    activity: [
+      ...(lg.data ?? []).map(
+        (r: Json): Activity => ({
+          kind: 'log',
+          clientId: r.client_id,
+          at: r.created_at,
+          actorId: r.actor_id ?? null,
+          actorRole: r.actor_role === 'client' ? 'client' : 'team',
+          what: r.kind,
+          decision: r.decision,
+          campaignId: r.campaign_id ?? null,
+          slot: r.slot ?? null,
+        }),
+      ),
+      ...(md.data ?? []).map((r: Json): Activity => ({ kind: 'media', clientId: r.client_id, at: r.created_at, actorId: r.added_by ?? null })),
+      ...(bd.data ?? []).map((r: Json): Activity => ({ kind: 'board', clientId: r.client_id, at: r.created_at, actorId: r.added_by ?? null })),
+    ].sort((a, b) => b.at.localeCompare(a.at)),
+    seenAt: (sn.data as Json | null)?.seen_at ?? null,
     mediaCounts: (m.data ?? []).reduce((acc: Record<string, number>, r: Json) => {
       acc[r.client_id] = (acc[r.client_id] ?? 0) + 1;
       return acc;
@@ -145,7 +183,12 @@ export function useWorkspace(enabled = true) {
     );
   }, []);
 
-  return { data, error, refresh, patchPost };
+  /** Records that everything up to this moment has been seen, so the badge clears. */
+  const markSeen = useCallback((at: string) => {
+    setData((d) => (d ? { ...d, seenAt: at } : d));
+  }, []);
+
+  return { data, error, refresh, patchPost, markSeen };
 }
 
 /** "12M", "3H", "OCT 22": short rail times. */

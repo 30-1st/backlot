@@ -1,5 +1,7 @@
 import { isTeamRole, type Me } from '../lib/team';
-import type { Workspace } from './data';
+import { useEffect, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import type { Activity, Workspace } from './data';
 import { Checklist, setupLeft } from './Checklist';
 import { shotsWanted } from './gaps';
 import { PostMedia, ShotFrame } from './PostMedia';
@@ -159,8 +161,91 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
   return items.sort((a, b) => Number(b.needs) - Number(a.needs) || b.at.localeCompare(a.at));
 }
 
+// ---------- what is new ----------
+
+type News = { key: string; at: string; fresh: boolean; title: string; path: string };
+
+const POST_WORDS: Record<string, [string, string]> = {
+  approved: ['approved', 'post'],
+  changes: ['asked for changes on', 'post'],
+  posted: ['marked', 'post as posted'],
+  undone: ['undid a decision on', 'post'],
+};
+const OTHER_WORDS: Record<string, string> = {
+  'voice:approved': 'approved the voice card',
+  'brand:saved': 'updated the brand kit',
+  'brand:suggested': 'suggested brand kit changes',
+  'brand:approved': 'took the suggested brand kit changes',
+  'brand:dropped': 'dropped the suggested brand kit changes',
+};
+
+/**
+ * What other people did in the last 14 days: decisions, uploads, board items and finished
+ * campaigns, grouped by day so ten approvals read as one line. Nothing the person did
+ * themselves shows here. Lines newer than their last visit are marked fresh.
+ */
+function buildNews(me: Me, ws: Workspace, focus: string | null, seenAt: string | null): News[] {
+  const isTeam = isTeamRole(me.role);
+  const handle = (id: string) => ws.clients.find((c) => c.id === id)?.handle ?? '';
+  const day = (iso: string) => iso.slice(0, 10);
+  const groups = new Map<string, { a: Activity; n: number; at: string }>();
+  for (const a of ws.activity) {
+    if ((focus && a.clientId !== focus) || (a.actorId && a.actorId === me.userId)) continue;
+    const k =
+      a.kind === 'log'
+        ? [a.kind, a.clientId, a.what, a.decision, a.campaignId ?? '', a.actorRole, day(a.at)].join('|')
+        : [a.kind, a.clientId, day(a.at)].join('|');
+    const g = groups.get(k);
+    if (g) g.n += 1;
+    else groups.set(k, { a, n: 1, at: a.at });
+  }
+  const out: News[] = [];
+  for (const [k, { a, n, at }] of groups) {
+    const h = handle(a.clientId);
+    let title = '';
+    let path = 'today';
+    if (a.kind === 'log') {
+      const who = a.actorRole === 'client' ? (isTeam ? `@${h}` : 'Someone on your account') : isTeam ? 'A teammate' : 'Your team';
+      if (a.what === 'post') {
+        const [verb, noun] = POST_WORDS[a.decision] ?? ['changed', 'post'];
+        const c = a.campaignId ? ws.campaigns.find((x) => x.id === a.campaignId) : null;
+        title = `${who} ${verb} ${n} ${n === 1 ? noun : noun.replace('post', 'posts')}${c ? ` in ${campaignTitle(c)}` : ''}`;
+        path = a.campaignId && c ? `campaigns.${a.campaignId}` : 'approvals';
+      } else {
+        title = `${who} ${OTHER_WORDS[`${a.what}:${a.decision}`] ?? 'made a change'}`;
+        path = a.what === 'brand' ? 'brand' : 'insights';
+      }
+    } else if (a.kind === 'media') {
+      title = isTeam ? `${n} new ${n === 1 ? 'file' : 'files'} in @${h}'s Media` : `Your team added ${n} ${n === 1 ? 'file' : 'files'} to Media`;
+      path = 'library';
+    } else {
+      title = isTeam ? `${n} new ${n === 1 ? 'item' : 'items'} on @${h}'s board` : `Your team added ${n} ${n === 1 ? 'item' : 'items'} to the board`;
+      path = 'board';
+    }
+    out.push({ key: k, at, fresh: !seenAt || at > seenAt, title, path });
+  }
+  // Campaigns Bil finished, for the team (clients see the posts waiting for them instead).
+  if (isTeam) {
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    for (const c of ws.campaigns) {
+      if ((focus && c.clientId !== focus) || !['ready', 'approved'].includes(c.status) || c.updatedAt < since) continue;
+      out.push({ key: `done|${c.id}`, at: c.updatedAt, fresh: !seenAt || c.updatedAt > seenAt, title: `Bil finished ${campaignTitle(c)} for @${handle(c.clientId)}`, path: `campaigns.${c.id}` });
+    }
+  }
+  return out.sort((x, y) => y.at.localeCompare(x.at)).slice(0, 12);
+}
+
 export function needsYouCount(me: Me, ws: Workspace, focus: string | null): number {
-  return build(me, ws, focus).filter((i) => i.needs).length;
+  return build(me, ws, focus).filter((i) => i.needs).length + buildNews(me, ws, focus, ws.seenAt).filter((n) => n.fresh).length;
+}
+
+function ago(iso: string): string {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  if (m < 60) return m <= 1 ? 'just now' : `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'yesterday' : `${d} days ago`;
 }
 
 function Alert() {
@@ -226,7 +311,24 @@ function NextUp({ t, isTeam, go }: { t: Timed; isTeam: boolean; go: (p: string) 
 }
 
 export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
+  // What counted as new when this screen opened. It stays marked for this visit even
+  // after the visit is recorded, so nothing disappears while it is being read.
+  const firstSeen = useRef<string | null | undefined>(undefined);
+  if (firstSeen.current === undefined && ws.data) firstSeen.current = ws.data.seenAt;
+  const loaded = Boolean(ws.data);
+  useEffect(() => {
+    if (!loaded || !supabase) return;
+    const t = window.setTimeout(() => {
+      void supabase!.rpc('notices_seen').then(({ data }) => {
+        if (typeof data === 'string') ws.markSeen(data);
+      });
+    }, 1500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
   if (!ws.data) return <main aria-busy="true" />;
+  const news = buildNews(me, ws.data, focus, firstSeen.current ?? null);
   const items = build(me, ws.data, focus);
   const needs = items.filter((i) => i.needs);
   const quiet = items.filter((i) => !i.needs).slice(0, 4);
@@ -281,6 +383,38 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
         </section>
       )}
 
+      {news.length > 0 && (
+        <section aria-labelledby="new-title">
+          <h2 id="new-title" className="bl-section-title">
+            What&rsquo;s new {news.some((n) => n.fresh) && <span className="num">{news.filter((n) => n.fresh).length}</span>}
+          </h2>
+          <ul className="bl-rows">
+            {news.map((n, i) => (
+              <li key={n.key}>
+                <a
+                  className={`bl-row bl-in${n.fresh ? ' is-fresh' : ''}`}
+                  style={{ animationDelay: `${120 + i * 40}ms` }}
+                  href={`#${n.path}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go(n.path);
+                  }}
+                >
+                  <span className="bl-row-ic">{n.fresh ? <span className="bl-new-dot" aria-label="New" /> : <Tick />}</span>
+                  <span className="bl-row-txt">
+                    <b>{n.title}</b>
+                    <small>{ago(n.at)}</small>
+                  </span>
+                  <span className="bl-row-go">
+                    <Go />
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {quiet.length > 0 && (
         <section>
           <h2 className="bl-section-title">Lately</h2>
@@ -288,7 +422,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
         </section>
       )}
 
-      {items.length === 0 && !next && (
+      {items.length === 0 && news.length === 0 && !next && (
         <div className="bl-glass-card bl-in" style={{ alignItems: 'center', textAlign: 'center', padding: '28px 20px' }}>
           <b style={{ fontSize: 17 }}>You are all caught up</b>
           <span className="bl-small">
