@@ -142,6 +142,9 @@ export const bil = {
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),
+  /** The monthly report for one client and month (YYYY-MM). Replaces that month's report. */
+  report: (clientId: string, month: string) =>
+    call<{ id: string; costUsd: number }>('bil', 'report', { requestId: crypto.randomUUID(), clientId, month }),
   learn: (clientId: string) =>
     call<Record<string, unknown>>('bil', 'learn', { requestId: crypto.randomUUID(), clientId }),
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),

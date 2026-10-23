@@ -46,11 +46,16 @@ export const TOOLS = {
   ),
 
   client_posts_read: tool(
-    'Onboarding only: read up to 48 of a client\'s own recent original posts (no replies or reposts) with their public numbers, to learn their voice and what performs. Text is used, then dropped; only the voice card and derived numbers are kept.',
-    z.object({ clientId: id, maxPosts: z.number().int().min(5).max(48) }),
+    'Onboarding and monthly reports only: read up to 100 of a client\'s own original posts (no replies or reposts) with their public numbers, optionally between two times. Text is used, then dropped; only derived numbers and post IDs are kept.',
     z.object({
       clientId: id,
-      postsRead: z.number().int().min(0).max(48),
+      maxPosts: z.number().int().min(5).max(100),
+      since: isoDateTime.optional().describe('Only posts at or after this time.'),
+      until: isoDateTime.optional().describe('Only posts before this time.'),
+    }),
+    z.object({
+      clientId: id,
+      postsRead: z.number().int().min(0).max(100),
       posts: z
         .array(
           z.object({
@@ -71,7 +76,7 @@ export const TOOLS = {
               .describe('X\'s public numbers for the post, read in the same request at no extra cost.'),
           }),
         )
-        .max(48),
+        .max(100),
     }),
   ),
 

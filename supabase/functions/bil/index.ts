@@ -20,8 +20,11 @@
 //   campaign       CampaignRequest            queues a campaign and returns at once                  team
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
+//   report         { requestId, clientId, month }  monthly report from X numbers (about $0.005 a post + one Bil call)  team
 
 import {
+  makeReport,
+  ReportRequest,
   ApproveVoiceRequest,
   approveVoice,
   BilInputError,
@@ -97,6 +100,8 @@ async function handle(req: Request): Promise<Response> {
       case 'onboard':
         requireTeam(member);
         return reply(200, await onboardClient(user.userDb, workspaceId, parse(OnboardRequest, input)));
+      case 'report':
+        return reply(200, await makeReport(user.userDb, member, parse(ReportRequest, input)));
       case 'learn':
         requireTeam(member);
         return reply(200, await learnWhatWorks(user.userDb, workspaceId, parse(LearnRequest, input)));
@@ -132,7 +137,7 @@ async function handle(req: Request): Promise<Response> {
       case 'fill_detail':
         return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign, resume, review_post, fill_detail, brand_save or brand_review.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, approve_voice, estimate, campaign, resume, review_post, fill_detail, brand_save or brand_review.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

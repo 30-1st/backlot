@@ -12,7 +12,7 @@ import { getActiveTraceId } from 'npm:@langfuse/tracing@6.0.0';
  * Each name is a scope in private.spend_limits. 'campaign' covers one whole campaign
  * (its run id is the campaign id, so the plan and every drafting batch add up).
  */
-export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign';
+export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign' | 'report';
 
 /** Thrown when a reservation would go over a cap. Nothing was spent. */
 export class SpendLimitError extends Error {

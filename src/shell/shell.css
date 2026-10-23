@@ -1954,3 +1954,16 @@ a.bl-card:hover,
 .bl-read-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
 .bl-read-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .bl-trends-update { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- Monthly reports ---------- */
+.bl-report { display: flex; flex-direction: column; gap: 14px; }
+.bl-report-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+@media (min-width: 640px) { .bl-report-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.bl-report-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(165deg, var(--deck-a), var(--deck-b)); box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b); min-width: 0; }
+.bl-report-tile dd { margin: 0; }
+.bl-report-tile dd.num { font-family: var(--display); font-size: 26px; line-height: 1.15; }
+.bl-up { color: var(--accent-text); }
+.bl-down { color: var(--danger); }
+.bl-report-top { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.bl-report-top li { display: flex; flex-direction: column; gap: 2px; }
+.bl-report-list { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }

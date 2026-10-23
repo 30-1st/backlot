@@ -177,7 +177,7 @@ export const impl = {
     return { posts: posts.filter((p: { excerpt: string }) => p.excerpt.length > 0) };
   },
 
-  async client_posts_read(ctx: ToolContext, { clientId, maxPosts }: In<'client_posts_read'>): Promise<Out<'client_posts_read'>> {
+  async client_posts_read(ctx: ToolContext, { clientId, maxPosts, since, until }: In<'client_posts_read'>): Promise<Out<'client_posts_read'>> {
     const { userDb } = needUser(ctx);
     const { data: client, error } = await userDb.from('clients').select('id, x_handle, x_user_id').eq('id', clientId).maybeSingle();
     if (error) throw new Error(`Could not read the client: ${error.message}`);
@@ -200,6 +200,8 @@ export const impl = {
     // note_tweet carries the full text of long posts; plain text stops at 280 characters.
     // public_metrics and attachments come back in the same request at no extra cost.
     url.searchParams.set('tweet.fields', 'created_at,note_tweet,public_metrics,attachments');
+    if (since) url.searchParams.set('start_time', new Date(since).toISOString());
+    if (until) url.searchParams.set('end_time', new Date(until).toISOString());
     const body = await xGet(
       ctx.budget,
       'x_client_posts',

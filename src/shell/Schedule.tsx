@@ -313,9 +313,14 @@ export function MonthView({ ws, focus, isTeam, go, onDay, onDayView }: ScreenPro
           </li>
         ))}
       </ul>
-      <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => go('approvals')}>
-        {isTeam ? 'Approvals log' : 'Your approvals log'}
-      </button>
+      <div className="bl-row-actions">
+        <button type="button" className="bl-linkish" onClick={() => go('approvals')}>
+          {isTeam ? 'Approvals log' : 'Your approvals log'}
+        </button>
+        <button type="button" className="bl-linkish" onClick={() => go('reports')}>
+          Monthly reports
+        </button>
+      </div>
     </main>
   );
 }
