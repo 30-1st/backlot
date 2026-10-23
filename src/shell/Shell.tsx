@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { team, type Me } from '../lib/team';
+import { isTeamRole, team, type Me } from '../lib/team';
 import { useWorkspace } from './data';
 import { Back, Chevron, House, People, Rise, Sequence, Signal, Reel, Vault } from './icons';
 import { useTheme } from './theme';
@@ -67,7 +67,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   const head = inner[0] || (preview ? 'today' : 'home');
   const sub = inner.slice(1).join('.');
 
-  const isTeam = me ? me.role !== 'client' : false;
+  const isTeam = me ? isTeamRole(me.role) : false;
   const clients = ws.data?.clients ?? [];
   const focus = !isTeam ? me?.clientId ?? null : picked === 'all' ? null : picked;
   const single = focus ?? clients[0]?.id ?? null;
@@ -100,6 +100,12 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   if (!me) return wrap(<div className="bl-app" aria-busy="true" />);
   if (me.mustChangePassword) {
     return wrap(<ChangePassword forced onDone={() => void loadMe()} onSignOut={onSignOut} />);
+  }
+
+  // A Playground login has one room: the Playground, plus their own account page.
+  if (me.role === 'visitor' && (preview || !['playground', 'narrate', 'rein', 'account'].includes(head))) {
+    queueMicrotask(() => go('playground'));
+    return wrap(<div className="bl-app" aria-busy="true" />);
   }
 
   // Home has its own stage and no dock.

@@ -1,4 +1,4 @@
-import type { Me } from '../lib/team';
+import { isTeamRole, type Me } from '../lib/team';
 import type { Workspace } from './data';
 import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
@@ -24,7 +24,7 @@ export function campaignTitle(c: { plan: Record<string, unknown> | null; request
 }
 
 function build(me: Me, ws: Workspace, focus: string | null): Item[] {
-  const isTeam = me.role !== 'client';
+  const isTeam = isTeamRole(me.role);
   const handle = (id: string) => ws.clients.find((c) => c.id === id)?.handle ?? '';
   const inScope = (clientId: string) => !focus || clientId === focus;
   const items: Item[] = [];

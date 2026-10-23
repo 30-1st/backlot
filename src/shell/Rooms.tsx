@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Me } from '../lib/team';
+import { isTeamRole, type Me } from '../lib/team';
 import { Logo } from '../components/ui';
 import { Clapper, Reel, StarDoor } from './icons';
 import { ModeSwitch } from './ModeSwitch';
@@ -93,7 +93,7 @@ export function Deck({ rooms, go, label }: { rooms: Room[]; go: (p: string) => v
 }
 
 export function HomeRooms({ me, go, needs }: { me: Me; go: (p: string) => void; needs: number }) {
-  const isTeam = me.role !== 'client';
+  const isTeam = isTeamRole(me.role);
   const now = new Date();
   const rooms: Room[] = isTeam
     ? [

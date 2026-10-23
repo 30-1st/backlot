@@ -15,6 +15,7 @@ import {
   SaveConflict,
   duplicateNarration,
   mediaInUse,
+  savesToAccount,
   nextNarrationName,
   openNarration,
   peekNarration,
@@ -27,7 +28,6 @@ import {
 } from './lib/library';
 import { MediaOwner, pruneMedia, setUploadFolder, storeFiles, uid } from './lib/media';
 import { listShares } from './lib/people';
-import { hosted } from './lib/supabase';
 import { dateTime, fromInput, plural, toInput } from './lib/format';
 import { ConfirmButton, FileButton, Icon, Logo, PlatformMark, Segmented, useMedia } from './components/ui';
 import { ShareDialog } from './components/ShareDialog';
@@ -168,7 +168,7 @@ export function Studio({
         setShared(open.shared);
         setCanEdit(may);
         setLoaded(true);
-        if (hosted && !open.shared) void listShares(narrationId).then((list) => alive && setShareCount(list.length), () => undefined);
+        if (savesToAccount() && !open.shared) void listShares(narrationId).then((list) => alive && setShareCount(list.length), () => undefined);
       } catch {
         if (alive) onAccounts();
       }
@@ -280,7 +280,7 @@ export function Studio({
     if (fromServer.current === sandbox) return;
     unsaved.current = true;
     // Saving to the server is a network call, so wait a little longer between them.
-    const t = setTimeout(() => void flush(), hosted ? 700 : 250);
+    const t = setTimeout(() => void flush(), savesToAccount() ? 700 : 250);
     return () => clearTimeout(t);
   }, [sandbox, loaded, flush]);
 
@@ -300,7 +300,7 @@ export function Studio({
   }, [flush]);
 
   // While other people can reach this narration, look for their changes now and then.
-  const watching = hosted && loaded && (!!shared || shareCount > 0);
+  const watching = savesToAccount() && loaded && (!!shared || shareCount > 0);
   useEffect(() => {
     if (!watching) return;
     const t = setInterval(() => {
@@ -567,7 +567,7 @@ export function Studio({
                 <div className="notice warn" role="status">
                   <div>
                     <strong>Changes are not being saved.</strong>{' '}
-                    {hosted
+                    {savesToAccount()
                       ? 'Backlot cannot reach the server. Your changes are still on this screen and it will keep trying. Check your connection.'
                       : 'This browser is blocking storage for the page, so the sandbox will reset when you close it.'}
                   </div>

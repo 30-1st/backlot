@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { MediaItem } from '../types';
 import { blobDelete, blobGet, blobKeys, blobPut } from './db';
 import { currentUserId, hosted, supabase } from './supabase';
+import { isGuest } from './mode';
 
 // Photos and videos.
 //
@@ -77,7 +78,8 @@ export class MediaError extends Error {
  */
 export async function storeFile(file: File): Promise<MediaItem> {
   const id = fileId();
-  if (supabase) {
+  // A guest's files stay in this browser until they make an account.
+  if (supabase && !isGuest()) {
     if (file.size > MAX_UPLOAD_BYTES) throw new MediaError('too_large', file.name);
     const owner = uploadFolder ?? (await currentUserId());
     if (!owner) throw new MediaError('upload', file.name);
@@ -113,7 +115,7 @@ export async function storeFiles(files: File[]): Promise<{ items: MediaItem[]; p
 
 async function fetchBlob(id: string, folder: string | null): Promise<Blob | undefined> {
   const cached = await blobGet(id).catch(() => undefined);
-  if (cached || !supabase) return cached;
+  if (cached || !supabase || isGuest()) return cached;
   const owner = folder ?? (await currentUserId());
   if (!owner) return undefined;
   const { data } = await supabase.storage.from(BUCKET).download(`${owner}/${id}`);
@@ -181,7 +183,7 @@ export async function pruneMedia(keep: Set<string>): Promise<void> {
   } catch {
     // Leaving a few unused files behind is harmless.
   }
-  if (hosted) await pruneServerMedia(keep).catch(() => undefined);
+  if (hosted && !isGuest()) await pruneServerMedia(keep).catch(() => undefined);
 }
 
 async function pruneServerMedia(keep: Set<string>): Promise<void> {

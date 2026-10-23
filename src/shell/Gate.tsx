@@ -13,30 +13,35 @@ import { useTheme } from './theme';
 import { Install } from './Install';
 import { ModeSwitch } from './ModeSwitch';
 
-// The door for signed-out visitors: the welcome page, sign in, join with an invite code,
-// and the add-to-phone guide. Backlot is private, so there is no open sign-up.
+// The door for signed-out people: the welcome page, sign in, create a login, and the
+// add-to-phone guide. A login made with an invite code from the team joins as team or
+// client. Without a code it is a Playground login (a visitor): it saves their own
+// narrations and searches with Rein, and never sees client work. Anyone can also try the
+// Playground first without a login; that work stays in the browser until they save it.
 
 // Where "Request an invite" sends email. Set VITE_INVITE_EMAIL when the inbox exists;
 // until then the button is hidden so nobody writes to an address that is not there.
 const INVITE_EMAIL = (import.meta.env.VITE_INVITE_EMAIL as string | undefined)?.trim() || '';
 
-type View = 'welcome' | 'in' | 'join' | 'install' | 'privacy';
+export type View = 'welcome' | 'in' | 'join' | 'install' | 'privacy';
 
-export function Gate() {
+export function Gate({ start = 'welcome', onTry, onLeave }: { start?: View; onTry?: () => void; onLeave?: () => void }) {
   const { theme } = useTheme();
-  const [view, setView] = useState<View>('welcome');
+  const [view, setViewState] = useState<View>(start);
+  // Someone who came from the Playground goes back there instead of to the welcome page.
+  const setView = (v: View) => (v === 'welcome' && onLeave ? onLeave() : setViewState(v));
 
   return (
     <div className="bl-root" data-theme={theme}>
-      {view === 'welcome' && <Welcome go={setView} />}
-      {(view === 'in' || view === 'join') && <Door mode={view} go={setView} />}
+      {view === 'welcome' && <Welcome go={setView} onTry={onTry} />}
+      {(view === 'in' || view === 'join') && <Door mode={view} go={setView} saving={Boolean(onLeave)} />}
       {view === 'install' && <Install onBack={() => setView('welcome')} />}
       {view === 'privacy' && <Privacy onBack={() => setView('welcome')} />}
     </div>
   );
 }
 
-function Welcome({ go }: { go: (v: View) => void }) {
+function Welcome({ go, onTry }: { go: (v: View) => void; onTry?: () => void }) {
   const mail = INVITE_EMAIL
     ? `mailto:${INVITE_EMAIL}?subject=${encodeURIComponent('Backlot invite request')}&body=${encodeURIComponent('My X handle: @\nWhat I do or sell:\nMy main goal (followers, sales, attention or a launch):\n')}`
     : '';
@@ -109,8 +114,13 @@ function Welcome({ go }: { go: (v: View) => void }) {
             I have an account
           </button>
           <button type="button" className="bl-ghost big" onClick={() => go('join')}>
-            I have an invite code
+            Create a login
           </button>
+          {onTry && (
+            <button type="button" className="bl-linkish accent" style={{ alignSelf: 'center', fontSize: 15 }} onClick={onTry}>
+              Try the Playground without a login
+            </button>
+          )}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 20, fontSize: 13 }}>
             <button type="button" className="bl-linkish" onClick={() => go('privacy')}>
               Privacy note
@@ -125,7 +135,7 @@ function Welcome({ go }: { go: (v: View) => void }) {
   );
 }
 
-function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
+function Door({ mode, go, saving }: { mode: 'in' | 'join'; go: (v: View) => void; saving: boolean }) {
   const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -138,7 +148,6 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
     e.preventDefault();
     const name = cleanUsername(username);
     let problem: LoginProblem | null = null;
-    if (join && !code.trim()) return setError('Type the invite code your team sent you.');
     if (!name || !password) return setError('Type your username and password.');
     if (!USERNAME_RULE.test(name)) problem = join ? 'username_format' : 'wrong';
     else if (join && password.length < MIN_PASSWORD) problem = 'password_length';
@@ -147,7 +156,7 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
 
     setBusy(true);
     setError('');
-    problem = join ? await createLogin(code.trim(), name, password) : await signIn(name, password);
+    problem = join ? await createLogin(code.trim(), name, password, adult) : await signIn(name, password);
     // On success the app swaps this screen out by itself.
     if (problem) {
       setBusy(false);
@@ -178,17 +187,22 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
             Sign in
           </button>
           <button type="button" aria-pressed={join} onClick={() => { setError(''); go('join'); }}>
-            Join with a code
+            Create a login
           </button>
         </div>
 
         <h1 className="bl-h1 bl-rise" style={{ marginTop: 16 }}>
-          {join ? 'Join your team' : 'Welcome back'}
+          {join ? (saving ? 'Save your work' : 'Create a login') : 'Welcome back'}
         </h1>
+        {saving && (
+          <p className="bl-small" style={{ margin: 0 }}>
+            {join ? 'Make a login and what you made in the Playground moves into it.' : 'Sign in and what you made in the Playground moves into your login.'}
+          </p>
+        )}
 
         {join && (
           <label className="bl-field">
-            <span className="bl-label">Invite code</span>
+            <span className="bl-label">Invite code (only if your Backlot team sent one)</span>
             <input
               className="bl-input bl-code"
               value={code}
@@ -199,6 +213,7 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
               spellCheck={false}
               onChange={(e) => setCode(e.target.value)}
             />
+            <span className="bl-small">Without a code you get the Playground: narrate Instagram and X profiles and search trends with Rein.</span>
           </label>
         )}
         <label className="bl-field">
@@ -254,11 +269,11 @@ function Door({ mode, go }: { mode: 'in' | 'join'; go: (v: View) => void }) {
         <button type="submit" className="bl-btn big" disabled={busy}>
           {join ? (busy ? 'Creating your login' : 'Create my login') : busy ? 'Signing in' : 'Sign in'}
         </button>
-        {!join && (
-          <p className="bl-small" style={{ textAlign: 'center' }}>
-            Forgot your password? Message your Backlot team. They can set a new one in a minute.
-          </p>
-        )}
+        <p className="bl-small" style={{ textAlign: 'center' }}>
+          {join
+            ? 'Backlot has no email, so keep your password somewhere safe. Your Backlot team, if you have one, can set a new one.'
+            : 'Forgot your password? If you work with a Backlot team, message them. They can set a new one in a minute.'}
+        </p>
       </form>
     </main>
   );

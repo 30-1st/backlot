@@ -3484,3 +3484,47 @@ button.x-post:hover {
 .fill-x .field-hint {
   flex: 1 1 180px;
 }
+
+/* Trying the Playground without a login. */
+.guest-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 20px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--rule);
+  background: var(--stage-2, var(--stage));
+  color: var(--ink-2, var(--ink));
+  font-size: 14px;
+  line-height: 1.4;
+}
+.guest-strip strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.guest-strip-actions {
+  display: flex;
+  gap: 8px;
+}
+.move-guest-in {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  max-width: 440px;
+}
+.move-guest-in h2 {
+  margin: 0;
+}
+.move-guest-in p {
+  margin: 0;
+  line-height: 1.5;
+}
+.move-guest-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

@@ -1,9 +1,13 @@
-// Creates a Backlot login from a one-time invite code, a username and a password.
+// Creates a Backlot login from a username and a password, with or without an invite code.
 //
-// Backlot is private: nobody can sign up without a code a teammate made (team function,
-// invite_create). The code decides whether the new login joins as team or as a client,
-// and which client. It is claimed in one step, so it can never be used twice; if making
-// the login fails afterwards, the code is handed back.
+// With a code a teammate made (team function, invite_create), the login joins as team or
+// as a client, and the code decides which client. It is claimed in one step, so it can
+// never be used twice; if making the login fails afterwards, the code is handed back.
+//
+// Without a code, the login is a visitor: the Playground only, to save their own
+// narrations. Visitors never see client data, Bil, chats or sharing (database rules),
+// and an idle visitor login is removed after 60 days (purge-inactive). Open sign-ups
+// have their own caps, so they can never use up the room invites need.
 //
 // Backlot has no email. Supabase Auth still needs an address for every user,
 // so each username gets an internal one on a domain that can never receive
@@ -24,6 +28,8 @@ const MAX_SIGNUPS_PER_HOUR = 5;
 // Across every address together. The forwarded address can be spoofed, so this cap is
 // what really bounds guessing; a small team never comes near it.
 const MAX_SIGNUPS_PER_HOUR_ALL = 30;
+const MAX_VISITORS_PER_HOUR = 3;
+const MAX_VISITORS_PER_HOUR_ALL = 60;
 
 const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -50,7 +56,7 @@ async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return reply(405, { error: 'method' });
 
-  let body: { username?: unknown; password?: unknown; code?: unknown };
+  let body: { username?: unknown; password?: unknown; code?: unknown; adult?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -59,42 +65,67 @@ async function handle(req: Request): Promise<Response> {
 
   const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
-  const code = typeof body.code === 'string' ? body.code : '';
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  const visitor = code === '';
 
-  if (!looksLikeCode(code)) return reply(400, { error: 'invite_invalid' });
+  if (!visitor && !looksLikeCode(code)) return reply(400, { error: 'invite_invalid' });
+  // The app asks everyone to confirm they are 18 or older; visitors confirm it here too.
+  if (visitor && body.adult !== true) return reply(400, { error: 'adult_required' });
   if (!USERNAME.test(username)) return reply(400, { error: 'username_format' });
   if (RESERVED.has(username)) return reply(409, { error: 'username_taken' });
   if (password.length < 8 || password.length > 72) return reply(400, { error: 'password_length' });
 
   const db = admin();
 
-  // Slow down bulk sign-ups from one address.
+  // Slow down bulk sign-ups from one address, counting invite and open sign-ups apart.
+  const kind = visitor ? 'visitor' : 'invite';
   const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
   const since = new Date(Date.now() - 3_600_000).toISOString();
   const { count, error: countError } = await db
     .from('signup_log')
     .select('id', { count: 'exact', head: true })
     .eq('ip', ip)
+    .eq('kind', kind)
     .gte('created_at', since);
   if (countError) return reply(500, { error: 'server' });
-  if ((count ?? 0) >= MAX_SIGNUPS_PER_HOUR) return reply(429, { error: 'too_many' });
+  if ((count ?? 0) >= (visitor ? MAX_VISITORS_PER_HOUR : MAX_SIGNUPS_PER_HOUR)) return reply(429, { error: 'too_many' });
   const { count: all, error: allError } = await db
     .from('signup_log')
     .select('id', { count: 'exact', head: true })
+    .eq('kind', kind)
     .gte('created_at', since);
   if (allError) return reply(500, { error: 'server' });
-  if ((all ?? 0) >= MAX_SIGNUPS_PER_HOUR_ALL) return reply(429, { error: 'too_many' });
-  await db.from('signup_log').insert({ ip });
+  if ((all ?? 0) >= (visitor ? MAX_VISITORS_PER_HOUR_ALL : MAX_SIGNUPS_PER_HOUR_ALL)) return reply(429, { error: 'too_many' });
+  await db.from('signup_log').insert({ ip, kind });
 
-  // Claim the code before making anything. Wrong, used and expired codes look the same.
-  const { data: claimed, error: claimError } = await db.rpc('invite_claim', { p_code_hash: await hashCode(code) });
-  if (claimError) {
-    console.error('invite claim failed', claimError.code, claimError.message);
-    return reply(500, { error: 'server' });
+  // Where the login joins. An invite says so; a visitor joins Backlot's one workspace.
+  let invite: { invite_id: string; workspace_id: string; role: string; client_id: string | null } | null = null;
+  let workspaceId: string;
+  let role: string;
+  let clientId: string | null = null;
+  if (visitor) {
+    const { data: owner, error: ownerError } = await db.from('workspace_members').select('workspace_id').eq('role', 'owner').limit(2);
+    if (ownerError || !owner || owner.length !== 1) {
+      console.error('visitor sign-up: expected exactly one workspace', ownerError?.message ?? owner?.length);
+      return reply(500, { error: 'server' });
+    }
+    workspaceId = owner[0].workspace_id;
+    role = 'visitor';
+  } else {
+    // Claim the code before making anything. Wrong, used and expired codes look the same.
+    const { data: claimed, error: claimError } = await db.rpc('invite_claim', { p_code_hash: await hashCode(code) });
+    if (claimError) {
+      console.error('invite claim failed', claimError.code, claimError.message);
+      return reply(500, { error: 'server' });
+    }
+    invite = Array.isArray(claimed) ? claimed[0] : null;
+    if (!invite) return reply(403, { error: 'invite_invalid' });
+    workspaceId = invite.workspace_id;
+    role = invite.role;
+    clientId = invite.client_id;
   }
-  const invite = Array.isArray(claimed) ? claimed[0] : null;
-  if (!invite) return reply(403, { error: 'invite_invalid' });
   const giveBack = async () => {
+    if (!invite) return;
     const { error } = await db.rpc('invite_finish', { p_invite: invite.invite_id, p_user: null });
     if (error) console.error('could not hand the invite back', error.message);
   };
@@ -131,9 +162,9 @@ async function handle(req: Request): Promise<Response> {
 
   const { error: joinError } = await db.from('workspace_members').insert({
     user_id: newId,
-    workspace_id: invite.workspace_id,
-    role: invite.role,
-    client_id: invite.client_id,
+    workspace_id: workspaceId,
+    role,
+    client_id: clientId,
   });
   if (joinError) {
     await undo();
@@ -142,10 +173,12 @@ async function handle(req: Request): Promise<Response> {
     return reply(500, { error: 'server' });
   }
 
-  const { error: finishError } = await db.rpc('invite_finish', { p_invite: invite.invite_id, p_user: newId });
-  if (finishError) console.error('could not record who used the invite', finishError.message);
+  if (invite) {
+    const { error: finishError } = await db.rpc('invite_finish', { p_invite: invite.invite_id, p_user: newId });
+    if (finishError) console.error('could not record who used the invite', finishError.message);
+  }
 
-  return reply(200, { ok: true, username, role: invite.role });
+  return reply(200, { ok: true, username, role });
 }
 
 Deno.serve(withCors(handle));

@@ -3,16 +3,35 @@
 //   media -> uploaded photos and videos (Blobs), keyed by media id
 // Every call can reject (private windows, blocked site data), so callers catch.
 
-const DB_NAME = 'backlot';
 const DB_VERSION = 1;
 
-let opening: Promise<IDBDatabase> | null = null;
+// 'backlot' holds the offline build's library, or the signed-in cache in the hosted build.
+// 'backlot-guest' holds work someone does in the Playground before making an account, kept
+// apart so signing in, tidying the cache or signing out can never touch it.
+type StoreName = 'backlot' | 'backlot-guest';
+let dbName: StoreName = 'backlot';
+// Set only while signed-in code reads a guest's work to move it (lib/adopt.ts). It wins
+// over dbName, so a screen re-rendering meanwhile cannot switch storage under it.
+let override: StoreName | null = null;
+const openings = new Map<StoreName, Promise<IDBDatabase>>();
+
+/** Point every call below at another database in this browser. */
+export function setStorageName(name: StoreName): void {
+  dbName = name;
+}
+
+/** For the duration of a move: read and write this database whatever the mode is. */
+export function setStorageOverride(name: StoreName | null): void {
+  override = name;
+}
 
 function open(): Promise<IDBDatabase> {
+  const name = override ?? dbName;
+  let opening = openings.get(name);
   if (!opening) {
     opening = new Promise<IDBDatabase>((resolve, reject) => {
       try {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        const req = indexedDB.open(name, DB_VERSION);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
@@ -25,8 +44,9 @@ function open(): Promise<IDBDatabase> {
         reject(err);
       }
     });
+    openings.set(name, opening);
     opening.catch(() => {
-      opening = null;
+      openings.delete(name);
     });
   }
   return opening;

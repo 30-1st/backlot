@@ -8,13 +8,13 @@ import {
   duplicateNarration,
   listAccounts,
   mediaInUse,
+  savesToAccount,
   nextNarrationName,
   renameNarration,
   type Account,
 } from '../lib/library';
 import { MediaOwner, pruneMedia } from '../lib/media';
 import { leaveShare, listSharedWithMe, shareCounts, type NarrationCard } from '../lib/people';
-import { hosted } from '../lib/supabase';
 import { plural, shortDate } from '../lib/format';
 import { makeExample } from '../sample';
 import { Intake } from './Intake';
@@ -60,7 +60,7 @@ export function Accounts({
   const { name } = PLATFORM[platform];
 
   const refreshShares = useCallback(() => {
-    if (!hosted) return;
+    if (!savesToAccount()) return;
     void listSharedWithMe(platform).then(setShared, () => undefined);
     void shareCounts().then(setCounts, () => undefined);
   }, [platform]);
@@ -152,8 +152,8 @@ export function Accounts({
           {failed && (
             <div className="notice warn" role="status">
               <div>
-                <strong>{hosted ? 'Backlot cannot reach the server.' : 'Accounts cannot be saved here.'}</strong>{' '}
-                {hosted ? 'Check your connection and reload the page.' : 'This browser is blocking storage for the page.'}
+                <strong>{savesToAccount() ? 'Backlot cannot reach the server.' : 'Accounts cannot be saved here.'}</strong>{' '}
+                {savesToAccount() ? 'Check your connection and reload the page.' : 'This browser is blocking storage for the page.'}
               </div>
             </div>
           )}
@@ -167,7 +167,7 @@ export function Accounts({
                     counts={counts}
                     onOpen={onOpen}
                     onChanged={refresh}
-                    onShare={hosted ? setSharing : undefined}
+                    onShare={savesToAccount() ? setSharing : undefined}
                   />
                 </li>
               ))}

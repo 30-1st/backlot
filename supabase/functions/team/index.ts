@@ -23,7 +23,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { serviceClient } from '../_shared/spend.ts';
-import { AccessError, memberOf, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
+import { AccessError, isTeam, memberOf, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
@@ -114,7 +114,7 @@ async function handle(req: Request): Promise<Response> {
         ]);
         // The shared monthly AI budget, for the team's status line. Clients never see spend.
         let budget: { used: number; cap: number } | null = null;
-        if (member.role !== 'client') {
+        if (isTeam(member)) {
           const { data: s, error: sError } = await db.rpc('agent_spend_summary');
           if (sError) console.error('team: spend summary failed', sError.message);
           else budget = { used: Number(s?.month_used ?? 0), cap: Number(s?.month_cap ?? 0) };
@@ -134,7 +134,8 @@ async function handle(req: Request): Promise<Response> {
       case 'people': {
         requireTeam(member);
         const [{ data: rows, error }, { data: clients, error: cError }] = await Promise.all([
-          db.from('workspace_members').select('user_id, role, client_id, created_at').eq('workspace_id', member.workspaceId),
+          // Visitors are not part of the team's people list.
+          db.from('workspace_members').select('user_id, role, client_id, created_at').eq('workspace_id', member.workspaceId).neq('role', 'visitor'),
           db.from('clients').select('id, x_handle').eq('owner_id', member.workspaceId).order('created_at'),
         ]);
         if (error || cError) throw new Error(`Could not read the team: ${(error ?? cError)!.message}`);
@@ -238,7 +239,8 @@ async function handle(req: Request): Promise<Response> {
           return reply(200, { brief: briefForApp(reused.brief), reused: true });
         }
         let rowId: string | null = null;
-        if (member.role === 'client') {
+        // Everyone outside the team (clients and visitors) gets the 3 free searches.
+        if (!isTeam(member)) {
           const { data, error } = await db.rpc('rein_claim_free', { p_user: userId, p_workspace: member.workspaceId, p_niche: r.niche, p_region: r.region });
           if (error) throw new Error(`Could not check free searches: ${error.message}`);
           if (!data) return reply(402, { error: 'You have used your 3 free searches. Paid searches open soon: $5 a search or $15 a month.', pay: true });
@@ -277,7 +279,7 @@ async function handle(req: Request): Promise<Response> {
           if (nb) lastBrief = briefForApp(nb.brief);
         }
         return reply(200, {
-          freeLeft: member.role === 'client' ? Math.max(0, FREE_SEARCHES - usedFree) : null,
+          freeLeft: isTeam(member) ? null : Math.max(0, FREE_SEARCHES - usedFree),
           searches: (rows ?? []).slice(0, 8).map((x) => ({ niche: x.niche, region: x.region, at: x.created_at })),
           last: lastBrief,
         });

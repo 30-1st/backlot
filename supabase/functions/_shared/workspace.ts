@@ -4,13 +4,15 @@
 //   owner   the founder; one per workspace
 //   team    sees every client, runs Bil and Rein, makes invites, resets passwords
 //   client  sees only their own client; approves posts and answers Bil
+//   visitor signed up without an invite to save narrations; the Playground only, no
+//           client data, no Bil, no chats or sharing
 //
 // A workspace is identified by its owner's login ID, which is the owner_id every client
 // row already carries. Server code scopes all client data to `workspaceId`.
 
 import { serviceClient } from './spend.ts';
 
-export type Role = 'owner' | 'team' | 'client';
+export type Role = 'owner' | 'team' | 'client' | 'visitor';
 
 export type Member = {
   userId: string;

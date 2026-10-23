@@ -4,8 +4,9 @@ import { clearMediaCache } from './media';
 import { supabase } from './supabase';
 
 // Backlot logins are a username and a password, nothing else. There is no email.
-// Backlot is private: a new login needs a one-time invite code from the team, and a
-// forgotten password is reset by a teammate (team function, password_reset).
+// A one-time invite code from the team makes a team or client login; without a code the
+// login is a Playground login. A forgotten password is reset by a teammate (team
+// function, password_reset).
 //
 // Supabase Auth needs an address for every user, so each username maps to an
 // internal one on a domain that can never receive mail. The sign-up function
@@ -29,6 +30,7 @@ export type LoginProblem =
   | 'password_weak'
   | 'wrong'
   | 'too_many'
+  | 'adult_required'
   | 'network'
   | 'server';
 
@@ -40,6 +42,7 @@ export const PROBLEM_TEXT: Record<LoginProblem, string> = {
   password_weak: 'That password is too easy to guess. Try a longer one.',
   wrong: 'Wrong username or password.',
   too_many: 'Too many tries from this connection. Wait a while and try again.',
+  adult_required: 'Tick the box to confirm you are 18 or older and have read the privacy note.',
   network: 'Backlot cannot reach the server. Check your connection and try again.',
   server: 'Something went wrong on our side. Try again in a moment.',
 };
@@ -55,10 +58,13 @@ export async function signIn(username: string, password: string): Promise<LoginP
   return 'server';
 }
 
-/** Create a login with an invite code, then sign straight in with it. */
-export async function createLogin(code: string, username: string, password: string): Promise<LoginProblem | null> {
+/**
+ * Create a login, then sign straight in with it. With an invite code it joins the team or
+ * a client; without one it is a Playground login. Everyone confirms they are 18 or older.
+ */
+export async function createLogin(code: string, username: string, password: string, adult: boolean): Promise<LoginProblem | null> {
   if (!supabase) return 'server';
-  const { error } = await supabase.functions.invoke('signup', { body: { code, username, password } });
+  const { error } = await supabase.functions.invoke('signup', { body: { code, username, password, adult } });
   if (error) {
     if (error instanceof FunctionsFetchError) return 'network';
     if (error instanceof FunctionsHttpError) {

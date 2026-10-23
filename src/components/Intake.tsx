@@ -3,7 +3,7 @@ import type { Sandbox } from '../types';
 import type { Platform } from '../platforms';
 import { MediaError, isMediaFile, storeFile } from '../lib/media';
 import { newPost } from '../state';
-import { hosted } from '../lib/supabase';
+import { savesToAccount } from '../lib/library';
 import { bil, fileFromDataUrl, useCanLookup } from '../lib/team';
 import { ImportGuide } from './ImportGuide';
 import { FileButton, Icon, Modal, NumberInput, cx } from './ui';
@@ -163,7 +163,7 @@ export function Intake({
           <h2>{isX ? 'Set up your X profile' : 'Bring in your profile'}</h2>
           <p>
             {isX ? 'Type in the basics. Add photos and videos for posts with media, or write posts once the set is built.' : 'Type in the basics and add your own photos and videos.'}{' '}
-            {hosted ? 'They are copied into your Backlot account' : 'Everything stays in this browser'}, and you can
+            {savesToAccount() ? 'They are copied into your Backlot account' : 'Everything stays in this browser'}, and you can
             change all of it once the set is built.
           </p>
           <button type="button" className="btn quiet sm intake-close" onClick={onClose} aria-label="Close">

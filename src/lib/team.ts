@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { FunctionsFetchError, FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { isGuest } from './mode';
 
 // The app's calls to Backlot's server doors: team (who you are, people, invites,
 // passwords) and bil (Bil's actions). Errors come back as plain sentences.
 
-export type Role = 'owner' | 'team' | 'client';
+export type Role = 'owner' | 'team' | 'client' | 'visitor';
+
+/** Owner and team: everyone who works on clients. Clients and visitors are not. */
+export const isTeamRole = (r: Role | undefined | null): boolean => r === 'owner' || r === 'team';
 
 export type Me = {
   userId: string;
@@ -108,10 +112,10 @@ export function fileFromDataUrl(dataUrl: string, name: string): File | null {
 export function useCanLookup(enabled = true): boolean {
   const [ok, setOk] = useState(false);
   useEffect(() => {
-    if (!supabase || !enabled) return;
+    if (!supabase || !enabled || isGuest()) return;
     let live = true;
     team.me().then(
-      (m) => live && setOk(m.role !== 'client'),
+      (m) => live && setOk(isTeamRole(m.role)),
       () => undefined,
     );
     return () => {

@@ -28,7 +28,7 @@ export function TeamScreen({
       <section className="bl-card">
         <h2 className="bl-h2">You</h2>
         <span className="bl-small">
-          Signed in as <b>@{me.username}</b>, {me.role === 'client' ? `client${me.clientHandle ? ` (@${me.clientHandle})` : ''}` : me.role}
+          Signed in as <b>@{me.username}</b>, {me.role === 'client' ? `client${me.clientHandle ? ` (@${me.clientHandle})` : ''}` : me.role === 'visitor' ? 'Playground member' : me.role}
         </span>
         <span className="bl-label" style={{ marginTop: 6 }}>
           Look
@@ -50,9 +50,11 @@ export function TeamScreen({
           <button type="button" className="bl-ghost" onClick={() => setChanging(true)}>
             Change password
           </button>
-          <button type="button" className="bl-ghost" onClick={() => go('people')}>
-            People and chats
-          </button>
+          {me.role !== 'visitor' && (
+            <button type="button" className="bl-ghost" onClick={() => go('people')}>
+              People and chats
+            </button>
+          )}
           <button type="button" className="bl-ghost" onClick={onSignOut}>
             Sign out
           </button>
