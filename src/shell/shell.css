@@ -1942,3 +1942,14 @@ a.bl-card:hover,
 /* ---------- What's new ---------- */
 .bl-new-dot { display: block; width: 10px; height: 10px; border-radius: 5px; background: var(--accent-text); box-shadow: 0 0 0 4px rgba(var(--glow), 0.18); }
 .bl-row.is-fresh .bl-row-txt b { color: var(--ink); }
+
+/* ---------- Bil's read on a post ---------- */
+.bl-read { border-radius: 14px; background: var(--mist); padding: 0 14px; }
+.bl-read[open] { padding-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+.bl-read summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
+.bl-read summary::-webkit-details-marker { display: none; }
+.bl-read summary::after { content: '+'; font-weight: 400; color: var(--ink-2); }
+.bl-read[open] summary::after { content: '\2212'; }
+.bl-read-scores { margin-left: auto; color: var(--ink-2); font-weight: 500; }
+.bl-read-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; }
+.bl-read-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }

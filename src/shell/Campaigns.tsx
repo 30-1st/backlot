@@ -416,6 +416,7 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
           <span>{why}</span>
         </div>
       )}
+      <BilsRead post={post.post} />
       {post.review === 'changes' && post.reviewNote && <div className="bl-error">Change asked: {post.reviewNote}</div>}
       <button type="button" className="bl-ghost bl-start" onClick={onCopy}>
         {copied ? 'Copied' : 'Copy the text'}
@@ -424,3 +425,77 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
   );
 }
 
+
+type Signal = { action?: string; effect?: string; why?: string };
+
+/** Actions that hurt a post's reach; raising them is bad news, lowering them good. */
+const NEGATIVE = new Set(['not_interested', 'mute_author', 'block_author', 'report']);
+
+const ACTION_WORDS: Record<string, string> = {
+  favorite: 'likes',
+  reply: 'replies',
+  repost: 'reposts',
+  quote: 'quotes',
+  share: 'shares',
+  share_via_dm: 'shares by DM',
+  share_via_copy_link: 'link copies',
+  click_post: 'post opens',
+  click_profile: 'profile visits',
+  click_link: 'link clicks',
+  photo_expand: 'photo opens',
+  video_open: 'video opens',
+  click_quoted_post: 'quoted post opens',
+  video_quality_view: 'video watches',
+  dwell: 'time spent reading',
+  follow_author: 'follows',
+  not_interested: '"not interested" taps',
+  mute_author: 'mutes',
+  block_author: 'blocks',
+  report: 'reports',
+};
+
+/** Bil's score and reasons for one post, folded away until asked for. */
+function BilsRead({ post }: { post: Record<string, any> }) {
+  const a = post.algorithm as { score?: number; signals?: Signal[]; repoFile?: string; repoCommit?: string } | undefined;
+  const v = post.voice as { match?: number; drift?: string[] } | undefined;
+  if (!a || typeof a.score !== 'number') return null;
+  const signals = Array.isArray(a.signals) ? a.signals.filter((x) => x.why) : [];
+  const drift = Array.isArray(v?.drift) ? v!.drift.filter(Boolean) : [];
+  const word = (s: Signal) => ACTION_WORDS[String(s.action ?? '')] ?? String(s.action ?? '').replace(/_/g, ' ');
+  const repo =
+    a.repoFile && a.repoCommit && /^[0-9a-f]{7,40}$/.test(a.repoCommit) && /^[A-Za-z0-9_./-]{1,200}$/.test(a.repoFile)
+      ? `https://github.com/xai-org/x-algorithm/blob/${a.repoCommit}/${a.repoFile}`
+      : null;
+  return (
+    <details className="bl-read">
+      <summary>
+        <span>Bil&rsquo;s read</span>
+        <span className="bl-read-scores num">
+          Fit {a.score}
+          {typeof v?.match === 'number' ? ` · Voice ${v.match}` : ''}
+        </span>
+      </summary>
+      <p className="bl-small" style={{ margin: 0 }}>
+        Fit is how well the post suits X&rsquo;s published ranking settings, out of 100. Voice is how close it sounds to the approved voice card. Both are guides, not promises: X scores each post per viewer.
+      </p>
+      {signals.length > 0 && (
+        <ul className="bl-read-list">
+          {signals.map((s, i) => (
+            <li key={i}>
+              <span className={`bl-chip-ink${(s.effect === 'lowers') !== NEGATIVE.has(String(s.action)) ? ' bad' : ''}`}>
+                {s.effect === 'lowers' ? 'Lowers' : 'Raises'} {word(s)}
+              </span>
+              <span>{s.why}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {drift.length > 0 && <p className="bl-small" style={{ margin: 0 }}>Where it drifts from their voice: {drift.join(' ')}</p>}
+      {repo && (
+        <a className="bl-linkish" href={repo} target="_blank" rel="noopener noreferrer">
+          The ranking code this is based on
+        </a>
+      )}
+    </details>
+  );
+}
