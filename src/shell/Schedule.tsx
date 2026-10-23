@@ -15,6 +15,81 @@ function statusWord(t: Timed): { word: string; cls: string } {
   return { word: 'Waiting for OK', cls: '' };
 }
 
+/** What Bil said a held post is missing, in his words, shortest first. */
+function missing(post: Record<string, unknown>): string[] {
+  const c = post.compliance as { blockedReasons?: unknown } | undefined;
+  const list = Array.isArray(c?.blockedReasons) ? c.blockedReasons : Array.isArray(post.blockedReasons) ? post.blockedReasons : [];
+  return list.map(String).filter((r) => r && !/^Still breaks a rule/.test(r)).slice(0, 3);
+}
+
+/** A held post: what Bil needs, a box to give it, and Bil rewrites the post. */
+export function DetailBox({ campaignId, slot, post, onDone }: { campaignId: string; slot: number; post: Record<string, unknown>; onDone: () => Promise<void> | void }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const needs = missing(post);
+  const id = `detail-${campaignId}-${slot}`;
+
+  async function send() {
+    setBusy(true);
+    setNote('');
+    try {
+      const r = await bil.fillDetail(campaignId, slot, detail.trim());
+      if (r.status === 'blocked') setNote(r.reasons[0] ? `Bil still needs more: ${r.reasons[0]}` : 'Bil still needs more to write this post.');
+      else setOpen(false);
+      await onDone();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Bil could not rewrite this post right now.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="bl-btn" onClick={() => setOpen(true)}>
+        Give the detail
+      </button>
+    );
+  }
+  return (
+    <form
+      className="bl-detail"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (detail.trim().length >= 2 && !busy) void send();
+      }}
+    >
+      {needs.length > 0 && (
+        <ul className="bl-detail-needs">
+          {needs.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
+      <label className="bl-label" htmlFor={id}>
+        The detail
+      </label>
+      <textarea id={id} className="bl-input" rows={3} maxLength={500} value={detail} placeholder="For example: $40, ships Friday, link in bio" onChange={(e) => setDetail(e.target.value)} autoFocus />
+      {note && (
+        <p className="bl-error" role="alert">
+          {note}
+        </p>
+      )}
+      <div className="bl-row-actions">
+        <button type="button" className="bl-ghost" disabled={busy} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="bl-btn" disabled={busy || detail.trim().length < 2}>
+          {busy ? 'Bil is writing' : 'Send to Bil'}
+        </button>
+      </div>
+      <span className="bl-small">Bil rewrites only this post with what you give him. It uses a few cents of the AI budget.</span>
+    </form>
+  );
+}
+
 export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => void }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const days = useMemo(() => [...new Set(all.map((t) => t.day))].sort(), [all]);
@@ -112,11 +187,7 @@ export function DayView({ ws, go, focus, onAll }: ScreenProps & { onAll: () => v
                     </button>
                   </>
                 )}
-                {t.post.status === 'blocked' && (
-                  <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
-                    See what is missing
-                  </button>
-                )}
+                {t.post.status === 'blocked' && <DetailBox campaignId={t.campaign.id} slot={t.post.slot} post={t.post.post} onDone={ws.refresh} />}
                 {!canApprove && t.post.status !== 'blocked' && (
                   <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
                     Open the post

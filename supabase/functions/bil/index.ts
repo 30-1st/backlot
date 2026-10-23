@@ -37,6 +37,8 @@ import {
   onboardClient,
   resumeCampaign,
   ReviewPostRequest,
+  FillDetailRequest,
+  fillDetail,
   reviewPost,
   startCampaign,
 } from '../_shared/bil.ts';
@@ -119,8 +121,10 @@ async function handle(req: Request): Promise<Response> {
       }
       case 'review_post':
         return reply(200, await reviewPost(member, parse(ReviewPostRequest, input)));
+      case 'fill_detail':
+        return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign, resume or review_post.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, approve_voice, estimate, campaign, resume, review_post or fill_detail.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

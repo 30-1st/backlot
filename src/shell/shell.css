@@ -1846,3 +1846,9 @@ a.bl-card:hover,
 .bl-plan.pick .bl-radio { box-shadow: inset 0 0 0 6px var(--accent); }
 .bl-root[data-theme='night'] .bl-chip-ink.next { background: var(--ink); color: var(--bg); }
 .bl-root[data-theme='night'] .bl-chip-ink.bad { background: var(--danger-wash); color: var(--danger); }
+
+/* A held post: what Bil needs, and a box to give it. */
+.bl-detail { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.bl-detail-needs { margin: 0; padding: 10px 12px 10px 28px; border-radius: 12px; background: var(--danger-wash); color: var(--ink); font-size: 13px; line-height: 1.4; }
+.bl-detail-needs li + li { margin-top: 4px; }
+.bl-detail textarea.bl-input { resize: vertical; min-height: 72px; font: inherit; }

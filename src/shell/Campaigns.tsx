@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
-import { DayView } from './Schedule';
+import { DayView, DetailBox } from './Schedule';
 import { timedPosts } from './timing';
 import type { Campaign, Post } from './data';
 import { Back } from './icons';
@@ -269,7 +269,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
               {working
                 ? 'New posts appear here as he finishes them.'
                 : blocked.length
-                  ? `${blocked.length} ${blocked.length === 1 ? 'post needs' : 'posts need'} a detail before they can be written. See All posts.`
+                  ? `${blocked.length} ${blocked.length === 1 ? 'post needs' : 'posts need'} a detail before they can be written. Give it under All posts.`
                   : 'Every post has a decision. Copy the approved ones when it is time to post.'}
             </span>
           </div>
@@ -292,7 +292,11 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
                   <span style={{ lineHeight: 1.4 }}>
                     {p.status === 'blocked' ? String(p.post.idea ?? 'Waiting on a detail') : String(p.post.hook ?? p.post.draft ?? '')}
                   </span>
-                  {reasons.length > 0 && <span className="bl-small">Needs: {reasons.join(' ')}</span>}
+                  {p.status === 'blocked' ? (
+                    <DetailBox campaignId={campaign.id} slot={p.slot} post={p.post} onDone={ws.refresh} />
+                  ) : (
+                    reasons.length > 0 && <span className="bl-small">Needs: {reasons.join(' ')}</span>
+                  )}
                   {p.review === 'changes' && p.reviewNote && <span className="bl-small">Change asked: {p.reviewNote}</span>}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>

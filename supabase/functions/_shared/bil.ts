@@ -635,6 +635,98 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt };
 }
 
+export const FillDetailRequest = z.object({
+  campaignId: id,
+  slot: z.number().int().min(1).max(60),
+  detail: z.string().trim().min(2).max(500),
+});
+
+/**
+ * A held post gets the real detail it was waiting on (a price, a link, a date), and Bil
+ * rewrites that one post with it. The same code checks run as in a campaign, with one
+ * retry for fixable slips. The team or that client may answer; it costs one short call.
+ */
+export async function fillDetail(m: Member, req: z.infer<typeof FillDetailRequest>) {
+  const db = serviceClient();
+  const { data: campaign, error: cError } = await db
+    .from('campaigns').select('id, client_id, owner_id, status, request, plan').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
+  if (cError) throw new Error(`Could not read the campaign: ${cError.message}`);
+  if (!campaign) throw new BilInputError('No such campaign.', 404);
+  requireClientAccess(m, campaign.client_id);
+  const c = campaign as Campaign;
+
+  const { data: row, error: pError } = await db
+    .from('campaign_posts').select('status').eq('campaign_id', c.id).eq('slot', req.slot).maybeSingle();
+  if (pError) throw new Error(`Could not read the post: ${pError.message}`);
+  if (!row) throw new BilInputError('No such post in this campaign.', 404);
+  if (row.status !== 'blocked') throw new BilInputError('This post is already written.', 409);
+
+  const plan = CampaignPlan.parse(c.plan);
+  const slot = plan.slots.find((x) => x.slot === req.slot);
+  if (!slot) throw new BilInputError('This post is not in the campaign plan.', 404);
+
+  return await traced('bil-fill-detail', { sessionId: c.id, userId: c.owner_id, tags: ['detail'] }, async () => {
+    const kit = await loadKit(db, c.client_id, c.owner_id);
+    const mediaFiles = new Map((await loadLibraryFiles(db, kit.clientId, kit.ownerId, slot.mediaId ? [slot.mediaId] : [])).map((f) => [f.id, f]));
+    const { data: written } = await db.from('campaign_posts').select('post').eq('campaign_id', c.id).eq('status', 'ok').order('slot');
+    const hooks = (written ?? []).slice(-20).map((r: any) => String(r.post?.hook ?? '').slice(0, 120)).filter(Boolean);
+    const ctx = checkContextFor(kit, plan);
+    const budget = new Budget('campaign', { runId: c.id, perCallCap: PER_CALL_CAP, db });
+    const details = { [String(slot.slot)]: req.detail };
+
+    let redo: Record<string, string[]> = {};
+    let judged: Judged | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let result;
+      try {
+        result = await bilCall({
+          budget,
+          schema: BatchDraft,
+          prompt: draftPrompt(kit, plan, [slot], redo, hooks, mediaFiles, details),
+          maxOutputTokens: 1400,
+          reasoning: 'low',
+          reasoningAllowance: 3000,
+          timeoutMs: 90_000,
+          functionId: 'bil-fill-detail',
+        });
+      } catch (err) {
+        if (err instanceof RefusalError) {
+          judged = { kind: 'blocked', post: heldPost(slot, ['Grok declined to write this post. Change the idea or write it by hand.']) };
+          break;
+        }
+        throw err;
+      }
+      const p = result.output.posts.find((x) => x.slot === slot.slot) ?? result.output.posts[0];
+      if (!p) {
+        redo = { [String(slot.slot)]: ['This slot was missing last time; write it.'] };
+        continue;
+      }
+      judged = judgeDraft(slot, { ...p, slot: slot.slot }, kit, plan, mediaFiles, ctx);
+      if (judged.kind !== 'redo') break;
+      redo = { [String(slot.slot)]: judged.fixes };
+    }
+    if (!judged || judged.kind === 'redo') {
+      const reasons = judged?.kind === 'redo' ? ['Still breaks a rule after a second try:', ...judged.fixes] : ['Bil could not draft this post after two tries.'];
+      judged = { kind: 'blocked', post: heldPost(slot, reasons) };
+    }
+
+    // Only replace the post if it is still held, so two people answering at once cannot both write it.
+    const { data: saved, error } = await db
+      .from('campaign_posts')
+      .update({ status: judged.kind, post: judged.post, review: 'pending', review_note: null, reviewed_by: null, reviewed_at: null })
+      .eq('campaign_id', c.id)
+      .eq('slot', slot.slot)
+      .eq('status', 'blocked')
+      .select('slot');
+    if (error) throw new Error(`Could not save the post: ${error.message}`);
+    if (!saved?.length) throw new BilInputError('Someone else just answered this post. Refresh to see it.', 409);
+    if (c.status === 'ready' || c.status === 'approved') await finalizeCampaign(db, c);
+
+    const reasons = judged.kind === 'blocked' ? ((judged.post as { blockedReasons?: string[]; compliance?: { blockedReasons?: string[] } }).compliance?.blockedReasons ?? (judged.post as { blockedReasons?: string[] }).blockedReasons ?? []) : [];
+    return { campaignId: c.id, slot: slot.slot, status: judged.kind, reasons, spentUsd: Math.round(budget.spentUsd * 10_000) / 10_000 };
+  });
+}
+
 // =====================================================================================
 // Campaigns
 // =====================================================================================
@@ -1169,14 +1261,24 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
 
 // ---------- step: batch ----------
 
-function batchTask(slots: PlanSlot[], redo: Record<string, string[]>, hooks: string[], kit: Kit, plan: CampaignPlan, media: Map<string, LibraryFile>): string {
+function batchTask(
+  slots: PlanSlot[],
+  redo: Record<string, string[]>,
+  hooks: string[],
+  kit: Kit,
+  plan: CampaignPlan,
+  media: Map<string, LibraryFile>,
+  details: Record<string, string> = {},
+): string {
   const limit = kit.profile.xPremium ? 'Long posts are allowed (X Premium), but most should still be short.' : 'Every post must fit 280 characters as X counts them (a link counts as 23, an emoji as 2).';
   const tags = [...new Set([...kit.profile.allowedHashtags, ...plan.trendHashtags])];
   const list = slots.map((s) => {
     const fix = redo[String(s.slot)];
     const { mediaId, ...rest } = s;
     const file = mediaId ? media.get(mediaId) : undefined;
-    const shown = file ? { ...rest, media: { kind: file.kind, tags: file.tags, ...(file.note ? { note: file.note } : {}) } } : rest;
+    const withMedia = file ? { ...rest, media: { kind: file.kind, tags: file.tags, ...(file.note ? { note: file.note } : {}) } } : rest;
+    const detail = details[String(s.slot)];
+    const shown = detail ? { ...withMedia, detailFromClient: detail } : withMedia;
     return JSON.stringify(fix ? { ...shown, fixFromLastTry: fix } : shown);
   });
   return `# Your task: write these posts
@@ -1189,7 +1291,94 @@ ${list.join('\n')}
 - Do not open the same way as these hooks already used: ${hooks.length ? hooks.map((h) => JSON.stringify(h)).join(' | ') : '(none yet)'}
 - algorithmScore and signals use the X ranking settings above. voiceMatch and drift check the draft against the voice card honestly.
 - When a slot has media, write the post for that exact photo or video (its tags say what is in it), and use mediaIdea to say how to post it (crop, first frame, caption placement). Without media, mediaIdea describes what to shoot.
+- When a slot has detailFromClient, it is the real fact this post was waiting on (a price, a link, a date). Use it exactly as given and invent nothing beyond it. If it still is not enough, say what is missing in compliance.blockedReasons.
 - If a post cannot be written within the rules, still return the slot with the reason in compliance.blockedReasons.`;
+}
+
+/** Everything Bil reads before drafting: the client, X's ranking settings, the plan, then the task. */
+function draftPrompt(
+  kit: Kit,
+  plan: CampaignPlan,
+  slots: PlanSlot[],
+  redo: Record<string, string[]>,
+  hooks: string[],
+  mediaFiles: Map<string, LibraryFile>,
+  details: Record<string, string> = {},
+): string {
+  const planForPrompt = { ...plan, slots: plan.slots.map(({ mediaId: _m, ...rest }) => rest), algorithm: undefined, adjustments: undefined };
+  return [
+    snapshotText(kit),
+    `# X ranking settings (published defaults, xai-org/x-algorithm at ${plan.algorithm.repoCommit.slice(0, 7)})`,
+    JSON.stringify(plan.algorithm.params),
+    ...plan.algorithm.excerpts.map((e) => `## ${e.file} lines ${e.lines}\n${e.text}`),
+    '# The approved campaign plan',
+    JSON.stringify(planForPrompt),
+    batchTask(slots, redo, hooks, kit, plan, mediaFiles, details),
+  ].join('\n');
+}
+
+function checkContextFor(kit: Kit, plan: CampaignPlan): CheckContext {
+  return {
+    premium: kit.profile.xPremium,
+    allowedHashtags: new Set([...kit.profile.allowedHashtags, ...plan.trendHashtags].map((t) => t.toLowerCase())),
+    wordsTheyAvoid: kit.card?.wordsTheyAvoid ?? [],
+    adultAllowed: kit.profile.adultContent && kit.profile.adultsOnlyConfirmed,
+  };
+}
+
+/** A post row for a slot that could not be written, keeping the plan's idea and the reasons. */
+function heldPost(s: PlanSlot, reasons: string[]) {
+  return { order: s.slot, dayOffset: s.dayOffset, postWindow: s.postWindow, postType: s.postType, pillar: s.pillar, stage: s.stage, idea: s.idea, ...(s.mediaId ? { mediaId: s.mediaId } : {}), blockedReasons: reasons.slice(0, 10) };
+}
+
+type Judged =
+  | { kind: 'ok'; post: unknown }
+  | { kind: 'blocked'; post: unknown }
+  | { kind: 'redo'; fixes: string[] };
+
+/** Checks one draft from Grok in code and turns it into what gets saved, or the fixes it needs. */
+function judgeDraft(s: PlanSlot, p: BatchDraft['posts'][number], kit: Kit, plan: CampaignPlan, mediaFiles: Map<string, LibraryFile>, ctx: CheckContext): Judged {
+  const draft = (p.draft ?? '').replace(/—/g, ', ').trim();
+  const flags = {
+    paidOrSponsored: p.compliance.paidOrSponsored,
+    financialContent: p.compliance.financialContent,
+    adultContent: p.compliance.adultContent,
+    promotion: p.compliance.promotion,
+    blockedReasons: cutList(p.compliance.blockedReasons, 5, 200),
+  };
+  const check = checkDraft(draft, flags, ctx);
+  const post = CampaignPost.safeParse({
+    order: s.slot,
+    dayOffset: s.dayOffset,
+    postWindow: s.postWindow,
+    postType: s.postType,
+    pillar: s.pillar,
+    stage: s.stage,
+    hook: cut(p.hook, 280) ?? cut(draft.split('\n')[0], 280),
+    draft,
+    callToAction: cut(p.callToAction, 200),
+    mediaIdea: cut(p.mediaIdea, 400),
+    mediaId: s.mediaId && mediaFiles.has(s.mediaId) ? s.mediaId : undefined,
+    engagementPlan: cut(p.engagementPlan, 400),
+    algorithm: {
+      score: clampInt(p.algorithmScore, 0, 100, 50),
+      signals: p.signals.slice(0, 10).map((g) => ({ action: g.action, effect: g.effect, why: cut(g.why, 240) ?? '' })).filter((g) => g.why),
+      repoFile: PARAMS_FILE,
+      repoCommit: plan.algorithm.repoCommit,
+    },
+    voice: { voiceCardVersion: kit.card?.version ?? 1, match: clampInt(p.voiceMatch, 0, 100, 50), drift: cutList(p.drift, 5, 200) },
+    compliance: {
+      ...flags,
+      licensedApprovalNeeded: Boolean(kit.profile.licensing?.complianceReviewRequired),
+      blockedReasons: [...new Set([...flags.blockedReasons, ...check.blocked])].slice(0, 10),
+    },
+  });
+  if (check.blocked.length || flags.blockedReasons.length) {
+    return { kind: 'blocked', post: post.success ? post.data : heldPost(s, [...flags.blockedReasons, ...check.blocked]) };
+  }
+  const fixes = [...check.redo, ...(post.success ? [] : [`Shape: ${issues(post.error, 2)}`])];
+  if (fixes.length || !post.success) return { kind: 'redo', fixes: fixes.map((f) => f.slice(0, 300)) };
+  return { kind: 'ok', post: post.data };
 }
 
 async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, budget: Budget, deadline: number): Promise<Next> {
@@ -1215,30 +1404,15 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
 
   const picked = slots.map((sl) => sl.mediaId).filter((m): m is string => Boolean(m));
   const mediaFiles = new Map((await loadLibraryFiles(db, kit.clientId, kit.ownerId, picked)).map((f) => [f.id, f]));
-  const planForPrompt = { ...plan, slots: plan.slots.map(({ mediaId: _m, ...rest }) => rest), algorithm: undefined, adjustments: undefined };
-  const prompt = [
-    snapshotText(kit),
-    `# X ranking settings (published defaults, xai-org/x-algorithm at ${plan.algorithm.repoCommit.slice(0, 7)})`,
-    JSON.stringify(plan.algorithm.params),
-    ...plan.algorithm.excerpts.map((e) => `## ${e.file} lines ${e.lines}\n${e.text}`),
-    '# The approved campaign plan',
-    JSON.stringify(planForPrompt),
-    batchTask(slots, redo, hooks, kit, plan, mediaFiles),
-  ].join('\n');
-
-  const ctx: CheckContext = {
-    premium: kit.profile.xPremium,
-    allowedHashtags: new Set([...kit.profile.allowedHashtags, ...plan.trendHashtags].map((t) => t.toLowerCase())),
-    wordsTheyAvoid: kit.card?.wordsTheyAvoid ?? [],
-    adultAllowed: kit.profile.adultContent && kit.profile.adultsOnlyConfirmed,
-  };
+  const prompt = draftPrompt(kit, plan, slots, redo, hooks, mediaFiles);
+  const ctx = checkContextFor(kit, plan);
 
   const newRows: Array<{ campaign_id: string; owner_id: string; slot: number; status: 'ok' | 'blocked'; post: unknown }> = [];
   // Fixes owed to slots outside this batch carry over to the next one.
   const inBatch = new Set(slots.map((s) => String(s.slot)));
   const nextRedo: Record<string, string[]> = Object.fromEntries(Object.entries(redo).filter(([k]) => !inBatch.has(k)));
   const blockRow = (s: PlanSlot, reasons: string[]) =>
-    newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: { order: s.slot, dayOffset: s.dayOffset, postWindow: s.postWindow, postType: s.postType, pillar: s.pillar, stage: s.stage, idea: s.idea, ...(s.mediaId ? { mediaId: s.mediaId } : {}), blockedReasons: reasons.slice(0, 10) } });
+    newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: heldPost(s, reasons) });
 
   let ms = 0;
   try {
@@ -1264,51 +1438,12 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
         else nextRedo[String(s.slot)] = ['This slot was missing last time; write it.'];
         continue;
       }
-      const draft = (p.draft ?? '').replace(/—/g, ', ').trim();
-      const flags = {
-        paidOrSponsored: p.compliance.paidOrSponsored,
-        financialContent: p.compliance.financialContent,
-        adultContent: p.compliance.adultContent,
-        promotion: p.compliance.promotion,
-        blockedReasons: cutList(p.compliance.blockedReasons, 5, 200),
-      };
-      const check = checkDraft(draft, flags, ctx);
-      const post = CampaignPost.safeParse({
-        order: s.slot,
-        dayOffset: s.dayOffset,
-        postWindow: s.postWindow,
-        postType: s.postType,
-        pillar: s.pillar,
-        stage: s.stage,
-        hook: cut(p.hook, 280) ?? cut(draft.split('\n')[0], 280),
-        draft,
-        callToAction: cut(p.callToAction, 200),
-        mediaIdea: cut(p.mediaIdea, 400),
-        mediaId: s.mediaId && mediaFiles.has(s.mediaId) ? s.mediaId : undefined,
-        engagementPlan: cut(p.engagementPlan, 400),
-        algorithm: {
-          score: clampInt(p.algorithmScore, 0, 100, 50),
-          signals: p.signals.slice(0, 10).map((g) => ({ action: g.action, effect: g.effect, why: cut(g.why, 240) ?? '' })).filter((g) => g.why),
-          repoFile: PARAMS_FILE,
-          repoCommit: plan.algorithm.repoCommit,
-        },
-        voice: { voiceCardVersion: kit.card?.version ?? 1, match: clampInt(p.voiceMatch, 0, 100, 50), drift: cutList(p.drift, 5, 200) },
-        compliance: {
-          ...flags,
-          licensedApprovalNeeded: Boolean(kit.profile.licensing?.complianceReviewRequired),
-          blockedReasons: [...new Set([...flags.blockedReasons, ...check.blocked])].slice(0, 10),
-        },
-      });
-      const shapeProblems = post.success ? [] : [`Shape: ${issues(post.error, 2)}`];
-      const fixable = [...check.redo, ...shapeProblems];
-      if (check.blocked.length || flags.blockedReasons.length) {
-        if (post.success) newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: post.data });
-        else blockRow(s, [...flags.blockedReasons, ...check.blocked]);
-      } else if (fixable.length) {
-        if (earlier) blockRow(s, ['Still breaks a rule after a second try:', ...fixable]);
-        else nextRedo[String(s.slot)] = fixable.map((f) => f.slice(0, 300));
-      } else if (post.success) {
-        newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'ok', post: post.data });
+      const judged = judgeDraft(s, p, kit, plan, mediaFiles, ctx);
+      if (judged.kind === 'redo') {
+        if (earlier) blockRow(s, ['Still breaks a rule after a second try:', ...judged.fixes]);
+        else nextRedo[String(s.slot)] = judged.fixes;
+      } else {
+        newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: judged.kind, post: judged.post });
       }
     }
   } catch (err) {
