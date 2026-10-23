@@ -289,3 +289,82 @@ export function XProfileSet({ layer = null }: { layer?: Layer | null }) {
     </div>
   );
 }
+
+/** A stand-in for someone else's post: drawn shapes, no words, so nothing real is pulled in. */
+function StandIn({ seed }: { seed: number }) {
+  const widths = [[92, 78, 40], [86, 54], [95, 88, 70, 30], [64], [90, 45]][seed % 5];
+  const media = seed % 3 === 1;
+  return (
+    <div className="x-post x-standin" aria-hidden="true">
+      <span className="x-post-avatar" />
+      <span className="x-post-main">
+        <span className="x-standin-head">
+          <i style={{ width: `${30 + ((seed * 7) % 20)}%` }} />
+          <i style={{ width: `${18 + ((seed * 5) % 12)}%` }} />
+        </span>
+        {widths.map((w, i) => (
+          <i key={i} className="x-standin-line" style={{ width: `${w}%` }} />
+        ))}
+        {media && <span className="x-standin-media" />}
+        <span className="x-actions">
+          {(['comment', 'repost', 'heart', 'views'] as const).map((icon) => (
+            <span key={icon} className="x-act">
+              <Icon name={icon} size={16} />
+            </span>
+          ))}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The home feed a follower scrolls: this profile's posts that are out at the chosen moment,
+ * newest first, each between plain stand-ins for other accounts, to judge whether they stop
+ * the scroll. Always seen as a visitor: no planning marks, nothing held or scheduled.
+ */
+export function XFeedSet({ layer = null }: { layer?: Layer | null }) {
+  const { sandbox, asOf } = useStage();
+  const { posts, settings } = sandbox;
+  const ours = useMemo<Item[]>(
+    () =>
+      [
+        ...posts.filter((p) => isPublic(p, asOf)).map((p): Item => ({ kind: 'own', post: p, at: p.date })),
+        ...(layer ? layer.posts.filter((p) => !p.held && p.at <= asOf) : []).map((p): Item => ({ kind: 'layer', post: p, at: p.at })),
+      ]
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 10),
+    [posts, layer, asOf],
+  );
+
+  return (
+    <div className="set lit x-set x-feed" data-lighting={settings.lighting}>
+      <div className="tabs x-tabs" aria-hidden="true">
+        <button type="button" aria-selected="true" tabIndex={-1}>
+          For you
+        </button>
+        <button type="button" aria-selected="false" tabIndex={-1}>
+          Following
+        </button>
+      </div>
+      {ours.length === 0 ? (
+        <div className="grid-empty">
+          <Icon name="chat" size={30} />
+          <strong>Nothing out yet</strong>
+          <span>Pick a later day: posts appear here once they go live.</span>
+        </div>
+      ) : (
+        <div className="x-timeline">
+          <StandIn seed={0} />
+          {ours.map((it, i) => (
+            <div key={it.kind === 'own' ? it.post.id : it.post.key} className="x-feed-group">
+              {it.kind === 'own' ? <XPost post={it.post} /> : <LayerPostView post={it.post} layer={layer!} />}
+              <StandIn seed={i * 2 + 1} />
+              <StandIn seed={i * 2 + 2} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

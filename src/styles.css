@@ -3680,3 +3680,42 @@ button.x-post:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* The home feed: this profile's posts between drawn stand-ins for other accounts. */
+.x-feed-group {
+  display: contents;
+}
+.x-standin .x-post-avatar {
+  background: var(--s-fill);
+}
+.x-standin-head {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.x-standin-head i,
+.x-standin-line {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--s-fill);
+}
+.x-standin-head i:first-child {
+  background: color-mix(in srgb, var(--s-muted) 35%, var(--s-fill));
+}
+.x-standin-line {
+  margin-top: 7px;
+}
+.x-standin-media {
+  display: block;
+  aspect-ratio: 16 / 9;
+  margin-top: 10px;
+  border-radius: 16px;
+  background: var(--s-fill);
+}
+.x-standin .x-actions {
+  opacity: 0.6;
+}
+.feed-switch {
+  margin-left: auto;
+}

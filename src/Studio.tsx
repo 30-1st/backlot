@@ -36,7 +36,7 @@ import { ProfileSet } from './components/ProfileSet';
 import { EditSheet, Inspector } from './components/Inspector';
 import { PostsFeed } from './components/PostsFeed';
 import { Intake } from './components/Intake';
-import { XProfileSet } from './components/XProfileSet';
+import { XFeedSet, XProfileSet } from './components/XProfileSet';
 import { DayChips, LayerPicker, useCampaignLayer } from './components/CampaignLayer';
 
 /** The working screen for one narration of one account: the set, its tools, and saving. */
@@ -74,6 +74,8 @@ export function Studio({
 
   const [view, setView] = useState<View>('creator');
   const [seenOn, setSeenOn] = useState<number | null>(null);
+  // X only, as a visitor: the profile page, or the home feed a follower scrolls.
+  const [feed, setFeed] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [intake, setIntake] = useState(false);
@@ -621,6 +623,19 @@ export function Studio({
                         </button>
                       )}
                     </label>
+                    {platform === 'x' && (
+                      <span className="feed-switch">
+                        <Segmented
+                          label="What the visitor is looking at"
+                          value={feed ? 'feed' : 'profile'}
+                          options={[
+                            { value: 'profile', label: 'Profile' },
+                            { value: 'feed', label: 'Home feed' },
+                          ]}
+                          onChange={(v) => setFeed(v === 'feed')}
+                        />
+                      </span>
+                    )}
                     {campaign.layer && <DayChips layer={campaign.layer} asOf={asOf} onPick={setSeenOn} />}
                   </>
                 )}
@@ -631,7 +646,11 @@ export function Studio({
                 <i className="mark tr" />
                 <i className="mark bl" />
                 <i className="mark br" />
-                {platform === 'x' ? <XProfileSet layer={campaign.layer} /> : <ProfileSet onAddHighlight={addHighlight} />}
+                {platform === 'x' ? (
+                  !creator && feed ? <XFeedSet layer={campaign.layer} /> : <XProfileSet layer={campaign.layer} />
+                ) : (
+                  <ProfileSet onAddHighlight={addHighlight} />
+                )}
               </div>
             </div>
           </div>
