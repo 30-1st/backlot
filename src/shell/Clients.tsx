@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Checklist, setupLeft, stepsFor } from './Checklist';
 import type { ScreenProps } from './Shell';
 
 // Clients: every client in the workspace, with a way into their schedule, what works for
@@ -6,7 +8,8 @@ import type { ScreenProps } from './Shell';
 export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId: string) => void }) {
   const clients = ws.data?.clients ?? [];
   const voiceOf = (id: string) => ws.data?.voices.find((v) => v.clientId === id);
-  const open = (id: string, path: string) => {
+  const [open, setOpen] = useState<string | null>(null);
+  const goFor = (id: string, path: string) => {
     pick(id);
     go(path);
   };
@@ -28,6 +31,8 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
       )}
       {clients.map((c) => {
         const v = voiceOf(c.id);
+        const left = ws.data ? setupLeft(ws.data, c) : 0;
+        const total = ws.data ? stepsFor(ws.data, c).length : 0;
         return (
           <section key={c.id} className="bl-glass-card bl-rise" aria-label={`@${c.handle}`}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -35,16 +40,28 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
               <span className="bl-chip-ink">{v ? (v.approved ? 'Voice approved' : 'Voice waiting') : 'No voice yet'}</span>
             </div>
             <div className="bl-row-actions">
-              <button type="button" className="bl-ghost" onClick={() => open(c.id, 'campaigns')}>
+              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'campaigns')}>
                 Schedule
               </button>
-              <button type="button" className="bl-ghost" onClick={() => open(c.id, 'insights')}>
+              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'insights')}>
                 What works
               </button>
-              <button type="button" className="bl-ghost" onClick={() => open(c.id, 'library')}>
+              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'library')}>
                 Media
               </button>
+              <button type="button" className="bl-ghost" aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>
+                {left ? `Setup ${total - left} of ${total}` : 'Set up'}
+              </button>
             </div>
+            {open === c.id && ws.data && (
+              <Checklist
+                ws={ws.data}
+                client={c}
+                isTeam
+                go={(path) => goFor(c.id, path)}
+                onChanged={() => void ws.refresh()}
+              />
+            )}
           </section>
         );
       })}

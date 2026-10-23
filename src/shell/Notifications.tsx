@@ -1,5 +1,6 @@
 import { isTeamRole, type Me } from '../lib/team';
 import type { Workspace } from './data';
+import { Checklist, setupLeft } from './Checklist';
 import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
@@ -236,9 +237,21 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
     </li>
   );
 
+  // A client still being set up sees their checklist first.
+  const mine = !isTeam && me.clientId ? ws.data.clients.find((c) => c.id === me.clientId) : undefined;
+  const setup = mine && setupLeft(ws.data, mine) > 0 ? mine : undefined;
+
   return (
     <main className="bl-today">
       <h1 className="bl-sr">Today</h1>
+      {setup && (
+        <section className="bl-glass-card bl-in" aria-labelledby="setup-title">
+          <h2 id="setup-title" className="bl-section-title" style={{ margin: 0 }}>
+            Getting set up
+          </h2>
+          <Checklist ws={ws.data} client={setup} isTeam={false} go={go} onChanged={() => void ws.refresh()} />
+        </section>
+      )}
       {next && <NextUp t={next} isTeam={isTeam} go={go} />}
 
       {needs.length > 0 && (

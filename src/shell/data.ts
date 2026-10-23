@@ -32,18 +32,25 @@ export type Post = {
   reviewedAt: string | null;
 };
 
+export type OnboardingStep = 'delegate' | 'first_call' | 'contract';
+export type StepDone = { clientId: string; step: OnboardingStep; doneAt: string };
+
 export type Workspace = {
   clients: Client[];
   voices: Voice[];
   campaigns: Campaign[];
   posts: Post[];
+  /** Onboarding steps a person ticked. The rest are worked out from the data. */
+  steps: StepDone[];
+  /** How many Media files each client has, not counting removed ones. */
+  mediaCounts: Record<string, number>;
 };
 
-const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [] };
+const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], steps: [], mediaCounts: {} };
 
 async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
-  const [c, v, k, p] = await Promise.all([
+  const [c, v, k, p, s, m] = await Promise.all([
     supabase.from('clients').select('id, x_handle, profile').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
@@ -52,8 +59,10 @@ async function load(): Promise<Workspace> {
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at').order('slot').limit(1000),
+    supabase.from('onboarding_steps').select('client_id, step, done_at'),
+    supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
   ]);
-  const error = c.error ?? v.error ?? k.error ?? p.error;
+  const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error;
   if (error) throw new Error(error.message);
   return {
     clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {} })),
@@ -70,6 +79,11 @@ async function load(): Promise<Workspace> {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     })),
+    steps: (s.data ?? []).map((r: Json) => ({ clientId: r.client_id, step: r.step, doneAt: r.done_at })),
+    mediaCounts: (m.data ?? []).reduce((acc: Record<string, number>, r: Json) => {
+      acc[r.client_id] = (acc[r.client_id] ?? 0) + 1;
+      return acc;
+    }, {}),
     posts: (p.data ?? []).map((r: Json) => ({
       campaignId: r.campaign_id,
       slot: r.slot,
