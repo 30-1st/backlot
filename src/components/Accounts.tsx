@@ -208,7 +208,7 @@ export function Accounts({
         </div>
       </main>
 
-      {intake && <Intake onBuild={build} onClose={() => setIntake(false)} onExample={useExample} />}
+      {intake && <Intake platform={platform} onBuild={build} onClose={() => setIntake(false)} onExample={useExample} />}
       {sharing && onPeople && (
         <ShareDialog
           narrationId={sharing.id}

@@ -1,5 +1,6 @@
 import { useMemo, useState, type DragEvent, type FormEvent } from 'react';
 import type { Sandbox } from '../types';
+import type { Platform } from '../platforms';
 import { MediaError, isMediaFile, storeFile } from '../lib/media';
 import { newPost } from '../state';
 import { hosted } from '../lib/supabase';
@@ -16,13 +17,18 @@ export function Intake({
   onBuild,
   onClose,
   onExample,
+  platform = 'instagram',
 }: {
+  /** Which app the profile is staged as. X has no download to bring in, so it starts typed. */
+  platform?: Platform;
   onBuild: (sandbox: Sandbox, count: number, notes?: string[]) => void;
   onClose: () => void;
   /** When given, offers the example profile as a quicker way in. */
   onExample?: () => void;
 }) {
-  const [mode, setMode] = useState<'download' | 'manual'>('download');
+  const isX = platform === 'x';
+  const [mode, setMode] = useState<'download' | 'manual'>(isX ? 'manual' : 'download');
+  const [banner, setBanner] = useState<File | null>(null);
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -36,6 +42,7 @@ export function Intake({
   const [error, setError] = useState('');
 
   const avatarUrl = useMemo(() => (avatar ? URL.createObjectURL(avatar) : ''), [avatar]);
+  const bannerUrl = useMemo(() => (banner ? URL.createObjectURL(banner) : ''), [banner]);
 
   function addFiles(list: File[]) {
     const good = list.filter(isMediaFile);
@@ -52,12 +59,13 @@ export function Intake({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!username.trim()) return setError('Add your username so the profile has a name.');
+    if (!username.trim()) return setError(isX ? 'Add your handle so the profile has a name.' : 'Add your username so the profile has a name.');
     if (!consent) return setError('Tick the box to confirm this is your own profile and content.');
     setBusy(true);
     setError('');
     try {
       const avatarItem = avatar ? await storeFile(avatar) : null;
+      const bannerItem = isX && banner ? await storeFile(banner) : null;
       const items = await Promise.all(files.map(storeFile));
       const now = Date.now();
       // A file's own date is the best first guess at when it was posted.
@@ -70,6 +78,7 @@ export function Intake({
       const media: Sandbox['media'] = {};
       for (const item of items) media[item.id] = item;
       if (avatarItem) media[avatarItem.id] = avatarItem;
+      if (bannerItem) media[bannerItem.id] = bannerItem;
 
       onBuild(
         {
@@ -85,6 +94,7 @@ export function Intake({
             followers: followers ?? 0,
             following: following ?? 0,
             postCount: null,
+            ...(bannerItem ? { banner: bannerItem.id } : {}),
           },
           highlights: [],
           posts,
@@ -109,13 +119,14 @@ export function Intake({
     );
   }
 
+  const maxBio = isX ? 160 : 150;
   return (
-    <Modal label="Bring in your profile" className="intake" onClose={onClose}>
+    <Modal label={isX ? 'Set up your X profile' : 'Bring in your profile'} className="intake" onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <header className="intake-head">
-          <h2>Bring in your profile</h2>
+          <h2>{isX ? 'Set up your X profile' : 'Bring in your profile'}</h2>
           <p>
-            Type in the basics and add your own photos and videos.{' '}
+            {isX ? 'Type in the basics. Add photos and videos for posts with media, or write posts once the set is built.' : 'Type in the basics and add your own photos and videos.'}{' '}
             {hosted ? 'They are copied into your Backlot account' : 'Everything stays in this browser'}, and you can
             change all of it once the set is built.
           </p>
@@ -138,28 +149,37 @@ export function Intake({
             />
           </div>
 
+          {isX && (
+            <div className="avatar-edit">
+              <span className="banner-thumb">
+                {bannerUrl ? <img src={bannerUrl} alt="" /> : <span className="media-empty"><Icon name="image" size={20} /></span>}
+              </span>
+              <FileButton label={banner ? 'Change header image' : 'Add header image'} icon="image" className="btn sm" imagesOnly onFiles={(f) => setBanner(f[0])} />
+            </div>
+          )}
+
           <div className="row2">
             <label className="field">
-              <span className="field-label">Username</span>
+              <span className="field-label">{isX ? 'Handle' : 'Username'}</span>
               <input
                 id="in-username"
                 value={username}
-                maxLength={30}
+                maxLength={isX ? 15 : 30}
                 autoComplete="off"
                 spellCheck={false}
                 placeholder="yourhandle"
-                onChange={(e) => setUsername(e.target.value.replace(/[\s@]/g, '').toLowerCase())}
+                onChange={(e) => setUsername(isX ? e.target.value.replace(/[^A-Za-z0-9_]/g, '') : e.target.value.replace(/[\s@]/g, '').toLowerCase())}
               />
             </label>
             <label className="field">
               <span className="field-label">Name</span>
-              <input id="in-name" value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
+              <input id="in-name" value={name} maxLength={isX ? 50 : 64} onChange={(e) => setName(e.target.value)} />
             </label>
           </div>
 
           <label className="field">
             <span className="field-label">Bio</span>
-            <textarea id="in-bio" rows={3} maxLength={150} value={bio} onChange={(e) => setBio(e.target.value)} />
+            <textarea id="in-bio" rows={3} maxLength={maxBio} value={bio} onChange={(e) => setBio(e.target.value)} />
           </label>
 
           <div className="row2">
@@ -182,7 +202,7 @@ export function Intake({
             onDragLeave={() => setOver(false)}
             onDrop={onDrop}
           >
-            <strong>{files.length ? `${files.length} ${files.length === 1 ? 'post' : 'posts'} ready` : 'Your posts'}</strong>
+            <strong>{files.length ? `${files.length} ${files.length === 1 ? 'post' : 'posts'} ready` : isX ? 'Posts with media (optional)' : 'Your posts'}</strong>
             <span>Drop photos and videos here, one file per post. Each post takes its date from the file.</span>
             <div className="drop-actions">
               <FileButton label={files.length ? 'Add more' : 'Choose files'} icon="plus" className="btn sm" multiple onFiles={addFiles} />
@@ -210,9 +230,11 @@ export function Intake({
         </div>
 
         <footer className="intake-foot">
-          <button type="button" className="btn quiet intake-alt" onClick={() => setMode('download')}>
-            Use my Instagram download
-          </button>
+          {!isX && (
+            <button type="button" className="btn quiet intake-alt" onClick={() => setMode('download')}>
+              Use my Instagram download
+            </button>
+          )}
           {onExample && (
             <button type="button" className="btn quiet" onClick={onExample}>
               Use the example profile instead

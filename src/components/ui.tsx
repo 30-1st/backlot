@@ -62,6 +62,8 @@ const paths = {
   link: 'M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1',
   pencil: 'M4 20h4L19 9l-4-4L4 16v4ZM13.500 6.500l4 4',
   more: 'M5 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0ZM11 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0ZM17 12a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z',
+  repost: 'M7 7h10l-3-3M17 17H7l3 3M17 7v5M7 17v-5',
+  views: 'M5 20v-6M10 20V9M15 20v-9M20 20V5',
 } as const;
 
 export type IconName = keyof typeof paths;

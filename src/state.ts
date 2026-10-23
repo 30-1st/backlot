@@ -1,4 +1,5 @@
 import { createContext, useContext, type Dispatch } from 'react';
+import type { Platform } from './platforms';
 import type {
   Highlight,
   MediaItem,
@@ -127,6 +128,7 @@ export function patchForStatus(post: Post, status: PostStatus, now: number): Par
 export function referencedMedia(s: Sandbox): Set<string> {
   const ids = new Set<string>();
   if (s.profile.avatar) ids.add(s.profile.avatar);
+  if (s.profile.banner) ids.add(s.profile.banner);
   for (const h of s.highlights) if (h.cover) ids.add(h.cover);
   for (const p of s.posts) for (const id of p.media) ids.add(id);
   return ids;
@@ -160,6 +162,8 @@ export interface Stage {
    * scrolling list of posts. Always true on phone-sized screens.
    */
   native: boolean;
+  /** Which app the page is staged as. */
+  platform: Platform;
 }
 
 export const StageContext = createContext<Stage | null>(null);

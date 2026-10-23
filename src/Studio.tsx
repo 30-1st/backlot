@@ -36,6 +36,7 @@ import { ProfileSet } from './components/ProfileSet';
 import { EditSheet, Inspector } from './components/Inspector';
 import { PostsFeed } from './components/PostsFeed';
 import { Intake } from './components/Intake';
+import { XProfileSet } from './components/XProfileSet';
 
 /** The working screen for one narration of one account: the set, its tools, and saving. */
 export function Studio({
@@ -370,6 +371,14 @@ export function Studio({
     );
   }
 
+  /** X: a post can be words alone. */
+  function addTextPost() {
+    const post = newPost([], { draft: true });
+    dispatch({ type: 'addPosts', posts: [post] });
+    setSelection({ type: 'post', id: post.id });
+    say('Added a draft post. Only you can see it until you set it live.');
+  }
+
   function addHighlight() {
     const id = uid('h');
     dispatch({ type: 'addHighlight', highlight: { id, title: 'New', cover: null } });
@@ -412,8 +421,9 @@ export function Studio({
       say,
       canEdit,
       native,
+      platform,
     }),
-    [sandbox, view, now, asOf, selection, say, canEdit, native],
+    [sandbox, view, now, asOf, selection, say, canEdit, native, platform],
   );
 
   const tally = useMemo(() => {
@@ -491,7 +501,12 @@ export function Studio({
 
           {tools && (
             <div className="tools">
-              <FileButton label="Add posts" icon="plus" className="btn primary" multiple onFiles={addPosts} />
+              {platform === 'x' && (
+                <button type="button" className="btn primary" onClick={addTextPost}>
+                  <Icon name="plus" /> <span>New post</span>
+                </button>
+              )}
+              <FileButton label={platform === 'x' ? 'Add media' : 'Add posts'} icon={platform === 'x' ? 'image' : 'plus'} className={platform === 'x' ? 'btn' : 'btn primary'} multiple onFiles={addPosts} />
               {!shared && (
                 <button type="button" className="btn" onClick={() => setPoint(sandbox)}>
                   <Icon name="flag" /> <span>Save point</span>
@@ -574,7 +589,7 @@ export function Studio({
                       <i className="dot" style={{ background: 'var(--draft)' }} />
                       {tally.draft} {plural(tally.draft, 'draft')}
                     </span>
-                    {canEdit && (
+                    {canEdit && platform !== 'x' && (
                       <span className="tally-hint">
                         {small
                           ? 'Hold a post, then drag it onto another to swap them.'
@@ -611,7 +626,7 @@ export function Studio({
                 <i className="mark tr" />
                 <i className="mark bl" />
                 <i className="mark br" />
-                <ProfileSet onAddHighlight={addHighlight} />
+                {platform === 'x' ? <XProfileSet /> : <ProfileSet onAddHighlight={addHighlight} />}
               </div>
             </div>
           </div>
@@ -621,7 +636,7 @@ export function Studio({
 
         {openId && <PostsFeed startId={openId} onClose={() => setOpenId(null)} />}
         {tools && selection && (native || openId !== null) && <EditSheet />}
-        {intake && <Intake onBuild={build} onClose={() => setIntake(false)} />}
+        {intake && <Intake platform={platform} onBuild={build} onClose={() => setIntake(false)} />}
         {sharing && meta && onPeople && (
           <ShareDialog
             narrationId={narrationId}

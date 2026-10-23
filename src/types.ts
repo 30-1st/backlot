@@ -21,6 +21,9 @@ export interface Post {
   pinnedAt: number | null;
   likes: number;
   comments: number;
+  /** X only: reposts and views. Missing on older narrations, read as 0. */
+  reposts?: number;
+  views?: number;
 }
 
 export interface Highlight {
@@ -40,6 +43,8 @@ export interface Profile {
   following: number;
   /** null means "count the posts a visitor can see". */
   postCount: number | null;
+  /** X only: the header image across the top of the profile. */
+  banner?: string | null;
 }
 
 export interface Settings {

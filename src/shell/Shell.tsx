@@ -12,7 +12,7 @@ import { TeamScreen } from './Team';
 import { ChangePassword } from './ChangePassword';
 import { HomeRooms } from './Rooms';
 import { ClientsScreen } from './Clients';
-import { PlaygroundScreen, PlaygroundSoon } from './Playground';
+import { PlaygroundScreen } from './Playground';
 import { MeasureFlow, PlanFlow } from './PlanFlow';
 import { AddClientFlow } from './AddClientFlow';
 import { ReinScreen } from './Rein';
@@ -22,11 +22,11 @@ import { ReinScreen } from './Rein';
 //   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #create
 //   Client                    #today, #campaigns and #library (Media) for a client; the team previews
 //                             a client's view under #client, #client.campaigns[.id]
-//   Playground (everyone)     #playground  #instagram (narration studio)  #narrate-x  #rein
+//   Playground (everyone)     #playground  #instagram and #x (narration studios)  #rein
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'narrate-x', 'rein'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -108,7 +108,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   // Which room this screen belongs to.
   const room: RoomKey = preview
     ? 'preview'
-    : ['playground', 'narrate', 'narrate-x', 'rein'].includes(head)
+    : ['playground', 'narrate', 'rein'].includes(head)
       ? 'play'
       : head === 'account' || head === 'team'
         ? 'account'
@@ -156,9 +156,6 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'narrate':
       screen = <PlaygroundScreen {...props} />;
       break;
-    case 'narrate-x':
-      screen = <PlaygroundSoon {...props} tool="x" />;
-      break;
     case 'rein':
       screen = <ReinScreen {...props} />;
       break;
@@ -168,7 +165,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const title =
     room === 'team' ? 'Team' : room === 'client' ? 'Your posts' : room === 'preview' ? 'Client' : room === 'play' ? 'Playground' : 'Account';
-  const nested = head === 'narrate-x' || head === 'rein';
+  const nested = head === 'rein';
 
   const budget = me.budget;
   const used = budget && budget.cap > 0 ? Math.min(100, Math.round((budget.used / budget.cap) * 100)) : 0;

@@ -3146,3 +3146,330 @@ button.ncard:hover {
   border-color: var(--brass);
   color: var(--brass);
 }
+
+/* ---------- The set, staged as an X profile ---------- */
+
+.x-set {
+  font-size: 15px;
+  line-height: 1.3125;
+}
+.x-muted {
+  color: var(--s-muted);
+}
+.x-topbar {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 16px;
+}
+.x-topbar b {
+  font-size: 18px;
+  font-weight: 800;
+}
+.x-topbar .x-muted {
+  font-size: 13px;
+}
+.x-banner {
+  aspect-ratio: 3 / 1;
+  background: var(--s-fill);
+  overflow: hidden;
+}
+.x-banner[role='button'] {
+  cursor: pointer;
+}
+.x-banner img,
+.x-banner video,
+.x-banner .media-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.x-id {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 16px;
+}
+.x-avatar {
+  display: block;
+  width: clamp(72px, 22%, 134px);
+  aspect-ratio: 1;
+  margin-top: max(-67px, -11%);
+  padding: 0;
+  border: 4px solid var(--s-bg);
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--s-fill);
+  color: var(--s-muted);
+}
+.x-avatar img,
+.x-avatar video,
+.x-avatar .media-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.x-id-btn {
+  padding-top: 12px;
+  min-height: 48px;
+}
+.x-pill {
+  height: 36px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.x-pill:not(.solid) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--s-line);
+}
+.x-head.is-selected .x-avatar {
+  border-color: var(--brass);
+}
+.x-head.is-selected .x-banner {
+  box-shadow: inset 0 0 0 2px var(--brass);
+}
+.x-bio {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 16px 12px;
+  min-width: 0;
+}
+.x-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.x-bio p {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.x-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 10px;
+}
+.x-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.x-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 10px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.x-counts b {
+  font-weight: 700;
+}
+.tabs.x-tabs {
+  justify-content: stretch;
+  gap: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--s-line);
+}
+.x-tabs button {
+  flex: 1;
+  justify-content: center;
+  margin: 0;
+  padding: 16px 4px 14px;
+  border-top: 0;
+  border-bottom: 4px solid transparent;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.x-tabs button[aria-selected='true'] {
+  font-weight: 700;
+  border-bottom-color: var(--s-fg);
+  border-radius: 0;
+}
+.x-timeline {
+  display: flex;
+  flex-direction: column;
+}
+.x-post {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--s-line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.x-post {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+button.x-post:hover {
+  background: color-mix(in srgb, var(--s-fill) 55%, transparent);
+}
+.x-post.is-selected {
+  box-shadow: inset 3px 0 0 var(--brass);
+  background: color-mix(in srgb, var(--s-fill) 70%, transparent);
+}
+.x-post.is-draft,
+.x-post.is-scheduled {
+  opacity: 0.78;
+}
+.x-post-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--s-fill);
+}
+.x-post-avatar img,
+.x-post-avatar video,
+.x-post-avatar .media-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.x-post-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.x-pinned {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--s-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.x-post-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  min-width: 0;
+}
+.x-post-head b {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.x-status {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.x-status.is-scheduled {
+  color: var(--sched);
+}
+.x-status.is-draft {
+  color: var(--draft);
+}
+.x-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.x-media {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  border: 1px solid var(--s-line);
+  border-radius: 16px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+.x-media.n1 {
+  aspect-ratio: auto;
+}
+.x-media.n2 {
+  grid-template-columns: 1fr 1fr;
+}
+.x-media.n3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.x-media.n3 .x-media-cell:first-child {
+  grid-row: span 2;
+}
+.x-media.n4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.x-media-cell {
+  position: relative;
+  display: block;
+  min-height: 0;
+  background: var(--s-fill);
+}
+.x-media-cell img,
+.x-media-cell video,
+.x-media-cell .media-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.x-media.n1 .x-media-cell img,
+.x-media.n1 .x-media-cell video {
+  height: auto;
+  max-height: 510px;
+}
+.x-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.x-actions {
+  display: flex;
+  justify-content: space-between;
+  max-width: 425px;
+  margin-top: 10px;
+  color: var(--s-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.x-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 48px;
+}
+.banner-thumb {
+  flex: none;
+  width: 120px;
+  aspect-ratio: 3 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--stage-3);
+}
+.banner-thumb img,
+.banner-thumb video,
+.banner-thumb .media-empty {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* X is a single 600px column; the tape marks follow the narrower set. */
+.set-wrap:has(> .x-set) {
+  width: 100%;
+  max-width: 624px;
+  margin-inline: auto;
+}

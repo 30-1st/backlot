@@ -76,8 +76,10 @@ export function EditSheet() {
 /* ---------- Profile ---------- */
 
 function ProfileEditor() {
-  const { sandbox, dispatch, asOf, say } = useStage();
+  const { sandbox, dispatch, asOf, say, platform } = useStage();
   const { profile, media, settings, posts } = sandbox;
+  const isX = platform === 'x';
+  const maxBio = isX ? 160 : 150;
   const set = (patch: Partial<typeof profile>) => dispatch({ type: 'profile', patch });
   const visible = posts.filter((p) => !p.draft && p.date <= asOf).length;
 
@@ -86,6 +88,13 @@ function ProfileEditor() {
     if (items.length === 0) return say(problems.join(' '));
     dispatch({ type: 'media', items });
     set({ avatar: items[0].id });
+  }
+
+  async function changeBanner(files: File[]) {
+    const { items, problems } = await storeFiles(files.slice(0, 1));
+    if (items.length === 0) return say(problems.join(' '));
+    dispatch({ type: 'media', items });
+    set({ banner: items[0].id });
   }
 
   return (
@@ -106,30 +115,46 @@ function ProfileEditor() {
         </div>
       </div>
 
-      <Field label="Username">
+      {isX && (
+        <div className="avatar-edit">
+          <span className="banner-thumb">
+            <MediaView item={profile.banner ? media[profile.banner] : undefined} />
+          </span>
+          <div className="stack-sm">
+            <FileButton label={profile.banner ? 'Change header' : 'Add header'} icon="swap" className="btn sm" imagesOnly onFiles={changeBanner} />
+            {profile.banner && (
+              <button type="button" className="btn quiet sm" onClick={() => set({ banner: null })}>
+                Remove header
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <Field label={isX ? 'Handle' : 'Username'}>
         <input
           id="pf-username"
           value={profile.username}
-          maxLength={30}
+          maxLength={isX ? 15 : 30}
           autoComplete="off"
           spellCheck={false}
-          onChange={(e) => set({ username: e.target.value.replace(/\s/g, '').toLowerCase() })}
+          onChange={(e) => set({ username: isX ? e.target.value.replace(/[^A-Za-z0-9_]/g, '') : e.target.value.replace(/\s/g, '').toLowerCase() })}
         />
       </Field>
       <Field label="Name">
-        <input id="pf-name" value={profile.name} maxLength={64} onChange={(e) => set({ name: e.target.value })} />
+        <input id="pf-name" value={profile.name} maxLength={isX ? 50 : 64} onChange={(e) => set({ name: e.target.value })} />
       </Field>
-      <Field label="Category">
+      <Field label={isX ? 'Location' : 'Category'}>
         <input
           id="pf-category"
           value={profile.category}
-          maxLength={40}
-          placeholder="Artist, Digital creator, Shop"
+          maxLength={isX ? 30 : 40}
+          placeholder={isX ? 'City or region' : 'Artist, Digital creator, Shop'}
           onChange={(e) => set({ category: e.target.value })}
         />
       </Field>
-      <Field label="Bio" hint={`${profile.bio.length} of 150`}>
-        <textarea id="pf-bio" rows={4} maxLength={150} value={profile.bio} onChange={(e) => set({ bio: e.target.value })} />
+      <Field label="Bio" hint={`${profile.bio.length} of ${maxBio}`}>
+        <textarea id="pf-bio" rows={4} maxLength={maxBio} value={profile.bio} onChange={(e) => set({ bio: e.target.value })} />
       </Field>
       <Field label="Link">
         <input
@@ -177,6 +202,7 @@ function ProfileEditor() {
           onChange={(lighting) => dispatch({ type: 'settings', patch: { lighting } })}
         />
       </div>
+      {!isX && (
       <div className="field">
         <span className="field-label">Grid crop</span>
         <Segmented
@@ -190,6 +216,7 @@ function ProfileEditor() {
           onChange={(tile) => dispatch({ type: 'settings', patch: { tile } })}
         />
       </div>
+      )}
     </>
   );
 }
@@ -197,7 +224,12 @@ function ProfileEditor() {
 /* ---------- Post ---------- */
 
 function PostEditor({ post }: { post: Post }) {
-  const { sandbox, dispatch, now, select, openPost, say } = useStage();
+  const { sandbox, dispatch, now, select, openPost, say, platform } = useStage();
+  const isX = platform === 'x';
+  // X takes up to 4 photos or videos on a post and pins one post at a time.
+  const maxMedia = isX ? 4 : MAX_CAROUSEL;
+  const maxPinned = isX ? 1 : MAX_PINNED;
+  const maxText = isX ? 280 : 2200;
   const [shot, setShot] = useState(0);
   const set = (patch: Partial<Post>) => dispatch({ type: 'post', id: post.id, patch });
   const status = statusOf(post, now);
@@ -209,14 +241,14 @@ function PostEditor({ post }: { post: Post }) {
   }, [shot, post.media.length]);
 
   async function addMedia(files: File[]) {
-    const room = MAX_CAROUSEL - post.media.length;
+    const room = maxMedia - post.media.length;
     const { items, problems } = await storeFiles(files.slice(0, room));
     if (items.length > 0) {
       dispatch({ type: 'media', items });
       set({ media: [...post.media, ...items.map((m) => m.id)] });
     }
     const notes = [...problems];
-    if (files.length > room) notes.unshift(`A post holds up to ${MAX_CAROUSEL} photos or videos. Added the first ${room}.`);
+    if (files.length > room) notes.unshift(`A post holds up to ${maxMedia} photos or videos. Added the first ${room}.`);
     if (notes.length > 0) say(notes.join(' '));
   }
 
@@ -243,7 +275,7 @@ function PostEditor({ post }: { post: Post }) {
 
   function togglePin() {
     if (post.pinnedAt !== null) return set({ pinnedAt: null });
-    if (pinnedCount >= MAX_PINNED) return say(`Up to ${MAX_PINNED} posts can be pinned. Unpin one first.`);
+    if (pinnedCount >= maxPinned) return say(maxPinned === 1 ? 'One post can be pinned at a time. Unpin the other first.' : `Up to ${maxPinned} posts can be pinned. Unpin one first.`);
     set({ pinnedAt: Date.now() });
   }
 
@@ -251,6 +283,7 @@ function PostEditor({ post }: { post: Post }) {
     <>
       <h2>Post</h2>
 
+      {post.media.length > 0 && (
       <div className="shots">
         {post.media.map((id, i) => (
           <button
@@ -262,14 +295,15 @@ function PostEditor({ post }: { post: Post }) {
             onClick={() => setShot(i)}
           >
             <MediaView item={sandbox.media[id]} />
-            {i === 0 && post.media.length > 1 && <span className="shot-cover">Cover</span>}
+            {!isX && i === 0 && post.media.length > 1 && <span className="shot-cover">Cover</span>}
           </button>
         ))}
       </div>
+      )}
       <div className="shot-tools">
-        <FileButton label="Swap" icon="swap" className="btn sm" onFiles={replaceMedia} />
-        {post.media.length < MAX_CAROUSEL && (
-          <FileButton label="Add" icon="plus" className="btn sm" multiple onFiles={addMedia} />
+        {post.media.length > 0 && <FileButton label="Swap" icon="swap" className="btn sm" onFiles={replaceMedia} />}
+        {post.media.length < maxMedia && (
+          <FileButton label={post.media.length === 0 ? 'Add photo or video' : 'Add'} icon="plus" className="btn sm" multiple onFiles={addMedia} />
         )}
         {post.media.length > 1 && (
           <>
@@ -308,7 +342,7 @@ function PostEditor({ post }: { post: Post }) {
         <span className="field-hint">
           {status === 'live' && 'Visitors see this post.'}
           {status === 'scheduled' && `Visitors see this from ${dateTime(post.date, now)}.`}
-          {status === 'draft' && 'Only you see this. Its date decides where it sits in the grid.'}
+          {status === 'draft' && `Only you see this. Its date decides where it sits in the ${isX ? 'timeline' : 'grid'}.`}
         </span>
       </div>
 
@@ -324,35 +358,60 @@ function PostEditor({ post }: { post: Post }) {
         />
       </Field>
 
-      <Field label="Caption" hint={`${post.caption.length} of 2,200`}>
+      <Field label={isX ? 'Post text' : 'Caption'} hint={`${post.caption.length} of ${maxText.toLocaleString('en-US')}`}>
         <textarea
           id="post-caption"
           rows={5}
-          maxLength={2200}
+          maxLength={maxText}
           value={post.caption}
           onChange={(e) => set({ caption: e.target.value })}
         />
       </Field>
-      <Field label="Location">
-        <input id="post-location" value={post.location} maxLength={60} onChange={(e) => set({ location: e.target.value })} />
-      </Field>
+      {isX ? (
+        <>
+          <div className="row2">
+            <Field label="Replies">
+              <NumberInput id="post-comments" value={post.comments} onChange={(v) => set({ comments: v ?? 0 })} />
+            </Field>
+            <Field label="Reposts">
+              <NumberInput id="post-reposts" value={post.reposts ?? 0} onChange={(v) => set({ reposts: v ?? 0 })} />
+            </Field>
+          </div>
+          <div className="row2">
+            <Field label="Likes">
+              <NumberInput id="post-likes" value={post.likes} onChange={(v) => set({ likes: v ?? 0 })} />
+            </Field>
+            <Field label="Views">
+              <NumberInput id="post-views" value={post.views ?? 0} onChange={(v) => set({ views: v ?? 0 })} />
+            </Field>
+          </div>
+        </>
+      ) : (
+        <>
+          <Field label="Location">
+            <input id="post-location" value={post.location} maxLength={60} onChange={(e) => set({ location: e.target.value })} />
+          </Field>
 
-      <div className="row2">
-        <Field label="Likes">
-          <NumberInput id="post-likes" value={post.likes} onChange={(v) => set({ likes: v ?? 0 })} />
-        </Field>
-        <Field label="Comments">
-          <NumberInput id="post-comments" value={post.comments} onChange={(v) => set({ comments: v ?? 0 })} />
-        </Field>
-      </div>
+          <div className="row2">
+            <Field label="Likes">
+              <NumberInput id="post-likes" value={post.likes} onChange={(v) => set({ likes: v ?? 0 })} />
+            </Field>
+            <Field label="Comments">
+              <NumberInput id="post-comments" value={post.comments} onChange={(v) => set({ comments: v ?? 0 })} />
+            </Field>
+          </div>
+        </>
+      )}
 
       <div className="panel-actions">
         <button type="button" className="btn" aria-pressed={post.pinnedAt !== null} onClick={togglePin}>
           <Icon name="pin" fill={post.pinnedAt !== null} /> {post.pinnedAt !== null ? 'Unpin' : 'Pin to top'}
         </button>
-        <button type="button" className="btn" onClick={() => openPost(post.id)}>
-          <Icon name="eye" /> Open post
-        </button>
+        {!isX && (
+          <button type="button" className="btn" onClick={() => openPost(post.id)}>
+            <Icon name="eye" /> Open post
+          </button>
+        )}
         <ConfirmButton
           className="danger"
           icon="trash"
