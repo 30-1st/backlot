@@ -44,7 +44,7 @@ import { Region, ReinBrief } from './schemas/rein.ts';
 import { AGENT_MODELS, grokBilled, grokCost, grokEstimate, MODELS, X_PRICES } from './models.ts';
 import { grokOptions, privateTelemetry, type Reasoning, xaiClient } from './grok.ts';
 import { Budget, serviceClient, SpendLimitError } from './spend.ts';
-import { impl } from './toolbox.ts';
+import { impl, xGet } from './toolbox.ts';
 import { algorithmParams, algorithmSearch, PARAMS_FILE } from './algorithm.ts';
 import { callRein, REIN_ESTIMATE_USD } from './rein-client.ts';
 import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts';
@@ -737,6 +737,91 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
     if (error) throw new Error(`Could not save the report: ${error.message}`);
     return { id: saved.id, numbers, summary, costUsd };
   });
+}
+
+// ---------- the engagement desk ----------
+
+export const DeskRequest = z.object({
+  requestId: id,
+  clientId: id,
+  /** Also read who replied to or mentioned the client in the last 2 days (paid). */
+  replies: z.boolean().default(false),
+});
+
+const DESK_REPLIES = 25;
+const DESK_CONVERSATIONS = 15;
+const excerptOf = (t: unknown) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) || null;
+
+/**
+ * Fills a client's engagement desk. Conversations come free from Rein's latest brief for
+ * the client (never for adult niches). Replies, when asked for, are read from X: posts that
+ * mention the client in the last 2 days, not their own. Only post IDs and short excerpts
+ * are kept, never who wrote them. Backlot never replies; a person does, by hand.
+ */
+export async function deskCheck(m: Member, req: z.infer<typeof DeskRequest>) {
+  requireTeam(m);
+  const db = serviceClient();
+  const { data: client, error } = await db.from('clients').select('id, x_handle, x_user_id, profile').eq('id', req.clientId).eq('owner_id', m.workspaceId).maybeSingle();
+  if (error) throw new Error(`Could not read the client: ${error.message}`);
+  if (!client) throw new BilInputError('No such client.', 404);
+  const adult = Boolean((client.profile as { adultContent?: unknown } | null)?.adultContent);
+  const rows: Array<Record<string, unknown>> = [];
+  let costUsd = 0;
+  let replies = 0;
+
+  if (req.replies) {
+    const budget = new Budget('desk', { runId: req.requestId, perCallCap: PER_CALL_CAP });
+    let userId: string | null = client.x_user_id;
+    if (!userId) {
+      const prof = await impl.x_profile_lookup({ budget, ownerId: m.workspaceId }, { handle: client.x_handle });
+      userId = prof.userId;
+      const { error: e } = await db.from('clients').update({ x_user_id: userId }).eq('id', req.clientId).eq('owner_id', m.workspaceId);
+      if (e) console.error('Could not save the X user ID', e.message);
+    }
+    const url = new URL(`https://api.x.com/2/users/${userId}/mentions`);
+    url.searchParams.set('max_results', String(DESK_REPLIES));
+    url.searchParams.set('start_time', new Date(Date.now() - 48 * 3_600_000).toISOString());
+    url.searchParams.set('tweet.fields', 'created_at,note_tweet,author_id');
+    const body = await xGet(
+      budget,
+      'x_desk_mentions',
+      url,
+      DESK_REPLIES * X_PRICES.postRead,
+      (b) => (Array.isArray(b?.data) ? b.data.length : 0) * X_PRICES.postRead,
+      `x_mentions:${userId}`,
+    );
+    for (const p of Array.isArray(body?.data) ? body.data : []) {
+      if (!p?.id || p.author_id === userId) continue;
+      const text = typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text;
+      rows.push({ kind: 'reply', post_id: String(p.id), excerpt: excerptOf(text), posted_at: p.created_at ?? null });
+      replies += 1;
+    }
+    costUsd = Math.round(budget.spentUsd * 1e4) / 1e4;
+  }
+
+  let conversations = 0;
+  if (!adult) {
+    const { data: line } = await db.from('client_briefs').select('brief_id').eq('client_id', req.clientId).eq('workspace_id', m.workspaceId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (line) {
+      const [{ data: nb }, { data: ev }] = await Promise.all([
+        db.from('niche_briefs').select('brief').eq('id', line.brief_id).maybeSingle(),
+        db.from('brief_evidence').select('trend_index, post_id, excerpt').eq('brief_id', line.brief_id).limit(60),
+      ]);
+      const trends: Array<{ topic?: unknown }> = Array.isArray((nb?.brief as { trends?: unknown } | null)?.trends) ? (nb!.brief as { trends: Array<{ topic?: unknown }> }).trends : [];
+      for (const e of (ev ?? []).slice(0, DESK_CONVERSATIONS)) {
+        rows.push({ kind: 'conversation', post_id: String(e.post_id), excerpt: excerptOf(e.excerpt), topic: excerptOf(trends[e.trend_index]?.topic) });
+        conversations += 1;
+      }
+    }
+  }
+
+  if (rows.length) {
+    const { error: e } = await db
+      .from('desk_items')
+      .upsert(rows.map((r) => ({ ...r, workspace_id: m.workspaceId, client_id: req.clientId })), { onConflict: 'client_id,post_id', ignoreDuplicates: true });
+    if (e) throw new Error(`Could not save the desk: ${e.message}`);
+  }
+  return { replies, conversations, costUsd, adult };
 }
 
 // ---------- the approvals log ----------

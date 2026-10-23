@@ -320,6 +320,9 @@ export function MonthView({ ws, focus, isTeam, go, onDay, onDayView }: ScreenPro
         <button type="button" className="bl-linkish" onClick={() => go('reports')}>
           Monthly reports
         </button>
+        <button type="button" className="bl-linkish" onClick={() => go('desk')}>
+          Engagement desk
+        </button>
       </div>
     </main>
   );

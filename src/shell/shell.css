@@ -1967,3 +1967,10 @@ a.bl-card:hover,
 .bl-report-top { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .bl-report-top li { display: flex; flex-direction: column; gap: 2px; }
 .bl-report-list { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+
+/* ---------- Engagement desk ---------- */
+.bl-desk { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: linear-gradient(165deg, var(--deck-a), var(--deck-b)); box-shadow: inset 0 1px 0 var(--deck-edge-a), inset 0 0 0 1px var(--deck-edge-b); }
+.bl-desk-item { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; min-width: 0; }
+.bl-desk-item + .bl-desk-item { border-top: 1px solid var(--deck-edge-b); }
+.bl-desk-text { margin: 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.bl-desk-meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

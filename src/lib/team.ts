@@ -142,6 +142,9 @@ export const bil = {
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),
+  /** Fills a client's engagement desk: trend posts (free) and, with replies, who replied to them (paid). */
+  desk: (clientId: string, replies: boolean) =>
+    call<{ replies: number; conversations: number; costUsd: number; adult: boolean }>('bil', 'desk', { requestId: crypto.randomUUID(), clientId, replies }),
   /** The monthly report for one client and month (YYYY-MM). Replaces that month's report. */
   report: (clientId: string, month: string) =>
     call<{ id: string; costUsd: number }>('bil', 'report', { requestId: crypto.randomUUID(), clientId, month }),
