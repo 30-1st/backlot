@@ -8,8 +8,8 @@ import type { Client, OnboardingStep, Workspace } from './data';
 // first call, the agreement). The client sees it on Today until it is done; the team sees
 // it on each client in Clients.
 
-// The X account the team works from. Set VITE_TEAM_X_HANDLE when it exists.
-const TEAM_HANDLE = (import.meta.env.VITE_TEAM_X_HANDLE as string | undefined)?.trim().replace(/^@/, '') || '';
+// The X account the team works from. VITE_TEAM_X_HANDLE can change it without a code change.
+const TEAM_HANDLE = (import.meta.env.VITE_TEAM_X_HANDLE as string | undefined)?.trim().replace(/^@/, '') || 'backlotsocial';
 
 type Who = 'team' | 'client' | 'either';
 export type Step = {
