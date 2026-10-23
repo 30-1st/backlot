@@ -5,10 +5,11 @@ import { signedUrls } from '../lib/clientMedia';
 // A post's own photo or video from the client's Media, matched by Bil. When a post has
 // none yet but Bil described one, the frame shows the shot to take instead.
 
-type File = { kind: string; url: string };
+export type File = { kind: string; url: string };
 const cache = new Map<string, File | 'gone'>();
 
-function useFile(id: string | null): File | 'gone' | null {
+/** A Media file's signed link and kind, cached for the visit. 'gone' when it was removed. */
+export function useFile(id: string | null): File | 'gone' | null {
   const [file, setFile] = useState<File | 'gone' | null>(id ? cache.get(id) ?? null : null);
   useEffect(() => {
     if (!id || !supabase) return;

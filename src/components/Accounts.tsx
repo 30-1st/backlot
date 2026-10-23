@@ -17,6 +17,7 @@ import { MediaOwner, pruneMedia } from '../lib/media';
 import { leaveShare, listSharedWithMe, shareCounts, type NarrationCard } from '../lib/people';
 import { plural, shortDate } from '../lib/format';
 import { makeExample } from '../sample';
+import { rememberLayer, takeXIntent } from './CampaignLayer';
 import { Intake } from './Intake';
 import { PeopleButton } from './PeopleButton';
 import { ShareDialog } from './ShareDialog';
@@ -52,6 +53,11 @@ export function Accounts({
 }) {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [intake, setIntake] = useState(false);
+  // Arriving from "See it on X": set up the client's @ and show the campaign on it.
+  const [intent] = useState(() => (platform === 'x' ? takeXIntent() : null));
+  useEffect(() => {
+    if (intent) setIntake(true);
+  }, [intent]);
   const [failed, setFailed] = useState(false);
   // Sharing exists only where there are logins.
   const [shared, setShared] = useState<NarrationCard[]>([]);
@@ -80,6 +86,7 @@ export function Accounts({
   async function build(sandbox: Sandbox, count: number, notes: string[] = []) {
     try {
       const meta = await createAccount(platform, sandbox);
+      if (intent) rememberLayer(meta.id, intent.campaignId);
       onOpen(
         meta.id,
         [
@@ -208,7 +215,9 @@ export function Accounts({
         </div>
       </main>
 
-      {intake && <Intake platform={platform} onBuild={build} onClose={() => setIntake(false)} onExample={useExample} />}
+      {intake && (
+        <Intake platform={platform} initialHandle={intent?.handle} onBuild={build} onClose={() => setIntake(false)} onExample={intent ? undefined : useExample} />
+      )}
       {sharing && onPeople && (
         <ShareDialog
           narrationId={sharing.id}

@@ -16,14 +16,14 @@ export type Timed = {
   day: string;
 };
 
-function addDays(iso: string, n: number): string {
+export function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
 /** The instant a wall-clock time happens in a time zone. */
-function zoned(day: string, hh: number, mm: number, tz: string): Date {
+export function zoned(day: string, hh: number, mm: number, tz: string): Date {
   const [y, m, d] = day.split('-').map(Number);
   const guess = Date.UTC(y, m - 1, d, hh, mm);
   try {

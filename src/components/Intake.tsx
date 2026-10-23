@@ -19,7 +19,10 @@ export function Intake({
   onClose,
   onExample,
   platform = 'instagram',
+  initialHandle = '',
 }: {
+  /** Typed in already, for example when opened from a campaign's "See it on X". */
+  initialHandle?: string;
   /** Which app the profile is staged as. X has no download to bring in, so it starts typed. */
   platform?: Platform;
   onBuild: (sandbox: Sandbox, count: number, notes?: string[]) => void;
@@ -30,7 +33,7 @@ export function Intake({
   const isX = platform === 'x';
   const [mode, setMode] = useState<'download' | 'manual'>(isX ? 'manual' : 'download');
   const [banner, setBanner] = useState<File | null>(null);
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(initialHandle.replace(/[^A-Za-z0-9_]/g, '').slice(0, 15));
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [followers, setFollowers] = useState<number | null>(0);

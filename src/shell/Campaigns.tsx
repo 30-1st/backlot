@@ -5,6 +5,8 @@ import { DayView, DetailBox } from './Schedule';
 import { timedPosts } from './timing';
 import type { Campaign, Post } from './data';
 import { Back } from './icons';
+import { listAccounts } from '../lib/library';
+import { rememberLayer, setXIntent } from '../components/CampaignLayer';
 import { campaignTitle } from './Notifications';
 import type { ScreenProps } from './Shell';
 
@@ -112,6 +114,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<number | null>(null);
 
@@ -158,6 +161,28 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
     }
   }
 
+  // Opens this client's X narration with the campaign layered on it, or X setup for their @.
+  async function seeOnX() {
+    setOpening(true);
+    setError('');
+    try {
+      const handle = ws.data?.clients.find((c) => c.id === campaign.clientId)?.handle ?? '';
+      const h = handle.toLowerCase();
+      const mine = (await listAccounts('x')).flatMap((a) => a.narrations);
+      const match = mine.filter((n) => h && n.username.toLowerCase() === h).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (match) {
+        rememberLayer(match.id, campaign.id);
+        go(`x.${match.id}`);
+      } else {
+        setXIntent({ handle, campaignId: campaign.id });
+        go('x');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open your X narrations.');
+      setOpening(false);
+    }
+  }
+
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="bl-bar" style={{ justifyContent: 'flex-start', gap: 12 }}>
@@ -170,6 +195,9 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           </span>
           <span className="bl-label bl-ellipsis">Goal: {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
         </div>
+        <button type="button" className="bl-ghost" style={{ marginLeft: 'auto', flexShrink: 0 }} disabled={opening} onClick={() => void seeOnX()}>
+          {opening ? 'Opening' : 'See it on X'}
+        </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

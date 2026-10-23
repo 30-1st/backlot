@@ -37,6 +37,7 @@ import { EditSheet, Inspector } from './components/Inspector';
 import { PostsFeed } from './components/PostsFeed';
 import { Intake } from './components/Intake';
 import { XProfileSet } from './components/XProfileSet';
+import { DayChips, LayerPicker, useCampaignLayer } from './components/CampaignLayer';
 
 /** The working screen for one narration of one account: the set, its tools, and saving. */
 export function Studio({
@@ -402,6 +403,8 @@ export function Studio({
   }
 
   const asOf = view === 'visitor' && seenOn !== null ? seenOn : now;
+  // A Bil campaign shown on top of an X narration, for the team or that client.
+  const campaign = useCampaignLayer(narrationId, platform === 'x' && !shared, sandbox.profile.username);
 
   const stage = useMemo<Stage>(
     () => ({
@@ -589,6 +592,7 @@ export function Studio({
                       <i className="dot" style={{ background: 'var(--draft)' }} />
                       {tally.draft} {plural(tally.draft, 'draft')}
                     </span>
+                    {campaign.available && <LayerPicker options={campaign.options} chosen={campaign.chosen} onChoose={campaign.choose} />}
                     {canEdit && platform !== 'x' && (
                       <span className="tally-hint">
                         {small
@@ -617,6 +621,7 @@ export function Studio({
                         </button>
                       )}
                     </label>
+                    {campaign.layer && <DayChips layer={campaign.layer} asOf={asOf} onPick={setSeenOn} />}
                   </>
                 )}
               </div>
@@ -626,7 +631,7 @@ export function Studio({
                 <i className="mark tr" />
                 <i className="mark bl" />
                 <i className="mark br" />
-                {platform === 'x' ? <XProfileSet /> : <ProfileSet onAddHighlight={addHighlight} />}
+                {platform === 'x' ? <XProfileSet layer={campaign.layer} /> : <ProfileSet onAddHighlight={addHighlight} />}
               </div>
             </div>
           </div>

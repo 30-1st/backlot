@@ -85,14 +85,14 @@ async function load(): Promise<Workspace> {
 const WORKING = new Set(['planning', 'drafting']);
 
 /** Loads the workspace and refreshes it every 15 seconds while Bil is still drafting. */
-export function useWorkspace() {
+export function useWorkspace(enabled = true) {
   const [data, setData] = useState<Workspace | null>(null);
   const [error, setError] = useState('');
   const alive = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await load();
+      const next = enabled ? await load() : EMPTY;
       if (alive.current) {
         setData(next);
         setError('');
@@ -100,7 +100,7 @@ export function useWorkspace() {
     } catch (e) {
       if (alive.current) setError(e instanceof Error ? e.message : 'Could not load your workspace.');
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     alive.current = true;
