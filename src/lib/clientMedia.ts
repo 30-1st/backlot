@@ -19,7 +19,12 @@ export type LibraryItem = {
   note: string | null;
   createdAt: string;
   removedAt: string | null;
+  status: MediaStatus;
+  /** Only files with this on may ever appear on the client's Kris page. */
+  krisOk: boolean;
 };
+
+export type MediaStatus = 'new' | 'approved' | 'retired';
 
 export const MAX_BYTES = 50 * 1024 * 1024;
 const KEEP_REMOVED_DAYS = 7;
@@ -91,6 +96,8 @@ function row(r: Record<string, unknown>): LibraryItem {
     note: (r.note as string | null) ?? null,
     createdAt: String(r.created_at),
     removedAt: (r.removed_at as string | null) ?? null,
+    status: r.status === 'approved' || r.status === 'retired' ? r.status : 'new',
+    krisOk: Boolean(r.kris_ok),
   };
 }
 
@@ -99,7 +106,7 @@ export async function listLibrary(clientId: string): Promise<LibraryItem[]> {
   const since = new Date(Date.now() - KEEP_REMOVED_DAYS * 86_400_000).toISOString();
   const { data, error } = await db()
     .from('library_items')
-    .select('id, client_id, path, kind, mime, bytes, width, height, duration_s, tags, note, created_at, removed_at')
+    .select('id, client_id, path, kind, mime, bytes, width, height, duration_s, tags, note, created_at, removed_at, status, kris_ok')
     .eq('client_id', clientId)
     .or(`removed_at.is.null,removed_at.gt.${since}`)
     .order('created_at', { ascending: false })
@@ -202,6 +209,11 @@ export async function addFile(workspaceId: string, clientId: string, file: File,
 
 export async function setTags(id: string, tags: string[], note: string | null): Promise<void> {
   const { error } = await db().rpc('library_set', { p_id: id, p_tags: tags, p_note: note });
+  if (error) throw new Error(error.message);
+}
+
+export async function setStatus(id: string, status: MediaStatus, krisOk: boolean): Promise<void> {
+  const { error } = await db().rpc('library_status', { p_id: id, p_status: status, p_kris_ok: krisOk });
   if (error) throw new Error(error.message);
 }
 

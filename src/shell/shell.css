@@ -1886,3 +1886,8 @@ a.bl-card:hover,
 .bl-brand-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .bl-brand-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; }
 .bl-brand-check input { width: 20px; height: 20px; margin: 0; flex-shrink: 0; accent-color: var(--accent-text); }
+
+/* Media gaps */
+.bl-gaps { display: flex; flex-direction: column; gap: 8px; }
+.bl-gaps > ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.45; }
+.bl-shots { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }

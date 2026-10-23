@@ -9,11 +9,14 @@ import {
   refuse,
   removeFile,
   restoreFile,
+  setStatus,
   setTags,
   signedUrls,
   type LibraryItem,
+  type MediaStatus,
 } from '../lib/clientMedia';
 import { plural } from '../lib/format';
+import { daysSince, shotsWanted, usage } from './gaps';
 import type { ScreenProps } from './Shell';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
@@ -48,7 +51,9 @@ function Thumb({ item, url, big = false }: { item: LibraryItem; url?: string; bi
   );
 }
 
-export function LibraryScreen({ me, ws, single, isTeam }: ScreenProps) {
+const STALE_DAYS = 14;
+
+export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const clientId = single;
   const client = ws.data?.clients.find((c) => c.id === clientId) ?? null;
   const [items, setItems] = useState<LibraryItem[] | null>(null);
@@ -81,16 +86,44 @@ export function LibraryScreen({ me, ws, single, isTeam }: ScreenProps) {
     if (clientId) void postTypeTags(clientId).then(setTypeTags, () => setTypeTags([]));
   }, [clientId, load]);
 
-  const live = useMemo(() => (items ?? []).filter((i) => !i.removedAt), [items]);
+  const kept = useMemo(() => (items ?? []).filter((i) => !i.removedAt), [items]);
   const removed = useMemo(() => (items ?? []).filter((i) => i.removedAt), [items]);
+  // Retired files stay out of the usual view; they have a filter of their own.
+  const live = useMemo(() => kept.filter((i) => i.status !== 'retired'), [kept]);
+  const retired = useMemo(() => kept.filter((i) => i.status === 'retired'), [kept]);
   const untagged = live.filter((i) => i.tags.length === 0);
+  const { used, planned } = useMemo(() => (ws.data && clientId ? usage(ws.data, clientId) : { used: new Set<string>(), planned: new Set<string>() }), [ws.data, clientId]);
+  const fresh = live.filter((i) => i.status === 'new');
+  const approved = live.filter((i) => i.status === 'approved');
+  const usedFiles = live.filter((i) => used.has(i.id));
+  const shots = ws.data && clientId ? shotsWanted(ws.data, clientId) : [];
+  const newest = (kind: 'photo' | 'video') => kept.filter((i) => i.kind === kind).map((i) => i.createdAt).sort().pop();
+  const videoDays = daysSince(newest('video'));
+  const photoDays = daysSince(newest('photo'));
+  const gaps = [
+    ...(items !== null && kept.length > 0 && (videoDays === null || videoDays >= STALE_DAYS) ? [videoDays === null ? 'No videos yet.' : `No new video in ${videoDays} days.`] : []),
+    ...(items !== null && kept.length > 0 && photoDays !== null && photoDays >= STALE_DAYS ? [`No new photos in ${photoDays} days.`] : []),
+  ];
   const topTags = useMemo(() => {
     const n = new Map<string, number>();
     for (const i of live) for (const t of i.tags) n.set(t, (n.get(t) ?? 0) + 1);
     return [...n.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
   }, [live]);
-  const shown = filter === 'all' ? live : filter === 'untagged' ? untagged : live.filter((i) => i.tags.includes(filter));
-  const open = live.find((i) => i.id === openId) ?? null;
+  const shown =
+    filter === 'all'
+      ? live
+      : filter === 'untagged'
+        ? untagged
+        : filter === ':new'
+          ? fresh
+          : filter === ':approved'
+            ? approved
+            : filter === ':used'
+              ? usedFiles
+              : filter === ':retired'
+                ? retired
+                : live.filter((i) => i.tags.includes(filter));
+  const open = kept.find((i) => i.id === openId) ?? null;
 
   async function addFiles(files: FileList | File[]) {
     if (!clientId) return;
@@ -197,17 +230,60 @@ export function LibraryScreen({ me, ws, single, isTeam }: ScreenProps) {
         </div>
       )}
 
-      {untagged.length > 0 && (
-        <p className="bl-p" style={{ margin: 0 }}>
-          {untagged.length} {plural(untagged.length, 'file needs', 'files need')} tags. Bil can only plan around tagged files.
-        </p>
+      {(untagged.length > 0 || shots.length > 0 || gaps.length > 0) && (
+        <section className="bl-glass-card bl-gaps" aria-labelledby="gaps-title">
+          <b id="gaps-title">What Media needs</b>
+          <ul>
+            {untagged.length > 0 && (
+              <li>
+                {untagged.length} {plural(untagged.length, 'file needs', 'files need')} tags. Bil can only plan around tagged files.
+              </li>
+            )}
+            {gaps.map((g) => (
+              <li key={g}>{g} Fresh media keeps posts from repeating.</li>
+            ))}
+            {shots.length > 0 && (
+              <li>
+                Bil asked for {shots.length} {plural(shots.length, 'shot')} in planned posts:
+                <ol className="bl-shots">
+                  {shots.slice(0, 4).map((s) => (
+                    <li key={`${s.campaignId}:${s.slot}`}>{s.idea}</li>
+                  ))}
+                </ol>
+                <button type="button" className="bl-linkish" onClick={() => go(`campaigns.${shots[0].campaignId}`)}>
+                  {shots.length > 4 ? `See all ${shots.length} in the campaign` : 'See the posts'}
+                </button>
+              </li>
+            )}
+          </ul>
+        </section>
       )}
 
-      {live.length > 0 && (
+      {kept.length > 0 && (
         <div className="bl-filters" role="group" aria-label="Show">
-          {['all', ...(untagged.length ? ['untagged'] : []), ...topTags].map((f) => (
+          {[
+            'all',
+            ...(untagged.length ? ['untagged'] : []),
+            ...(fresh.length && fresh.length < live.length ? [':new'] : []),
+            ...(approved.length ? [':approved'] : []),
+            ...(usedFiles.length ? [':used'] : []),
+            ...(retired.length ? [':retired'] : []),
+            ...topTags,
+          ].map((f) => (
             <button key={f} type="button" className="bl-tagchip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {f === 'all' ? `All ${live.length}` : f === 'untagged' ? `Untagged ${untagged.length}` : f}
+              {f === 'all'
+                ? `All ${live.length}`
+                : f === 'untagged'
+                  ? `Untagged ${untagged.length}`
+                  : f === ':new'
+                    ? `New ${fresh.length}`
+                    : f === ':approved'
+                      ? `Approved ${approved.length}`
+                      : f === ':used'
+                        ? `Used ${usedFiles.length}`
+                        : f === ':retired'
+                          ? `Retired ${retired.length}`
+                          : f}
             </button>
           ))}
         </div>
@@ -220,7 +296,17 @@ export function LibraryScreen({ me, ws, single, isTeam }: ScreenProps) {
               <button type="button" className="bl-tile" onClick={() => setOpenId(i.id)} aria-label={`${i.kind === 'video' ? 'Video' : 'Photo'}${i.tags.length ? `: ${i.tags.join(', ')}` : ', untagged'}`}>
                 <Thumb item={i} url={urls[i.path]} />
                 {i.kind === 'video' && <span className="bl-tile-badge num">{seconds(i.durationS) || 'Video'}</span>}
-                {i.tags.length === 0 && <span className="bl-tile-badge warn">Needs tags</span>}
+                {i.tags.length === 0 ? (
+                  <span className="bl-tile-badge warn">Needs tags</span>
+                ) : used.has(i.id) ? (
+                  <span className="bl-tile-badge">Used</span>
+                ) : planned.has(i.id) ? (
+                  <span className="bl-tile-badge">In a plan</span>
+                ) : i.status === 'approved' ? (
+                  <span className="bl-tile-badge">Approved</span>
+                ) : i.status === 'retired' ? (
+                  <span className="bl-tile-badge">Retired</span>
+                ) : null}
               </button>
             </li>
           ))}
@@ -296,6 +382,8 @@ function TagSheet({
   const [note, setNote] = useState(item.note ?? '');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
+  const [status, setStatusState] = useState<MediaStatus>(item.status);
+  const [krisOk, setKrisOk] = useState(item.krisOk);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -319,6 +407,7 @@ function TagSheet({
     setBusy(true);
     try {
       await setTags(item.id, tags, note.trim() || null);
+      if (status !== item.status || krisOk !== item.krisOk) await setStatus(item.id, status, krisOk && status !== 'retired');
       onSaved();
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Could not save the tags.');
@@ -385,12 +474,35 @@ function TagSheet({
           Note for Bil (optional)
         </label>
         <textarea id="note" className="bl-input" rows={2} maxLength={300} value={note} placeholder="For example: only use after Friday" onChange={(e) => setNote(e.target.value)} />
+        <div className="bl-field">
+          <span className="bl-label">Status</span>
+          <div className="bl-seg" role="group" aria-label="Status">
+            {(
+              [
+                ['new', 'New'],
+                ['approved', 'Approved'],
+                ['retired', 'Retired'],
+              ] as const
+            ).map(([v, l]) => (
+              <button key={v} type="button" aria-pressed={status === v} onClick={() => setStatusState(v)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="bl-small">
+            {status === 'retired' ? 'Kept for the record. Bil never plans with it again.' : status === 'approved' ? 'Good to use. Bil plans with it.' : 'Bil plans with it once it has tags.'}
+          </span>
+        </div>
+        <label className="bl-brand-check">
+          <input type="checkbox" checked={krisOk && status !== 'retired'} disabled={status === 'retired'} onChange={(e) => setKrisOk(e.target.checked)} />
+          <span>OK for Kris to show. Only files with this on can ever appear on the client&rsquo;s Kris page.</span>
+        </label>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <button type="button" className="bl-ghost bl-danger-text" onClick={() => void remove()} disabled={busy}>
             Remove
           </button>
           <button type="button" className="bl-btn" onClick={() => void save()} disabled={busy}>
-            {busy ? 'Saving' : tags.length ? `Save ${tags.length} ${plural(tags.length, 'tag')}` : 'Save'}
+            {busy ? 'Saving' : 'Save'}
           </button>
         </div>
         <p className="bl-small" style={{ margin: 0 }}>

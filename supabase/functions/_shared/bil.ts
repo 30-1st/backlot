@@ -276,7 +276,9 @@ export async function loadLibraryFiles(db: SupabaseClient, clientId: string, own
     .select('id, kind, tags, note, duration_s')
     .eq('client_id', clientId)
     .eq('workspace_id', ownerId)
-    .is('removed_at', null);
+    .is('removed_at', null)
+    // Retired files are kept for the record but never planned with again.
+    .neq('status', 'retired');
   if (ids) {
     if (ids.length === 0) return [];
     q = q.in('id', ids);

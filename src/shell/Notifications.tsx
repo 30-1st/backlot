@@ -1,6 +1,7 @@
 import { isTeamRole, type Me } from '../lib/team';
 import type { Workspace } from './data';
 import { Checklist, setupLeft } from './Checklist';
+import { shotsWanted } from './gaps';
 import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
@@ -136,6 +137,23 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
         action: { label: 'See insights', path: 'insights', primary: false },
       });
     }
+  }
+
+  // Shots Bil asked for that are not in Media yet.
+  for (const c of ws.clients) {
+    if (!inScope(c.id)) continue;
+    const shots = shotsWanted(ws, c.id);
+    if (!shots.length) continue;
+    items.push({
+      key: `${c.id}:shots`,
+      at: new Date().toISOString(),
+      needs: true,
+      label: `@${c.handle} · Media`,
+      title: `Bil asked for ${shots.length} ${shots.length === 1 ? 'shot' : 'shots'}`,
+      body: shots[0].idea.length > 90 ? `${shots[0].idea.slice(0, 88)}…` : shots[0].idea,
+      // A client goes to their Media; the team to the campaign, which is always the right client.
+      action: isTeam ? { label: 'See the shots', path: `campaigns.${shots[0].campaignId}`, primary: false } : { label: 'Open Media', path: 'library', primary: true },
+    });
   }
 
   return items.sort((a, b) => Number(b.needs) - Number(a.needs) || b.at.localeCompare(a.at));
