@@ -290,6 +290,31 @@ export async function loadLibraryFiles(db: SupabaseClient, clientId: string, own
     .map((r: any) => ({ id: r.id, kind: r.kind === 'video' ? 'video' : 'photo', tags: r.tags, note: r.note ?? null, seconds: r.duration_s == null ? null : Number(r.duration_s) }));
 }
 
+export type BoardItem = { id: string; verdict: 'more' | 'not'; note: string; kind: 'link' | 'shot' };
+
+/** Days a board item counts before it fades, unless pinned. */
+export const BOARD_FADE_DAYS = 28;
+
+/**
+ * The client's live inspiration board: pinned items, and the rest from the last 28 days.
+ * Bil reads the verdict and the note only, never the screenshot or the linked post.
+ */
+export async function loadBoard(db: SupabaseClient, clientId: string, ownerId: string): Promise<BoardItem[]> {
+  const since = new Date(Date.now() - BOARD_FADE_DAYS * 86_400_000).toISOString();
+  const { data, error } = await db
+    .from('inspiration_items')
+    .select('id, kind, verdict, note, pinned, created_at')
+    .eq('client_id', clientId)
+    .eq('workspace_id', ownerId)
+    .is('removed_at', null)
+    .or(`pinned.eq.true,created_at.gt.${since}`)
+    .order('pinned', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(40);
+  if (error) throw new Error(`Could not read the inspiration board: ${error.message}`);
+  return (data ?? []).map((r: any) => ({ id: r.id, kind: r.kind === 'shot' ? 'shot' : 'link', verdict: r.verdict === 'not' ? 'not' : 'more', note: String(r.note ?? '').slice(0, 280) }));
+}
+
 /**
  * The client as Grok sees them. Built the same way for every step of a campaign, so it
  * stays part of the cached opening. Times are left out: they change nothing Bil decides.
@@ -1230,7 +1255,8 @@ ${r.notes ? `Client notes: ${r.notes}\n` : ''}${reward}
 - postWindow is local time in ${kit.profile.timezone}. Windows are starting guesses; say so in notes.
 - Mix funnel stages to fit the goal. Use a trend only if it is in the trends you approved above, and only within its time window.
 - media: give each post that should carry a photo or video one file from their media library, by its ref, whose tags fit the post. Use each file once at most. Leave media out for text posts or when nothing fits, and never invent a ref.
-- kpis: one main measure and one or two supporting ones they can see in X's analytics or their own records.`;
+- kpis: one main measure and one or two supporting ones they can see in X's analytics or their own records.
+- Inspiration board: lean toward the "more like this" notes and steer clear of the "not this" ones. The notes are their words about a post or look, not facts to repeat. In inspiredBy, list the refs (like "b2") of the "more like this" items this plan really leans on; leave it empty if none. Never invent a ref.`;
 }
 
 async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, budget: Budget, deadline: number): Promise<Next> {
@@ -1240,6 +1266,8 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
   const algorithm = await algorithmContext();
   const files = await loadLibraryFiles(db, kit.clientId, kit.ownerId);
   const refs = new Map(files.map((f, i) => [`m${i + 1}`, f.id]));
+  const board = await loadBoard(db, kit.clientId, kit.ownerId);
+  const boardRefs = new Map(board.map((b, i) => [`b${i + 1}`, b]));
   const usedMedia = new Set<string>();
   const trends: Array<{ topic: string; summary: string; actWithinHours?: number; hashtags: string[]; touchesFinance: boolean }> =
     Array.isArray(step.payload.trends) ? step.payload.trends : [];
@@ -1258,6 +1286,10 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     files.length
       ? files.map((f, i) => JSON.stringify({ ref: `m${i + 1}`, kind: f.kind, tags: f.tags, ...(f.note ? { note: f.note } : {}), ...(f.seconds ? { seconds: f.seconds } : {}) })).join('\n')
       : '(none tagged yet: describe the media to shoot in mediaIdea instead)',
+    '# Their inspiration board (what the client or team wants more of, or less of)',
+    board.length
+      ? board.map((b, i) => JSON.stringify({ ref: `b${i + 1}`, verdict: b.verdict === 'more' ? 'more like this' : 'not this', note: b.note })).join('\n')
+      : '(empty)',
     planTask(c, kit, posts),
   ].join('\n');
 
@@ -1351,6 +1383,16 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     adjustments.push('A reward was asked for but the plan did not include one.');
   }
 
+  // Only real "more like this" items count as what the plan leaned on.
+  const inspiredBy = [
+    ...new Set(
+      (draft.inspiredBy ?? [])
+        .map((r) => boardRefs.get(String(r).trim().toLowerCase()))
+        .filter((b): b is BoardItem => Boolean(b) && b!.verdict === 'more')
+        .map((b) => b.id),
+    ),
+  ].slice(0, 10);
+
   const plan = CampaignPlan.parse({
     title: cut(draft.title, 120) ?? 'Campaign',
     goal: cut(draft.goal, 280) ?? cut(r.goal, 280),
@@ -1366,6 +1408,7 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     trendHashtags: [...new Set(trends.flatMap((t) => t.hashtags.map((h) => h.replace(/^#/, ''))))].slice(0, 20),
     algorithm,
     adjustments: adjustments.slice(0, 30),
+    inspiredBy,
   });
 
   await setStep(db, c.id, { plan, posts_total: plan.slots.length, status: 'drafting', step: `Drafting posts 1 to ${Math.min(BATCH_START, plan.slots.length)}` });
@@ -1418,7 +1461,7 @@ function draftPrompt(
   mediaFiles: Map<string, LibraryFile>,
   details: Record<string, string> = {},
 ): string {
-  const planForPrompt = { ...plan, slots: plan.slots.map(({ mediaId: _m, ...rest }) => rest), algorithm: undefined, adjustments: undefined };
+  const planForPrompt = { ...plan, slots: plan.slots.map(({ mediaId: _m, ...rest }) => rest), algorithm: undefined, adjustments: undefined, inspiredBy: undefined };
   return [
     snapshotText(kit),
     `# X ranking settings (published defaults, xai-org/x-algorithm at ${plan.algorithm.repoCommit.slice(0, 7)})`,

@@ -118,6 +118,7 @@ export const PlanDraft = z.object({
     )
     .max(60),
   reward: RewardDraft.optional().describe('Only when the client asked for a giveaway or reward.'),
+  inspiredBy: z.array(z.string()).max(10).optional().describe('Refs (like "b2") of the "more like this" board items this plan leans on. Never invent a ref.'),
   notes: str('Why this plan, what to watch, and what is a guess (posting windows are). Under 1,000 characters.'),
 });
 export type PlanDraft = z.infer<typeof PlanDraft>;
@@ -193,5 +194,7 @@ export const CampaignPlan = z.object({
   algorithm: AlgorithmContext,
   /** What code removed or changed from Grok's plan, in plain words. */
   adjustments: z.array(shortText(300)).max(30),
+  /** Inspiration board items ("more like this") the plan leaned on. */
+  inspiredBy: z.array(id).max(10).optional(),
 });
 export type CampaignPlan = z.infer<typeof CampaignPlan>;

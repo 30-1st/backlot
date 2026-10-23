@@ -174,7 +174,10 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           <h1 className="bl-h1 bl-rise">Media</h1>
           <p className="bl-p bl-muted" style={{ margin: '4px 0 0' }}>
             {isTeam && client ? `@${client.handle}. ` : ''}
-            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}. Bil plans around the tags, and never sees the images.`}
+            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}. Bil plans around the tags, and never sees the images.`}{' '}
+            <button type="button" className="bl-linkish" onClick={() => go('board')}>
+              Your board
+            </button>
           </p>
         </div>
         <button type="button" className="bl-btn" onClick={() => picker.current?.click()} disabled={sending}>

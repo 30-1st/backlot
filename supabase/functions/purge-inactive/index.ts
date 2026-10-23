@@ -17,6 +17,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 const IDLE_DAYS = 60;
 const BATCH = 200;
 const LIBRARY_KEEP_DAYS = 7;
+const BOARD_KEEP_DAYS = 90;
 
 function reply(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -115,6 +116,30 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Inspiration board: items removed more than 7 days ago, and unpinned items 90 days old.
+  // Screenshots go first, then the rows.
+  let boardItems = 0;
+  const boardBefore = new Date(Date.now() - LIBRARY_KEEP_DAYS * 86_400_000).toISOString();
+  const boardOld = new Date(Date.now() - BOARD_KEEP_DAYS * 86_400_000).toISOString();
+  const { data: stale, error: staleError } = await db
+    .from('inspiration_items')
+    .select('id, path')
+    .or(`removed_at.lt.${boardBefore},and(pinned.eq.false,created_at.lt.${boardOld})`)
+    .limit(500);
+  if (staleError) {
+    console.error('finding old board items failed', staleError.message);
+  } else if (stale && stale.length > 0) {
+    const shots = stale.map((s) => s.path).filter((p): p is string => Boolean(p));
+    const { error: storageError } = shots.length ? await db.storage.from('board').remove(shots) : { error: null };
+    if (storageError) {
+      console.error('deleting old board screenshots failed', storageError.message);
+    } else {
+      const { error } = await db.from('inspiration_items').delete().in('id', stale.map((s) => s.id));
+      if (error) console.error('deleting old board rows failed', error.message);
+      else boardItems = stale.length;
+    }
+  }
+
   // The sign-up log only needs the last hour. Keep a day and drop the rest.
   await db.from('signup_log').delete().lt('created_at', new Date(Date.now() - 86_400_000).toISOString());
 
@@ -134,5 +159,5 @@ Deno.serve(async (req: Request) => {
     else chats = empty.length;
   }
 
-  return reply(200, { ok: true, logins, files, libraryFiles, chats, failed: failed.length });
+  return reply(200, { ok: true, logins, files, libraryFiles, boardItems, chats, failed: failed.length });
 });

@@ -121,6 +121,8 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   const current = openSlot !== null ? posts.find((p) => p.slot === openSlot) ?? null : queue[0] ?? null;
   const total = Math.max(campaign.postsTotal, posts.length);
   const working = (campaign.status === 'planning' || campaign.status === 'drafting') && !campaign.hold;
+  const inspired = (campaign.plan as { inspiredBy?: unknown } | null)?.inspiredBy;
+  const leaned = Array.isArray(inspired) ? inspired.length : 0;
 
   async function decide(p: Post, decision: Decision, text?: string) {
     setBusy(true);
@@ -196,6 +198,11 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           <span className="bl-label bl-ellipsis">Goal: {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
         </div>
       </div>
+      {leaned > 0 && (
+        <p className="bl-small" style={{ margin: 0 }}>
+          Bil leaned on {leaned} {leaned === 1 ? 'item' : 'items'} from the board marked &ldquo;more like this.&rdquo;
+        </p>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div className="bl-ticks" style={{ gridTemplateColumns: `repeat(${Math.max(1, total)}, minmax(0, 1fr))` }} role="img" aria-label="Review progress">
