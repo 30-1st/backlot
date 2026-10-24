@@ -2402,3 +2402,8 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-way-options p { flex: 1; margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bl-qr { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .bl-qr-canvas { width: min(240px, 100%); height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+
+/* ---------- saving a post's media to the phone ---------- */
+
+.bl-pm-wrap { display: flex; flex-direction: column; gap: 8px; }
+.bl-pm-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

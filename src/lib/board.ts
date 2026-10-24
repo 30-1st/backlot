@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { scrubFile } from './scrubFile';
 
 // The inspiration board: X posts and screenshots the client or team want more of, or less
 // of, each with a short note. Bil reads the verdict and the note, never the image and never
@@ -126,7 +127,14 @@ export async function addShot(workspaceId: string, clientId: string, file: File,
   const type = file.type || SHOT_TYPES[ext];
   const name = randomName(Object.entries(SHOT_TYPES).find(([, t]) => t === type)?.[0] ?? 'png');
   const path = `${workspaceId}/${clientId}/${name}`;
-  const { error: up } = await db().storage.from('board').upload(path, file, { contentType: type, upsert: false, cacheControl: '3600' });
+  // Screenshots can carry location and device details too; they are removed before upload.
+  let clean: File;
+  try {
+    clean = await scrubFile(file);
+  } catch {
+    throw new Error('The screenshot could not be cleaned of its location and device details, so it was not added. Save it as a PNG or JPG and try again.');
+  }
+  const { error: up } = await db().storage.from('board').upload(path, clean, { contentType: type, upsert: false, cacheControl: '3600' });
   if (up) throw new Error('The screenshot could not be uploaded. Check your connection and try again.');
   const { error } = await db().rpc('board_add', { p_client: clientId, p_kind: 'shot', p_url: null, p_path: path, p_verdict: verdict, p_note: note });
   if (error) throw new Error(error.message);

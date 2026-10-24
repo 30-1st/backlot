@@ -3,6 +3,7 @@ import type { MediaItem } from '../types';
 import { blobDelete, blobGet, blobKeys, blobPut } from './db';
 import { currentUserId, hosted, supabase } from './supabase';
 import { isGuest } from './mode';
+import { scrubFile } from './scrubFile';
 
 // Photos and videos.
 //
@@ -57,7 +58,7 @@ export function isMediaFile(file: File): boolean {
 /** Why a file could not be kept. */
 export class MediaError extends Error {
   constructor(
-    public reason: 'too_large' | 'upload',
+    public reason: 'too_large' | 'upload' | 'unclean',
     public fileName: string,
   ) {
     super(reason);
@@ -67,7 +68,9 @@ export class MediaError extends Error {
   get sentence(): string {
     return this.reason === 'too_large'
       ? `"${this.fileName}" is larger than 50 MB, which is the limit for one file.`
-      : `"${this.fileName}" could not be uploaded. Check your connection and add it again.`;
+      : this.reason === 'unclean'
+        ? `"${this.fileName}" could not be cleaned of its location and device details, so it was not added. Save it as a JPG or MP4 and try again.`
+        : `"${this.fileName}" could not be uploaded. Check your connection and add it again.`;
   }
 }
 
@@ -76,8 +79,15 @@ export class MediaError extends Error {
  * Offline this always succeeds. Hosted, it fails if the upload fails, because
  * a file that only exists in this browser would vanish everywhere else.
  */
-export async function storeFile(file: File): Promise<MediaItem> {
+export async function storeFile(picked: File): Promise<MediaItem> {
   const id = fileId();
+  // Location, device and owner details are removed on this device, before anything is kept.
+  let file: File;
+  try {
+    file = await scrubFile(picked);
+  } catch {
+    throw new MediaError('unclean', picked.name);
+  }
   // A guest's files stay in this browser until they make an account.
   if (supabase && !isGuest()) {
     if (file.size > MAX_UPLOAD_BYTES) throw new MediaError('too_large', file.name);

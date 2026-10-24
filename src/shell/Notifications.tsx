@@ -299,7 +299,7 @@ function NextUp({ t, isTeam, go }: { t: Timed; isTeam: boolean; go: (p: string) 
         </span>
       </section>
       <article className="bl-glass-card bl-next-card bl-in" style={{ animationDelay: '80ms' }}>
-        {mediaId ? <PostMedia id={mediaId} size="hero" /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} /> : null}
+        {mediaId ? <PostMedia id={mediaId} size="hero" saveAs={`${campaignTitle(t.campaign)}-post-${t.post.slot}`} /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} /> : null}
         <p className="bl-next-text">{text}</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className={`bl-chip-ink${blocked ? ' bad' : ''}`}>{blocked ? 'Needs a detail' : approved ? 'Approved' : 'Waiting for OK'}</span>

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { scrubFile } from './scrubFile';
 
 // The Library: each client's real photos and videos in a private bucket, with tags.
 // Files live at <workspace id>/<client id>/<random name>. The database only lets the team
@@ -181,9 +182,16 @@ function randomName(ext: string): string {
 }
 
 /** Upload one file into a client's Library and record it. */
-export async function addFile(workspaceId: string, clientId: string, file: File, tags: string[] = []): Promise<string> {
-  const why = refuse(file);
+export async function addFile(workspaceId: string, clientId: string, picked: File, tags: string[] = []): Promise<string> {
+  const why = refuse(picked);
   if (why) throw new Error(why);
+  // Location, device and owner details are removed on this device, before upload.
+  let file: File;
+  try {
+    file = await scrubFile(picked);
+  } catch {
+    throw new Error(`"${picked.name}" could not be cleaned of its location and device details, so it was not added. Save it as a JPG or MP4 and try again.`);
+  }
   const mime = mimeOf(file)!;
   const kind = mime.startsWith('video/') ? 'video' : 'photo';
   const ext = Object.entries(TYPES).find(([, t]) => t === mime)?.[0] ?? 'bin';

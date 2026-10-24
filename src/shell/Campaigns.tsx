@@ -580,7 +580,7 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
         </span>
         <span className={`bl-chip ${s.cls}`}>{s.word}</span>
       </div>
-      {typeof post.post.mediaId === 'string' && <PostMedia id={post.post.mediaId} size="hero" />}
+      {typeof post.post.mediaId === 'string' && <PostMedia id={post.post.mediaId} size="hero" saveAs={`${campaignTitle(campaign)}-post-${post.slot}`} />}
       {post.post.mediaIdea && (
         <div className="bl-wash" style={{ fontSize: 14, lineHeight: 1.45 }}>
           <span className="bl-label accent">{post.post.mediaId ? 'How to post it: ' : 'Media: '}</span>

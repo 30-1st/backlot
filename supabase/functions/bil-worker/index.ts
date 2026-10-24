@@ -2,6 +2,9 @@
 // is waiting (see migration bil_pipeline), and by the bil function right after a campaign
 // is queued.
 //
+// Every 15 minutes, while any stored file has not been checked, pg_cron calls it with
+// { "job": "scrub_media" } to clean leftover photo and video metadata (migration media_scrub).
+//
 // Once an hour pg_cron also calls it with { "job": "kris_pitches" }, only when some client
 // has an opening, so Kris can bring a pitch on her own (see migration kris_pitches).
 //
@@ -15,6 +18,7 @@
 
 import { drain } from '../_shared/bil.ts';
 import { krisPitches } from '../_shared/kris.ts';
+import { scrubStoredMedia } from '../_shared/media-scrub.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -47,6 +51,16 @@ Deno.serve(async (req) => {
         .catch((err) => console.error('bil-worker: Kris pitches failed', err instanceof Error ? err.message : err)),
     );
     return reply(202, { accepted: true, job: 'kris_pitches' });
+  }
+
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'scrub_media') {
+    // Stops 30 seconds before Supabase's 150-second limit; the next tick carries on.
+    EdgeRuntime.waitUntil(
+      scrubStoredMedia(BOOT_AT + 120_000)
+        .then((r) => console.log(`bil-worker: media scrub checked ${r.checked}, cleaned ${r.cleaned}, skipped ${r.skipped}`))
+        .catch((err) => console.error('bil-worker: media scrub failed', err instanceof Error ? err.message : err)),
+    );
+    return reply(202, { accepted: true, job: 'scrub_media' });
   }
 
   if (draining >= MAX_DRAINS) return reply(202, { accepted: false, reason: 'busy', uptimeMs: Date.now() - BOOT_AT });
