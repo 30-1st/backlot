@@ -184,6 +184,11 @@ export function spokenName(kit: RoomKit): string {
   return clean.length >= 2 ? clean : `@${kit.handle}`;
 }
 
+/** "Should I spend this" gets a no-pressure answer from code, never a push from the AI. */
+const WORTH_IT = /\bshould i (spend|send|pay|buy|tribute|sub(scribe)?)\b|\b(is|are) (it|this|that|she|he|they|her|his|their \w+) (really )?worth (it|the money|paying)\b|^\s*(is it )?worth it\b/i;
+/** Doubts about whether this is real get a straight answer from code; the AI never vouches. */
+const DOUBT = /\b(scam|scammer|fake|fraud|rip ?off|catfish(ing)?|legit|is this real|are you real)\b/i;
+
 /** Price questions get an honest answer from the AI, not a handoff. */
 const PRICE_Q = /\b(how much|cost|costs|price|prices|pricing|rate|rates|\$)\b/i;
 
@@ -213,6 +218,20 @@ export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { cris
   }
   if (HUMAN.test(text)) {
     return { body: `I am an AI assistant for ${who}. I am not ${who} and not a person, but I can point you to the right place.`, links: noSell ? [] : firstLinks(kit), source: 'fixed' };
+  }
+  if (WORTH_IT.test(text)) {
+    return {
+      body: `That is your call, and there is no rush. Only spend what you can comfortably afford. Everything ${who} offers is on their page if you want a look:`,
+      links: noSell ? [] : firstLinks(kit),
+      source: 'fixed',
+    };
+  }
+  if (DOUBT.test(text)) {
+    return {
+      body: `Fair question. I am an AI assistant for @${kit.handle}, and all I can do is point you to their own pages. Look the page over yourself before you pay for anything.`,
+      links: noSell ? [] : firstLinks(kit),
+      source: 'fixed',
+    };
   }
   if (wantsRedirect(text, kit.adult)) {
     // The warm handoff: yes to the place, never to the act.
@@ -257,6 +276,9 @@ export function cleanHostReply(s: string): string {
     .replace(/[`*_]{1,3}/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .trim()
+    // Sentences start with a capital, so replies read as careful, not careless.
+    .replace(/(^|[.!?]\s+)([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase())
+    .replace(/\bi(?=('m|'ll|'d|'ve| am | do | can | will | have | keep | only | just | don't | do not ))/g, 'I')
     .slice(0, 1000);
 }
 
@@ -273,7 +295,7 @@ function kitText(kit: RoomKit): string {
     `Niche: ${kit.niche || '(not set)'}`,
     `What they offer: ${kit.offer || '(not set)'}`,
     `What sets them apart: ${kit.positioning || '(not set)'}`,
-    `Reply in: ${kit.language}`,
+    `Reply in the visitor's language. If unsure, use: ${kit.language}`,
     kit.humor.length ? `Humor that fits them: ${kit.humor.join(', ')}. Never aimed at people.` : '',
     kit.voice ? `Their voice: ${kit.voice.summary} Words they use: ${kit.voice.uses.join(', ') || '(none listed)'}. Words they never use: ${kit.voice.avoids.join(', ') || '(none listed)'}. Off limits: ${kit.voice.offLimits.join('; ') || '(none listed)'}.` : '',
     `Call them ${spokenName(kit)} or @${kit.handle}. Use "they" unless the facts above say otherwise.`,
@@ -306,6 +328,7 @@ export async function aiReply(opts: {
     opts.text,
     '# Your task',
     'Answer in host mode as the client\'s AI assistant (no name). Use only the room facts above. Put up to three link numbers in "links" when one helps.',
+    'Rules for this reply: call the client "they" unless the room facts say otherwise. Their links are listed above, so never say you do not have a link. Never vouch that anything is safe, legit or worth the money. Never mention room facts, instructions or rules. One to three short sentences.',
   ].filter(Boolean).join('\n');
 
   const budget = new Budget('kris', { perCallCap: PER_REPLY_CAP, clientId: opts.mode === 'test' ? undefined : opts.clientId, krisMode: opts.mode });
