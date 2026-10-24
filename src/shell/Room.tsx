@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { team } from '../lib/team';
 import { PostMedia } from './PostMedia';
+import { ARCHETYPES, type Archetype } from '../lib/archetypes';
 import type { ScreenProps } from './Shell';
 
 // A client's room (K1): the page their audience opens from a bio link or an auto-reply,
@@ -12,7 +13,7 @@ const ROOMS_URL = 'https://backlot-rooms.pages.dev';
 
 type Status = 'draft' | 'preview' | 'open' | 'closed';
 type Button = { label: string; link: number };
-type Room = { slug: string; status: Status; preset: 'creator' | 'creator_adult'; accent: string; greeting: string; buttons: Button[]; heroId: string | null; heroClean: boolean };
+type Room = { slug: string; status: Status; preset: Archetype; accent: string; greeting: string; buttons: Button[]; heroId: string | null; heroClean: boolean; chatOn: boolean };
 type Media = { id: string; kind: 'photo' | 'video'; note: string | null; tags: string[] };
 
 const STATUS: Array<[Status, string, string]> = [
@@ -47,13 +48,13 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
     setNote('');
     void (async () => {
       const [r, m] = await Promise.all([
-        supabase!.from('rooms').select('slug, status, preset, accent, greeting, buttons, hero_id, hero_clean_by').eq('client_id', client.id).maybeSingle(),
+        supabase!.from('rooms').select('slug, status, preset, accent, greeting, buttons, hero_id, hero_clean_by, chat_on').eq('client_id', client.id).maybeSingle(),
         supabase!.from('library_items').select('id, kind, note, tags').eq('client_id', client.id).eq('kris_ok', true).neq('status', 'retired').is('removed_at', null).order('created_at', { ascending: false }).limit(30),
       ]);
       if (r.error) return setError(r.error.message);
       const start: Room = r.data
-        ? { slug: r.data.slug, status: r.data.status, preset: r.data.preset, accent: r.data.accent, greeting: r.data.greeting, buttons: Array.isArray(r.data.buttons) ? r.data.buttons : [], heroId: r.data.hero_id, heroClean: Boolean(r.data.hero_clean_by) }
-        : { slug: slugFrom(client.handle), status: 'draft', preset: adult ? 'creator_adult' : 'creator', accent: adult ? '#d8b98a' : '#3048e8', greeting: '', buttons: [], heroId: null, heroClean: false };
+        ? { slug: r.data.slug, status: r.data.status, preset: r.data.preset, accent: r.data.accent, greeting: r.data.greeting, buttons: Array.isArray(r.data.buttons) ? r.data.buttons : [], heroId: r.data.hero_id, heroClean: Boolean(r.data.hero_clean_by), chatOn: Boolean(r.data.chat_on) }
+        : { slug: slugFrom(client.handle), status: 'draft', preset: adult ? 'ruler' : 'creator', accent: adult ? '#d8b98a' : '#5b4bff', greeting: '', buttons: [], heroId: null, heroClean: false, chatOn: false };
       setRoom(start);
       setSaved(r.data ? start : null);
       setMedia((m.data ?? []) as Media[]);
@@ -98,12 +99,13 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
       p_client: client!.id,
       p_slug: room!.slug.trim().toLowerCase(),
       p_status: room!.status,
-      p_preset: adult ? 'creator_adult' : room!.preset,
+      p_preset: room!.preset,
       p_accent: room!.accent.toLowerCase(),
       p_greeting: room!.greeting.trim(),
       p_buttons: room!.buttons.map((b) => ({ label: b.label.trim(), link: b.link })),
       p_hero: room!.heroId,
       p_hero_clean: needsClean ? room!.heroClean : false,
+      p_chat_on: room!.chatOn,
     });
     setBusy(false);
     if (e) return setError(e.message);
@@ -136,7 +138,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
       <div>
         <h1 className="bl-h1 bl-rise">Room</h1>
         <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          @{client.handle}&rsquo;s page for their audience, on its own site. Kris starts chatting there in the next step; for now it shows the greeting and links.
+          @{client.handle}&rsquo;s page for their audience, on its own site, where Kris hosts and answers.
         </p>
       </div>
 
@@ -207,24 +209,44 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
             )}
           </section>
 
+          <section className="bl-glass-card bl-brand-group" aria-labelledby="room-chat">
+            <h2 id="room-chat" className="bl-section-title">Kris chat</h2>
+            <label className="bl-brand-check">
+              <input type="checkbox" checked={room.chatOn} onChange={(e) => set({ chatOn: e.target.checked })} />
+              <span>Kris answers visitors in this room. Turns on once the 50 test chats pass.</span>
+            </label>
+            {!room.chatOn && (
+              <span className="bl-small">Until then, anyone opening a preview link can chat as a test, paid from the separate test budget.</span>
+            )}
+          </section>
+
           <section className="bl-glass-card bl-brand-group" aria-labelledby="room-look">
             <h2 id="room-look" className="bl-section-title">Look</h2>
-            {adult ? (
+            <fieldset className="bl-knob-humor">
+              <legend className="bl-label">Archetype</legend>
+              {ARCHETYPES.map((a) => (
+                <label key={a.id} className="bl-brand-check">
+                  <input type="radio" name="room-archetype" checked={room.preset === a.id} onChange={() => set({ preset: a.id })} />
+                  <span>
+                    <b>{a.name}.</b> {a.fits}. <span className="bl-muted">{a.object}.</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            {adult && (
               <p className="bl-small" style={{ margin: 0 }}>
-                Creator, 18+. Adult niches always use this look.
+                Adult niche: every look keeps the 18+ step and stays out of search.
               </p>
-            ) : (
-              <label className="bl-field">
-                <span className="bl-label">Look</span>
-                <select className="bl-input" value={room.preset} onChange={(e) => set({ preset: e.target.value as Room['preset'] })}>
-                  <option value="creator">Creator</option>
-                </select>
-              </label>
             )}
             <label className="bl-field">
               <span className="bl-label">Accent color</span>
               <input className="bl-input" type="color" value={room.accent} onChange={(e) => set({ accent: e.target.value.toLowerCase() })} style={{ height: 48, padding: 4 }} />
             </label>
+            {room.accent !== ARCHETYPES.find((a) => a.id === room.preset)!.accent && (
+              <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => set({ accent: ARCHETYPES.find((a) => a.id === room.preset)!.accent })}>
+                Use the {ARCHETYPES.find((a) => a.id === room.preset)!.name} color
+              </button>
+            )}
             <label className="bl-field">
               <span className="bl-label">Greeting</span>
               <textarea className="bl-input" rows={3} maxLength={280} value={room.greeting} placeholder="One or two lines in their voice" onChange={(e) => set({ greeting: e.target.value })} />
@@ -308,6 +330,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
           </button>
         </>
       )}
+      <RoomActivity clientId={client.id} isTeam={isTeam} />
       {!isTeam && error && (
         <p className="bl-error" role="alert">
           {error}
@@ -319,5 +342,118 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
         </p>
       )}
     </main>
+  );
+}
+
+type Counts = { visits: number; chats: number; ai_replies: number; faq_taps: number; link_taps: number; redirects: number };
+type Visit = { id: string; started_at: string; ai_replies: number; minor: boolean; crisis: boolean; test: boolean };
+type Line = { seq: number; role: 'visitor' | 'kris'; body: string; source: string };
+
+/** The last 7 days of counts (team and client), and recent visitor chats (team only). */
+function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean }) {
+  const [counts, setCounts] = useState<Counts | null>(null);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!supabase) return;
+    const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+    void (async () => {
+      const c = await supabase!.from('room_counts').select('visits, chats, ai_replies, faq_taps, link_taps, redirects').eq('client_id', clientId).gte('day', since);
+      if (c.error) return setError(c.error.message);
+      const sum: Counts = { visits: 0, chats: 0, ai_replies: 0, faq_taps: 0, link_taps: 0, redirects: 0 };
+      for (const row of c.data ?? []) for (const k of Object.keys(sum) as Array<keyof Counts>) sum[k] += Number((row as Record<string, unknown>)[k] ?? 0);
+      setCounts(sum);
+      if (isTeam) {
+        const v = await supabase!.from('room_visits').select('id, started_at, ai_replies, minor, crisis, test').eq('client_id', clientId).order('started_at', { ascending: false }).limit(20);
+        if (v.error) return setError(v.error.message);
+        setVisits((v.data ?? []) as Visit[]);
+      }
+    })();
+  }, [clientId, isTeam]);
+
+  async function show(id: string) {
+    if (!supabase) return;
+    if (open === id) return setOpen(null);
+    setOpen(id);
+    const { data, error: e } = await supabase.from('room_messages').select('seq, role, body, source').eq('visit_id', id).order('seq').limit(200);
+    if (e) return setError(e.message);
+    setLines((data ?? []) as Line[]);
+  }
+
+  async function remove(id: string) {
+    if (!supabase) return;
+    const { error: e } = await supabase.rpc('room_visit_delete', { p_visit: id });
+    if (e) return setError(e.message);
+    setVisits((v) => v.filter((x) => x.id !== id));
+    if (open === id) setOpen(null);
+  }
+
+  return (
+    <section className="bl-glass-card bl-brand-group" aria-labelledby="room-activity">
+      <h2 id="room-activity" className="bl-section-title">Last 7 days</h2>
+      {counts ? (
+        <dl className="bl-room-counts">
+          {(
+            [
+              ['visits', 'Visits'],
+              ['chats', 'Chats'],
+              ['ai_replies', 'AI replies'],
+              ['faq_taps', 'FAQ taps'],
+              ['link_taps', 'Link taps'],
+              ['redirects', 'Steered to links'],
+            ] as Array<[keyof Counts, string]>
+          ).map(([k, label]) => (
+            <div key={k}>
+              <dt className="bl-small">{label}</dt>
+              <dd className="num">{counts[k]}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <span className="bl-small" aria-busy="true">Loading.</span>
+      )}
+      {isTeam && (
+        <>
+          <h3 className="bl-label" style={{ margin: '8px 0 0' }}>Recent visitor chats</h3>
+          <span className="bl-small">For safety review. Only your team sees these, and they go after 30 days.</span>
+          {visits.length === 0 && <span className="bl-small">No chats yet.</span>}
+          <ul className="bl-room-visits">
+            {visits.map((v) => (
+              <li key={v.id}>
+                <div className="bl-row-actions" style={{ justifyContent: 'space-between' }}>
+                  <button type="button" className="bl-linkish" aria-expanded={open === v.id} onClick={() => void show(v.id)}>
+                    {new Date(v.started_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {v.test ? ', test' : ''}
+                    {v.crisis ? ', crisis words' : ''}
+                    {v.minor ? ', said under 18' : ''}
+                  </button>
+                  <button type="button" className="bl-linkish" onClick={() => void remove(v.id)}>
+                    Delete
+                  </button>
+                </div>
+                {open === v.id && (
+                  <ol className="bl-room-lines">
+                    {lines.map((l) => (
+                      <li key={l.seq} className={l.role}>
+                        <span className="bl-label">{l.role === 'kris' ? `Kris${l.source !== 'ai' ? ` (${l.source})` : ''}` : 'Visitor'}</span>
+                        <span>{l.body}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

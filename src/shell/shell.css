@@ -2010,3 +2010,8 @@ a.bl-card:hover,
 .bl-room-media > .bl-brand-check { grid-column: 1 / -1; }
 .bl-room-pick { display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
 .bl-room-pick input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-text); }
+.bl-room-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0; }
+.bl-room-counts dd { margin: 2px 0 0; font-size: 22px; font-weight: 650; }
+.bl-room-visits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-room-lines { list-style: none; margin: 8px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.bl-room-lines li { display: flex; flex-direction: column; gap: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }

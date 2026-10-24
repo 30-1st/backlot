@@ -1,11 +1,22 @@
-/* Rooms (K1). Two looks for now:
- *   creator        cool paper, heavy grotesk, the name set in the client's accent like a marker.
- *   creator_adult  oxblood dark, high-contrast Bodoni, hairline rules in the accent.
- * The client's accent arrives as --accent (and --on-accent for text on it). */
+/* Rooms (K2 redesign). Six archetype looks share one layout:
+ *   a live line (Kris is online, a ticking clock), a 3D brand object behind the name,
+ *   twinkling marks, suggestion cards, the chat, and a composer pinned to the bottom.
+ * Colors arrive as variables from the look and the client's accent (archetypes.ts). */
 
 :root {
   --sans: 'Hanken Grotesk Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --serif: 'Bodoni Moda Variable', 'Didot', 'Bodoni 72', Georgia, serif;
+  --grotesk: 'Bricolage Grotesque Variable', 'Hanken Grotesk Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --bg: #f4f5f8;
+  --ink: #141218;
+  --muted: #5b5867;
+  --accent: #5b4bff;
+  --on-accent: #ffffff;
+  --accent-text: #4b3cf0;
+  --surface: #ffffff;
+  --line: #d9d8e2;
+  --radius: 14px;
 }
 
 *,
@@ -23,121 +34,245 @@ body {
 
 body {
   font-family: var(--sans);
+  background: var(--bg);
 }
 
 .r-shell {
-  --accent: #3048e8;
-  --on-accent: #ffffff;
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  padding: 0 max(20px, env(safe-area-inset-left)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-right));
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--ink);
+  padding-bottom: 8px;
 }
 
-/* ---------- the two looks ---------- */
-
-.r-creator {
-  --bg: #f4f6fb;
-  --ink: #14151b;
-  --muted: #565a69;
-  --line: #d6dae6;
-  --raise: #ffffff;
-}
-
-.r-creator_adult {
-  --accent: #d8b98a;
-  --on-accent: #1a0c12;
-  --bg: #1a0c12;
-  --ink: #f2e8de;
-  --muted: #bba99d;
-  --line: rgba(242, 232, 222, 0.18);
-  --raise: #24121a;
+.r-dark {
   color-scheme: dark;
 }
 
-/* ---------- shared pieces ---------- */
+.r-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
-.r-main,
+/* ---------- the live line ---------- */
+
 .r-top,
+.r-main,
 .r-foot,
 .r-preview {
+  position: relative;
   width: 100%;
-  max-width: 560px;
+  max-width: 640px;
   margin-inline: auto;
+  padding-inline: max(20px, env(safe-area-inset-left));
 }
 
 .r-preview {
   margin-top: 12px;
-  padding: 8px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  font-size: 13px;
+  font: 500 12px/1.5 var(--mono);
   color: var(--muted);
 }
 
 .r-top {
+  z-index: 2;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 18px 0 8px;
-  font-size: 14px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-bottom: 6px;
+  font: 500 12px/1 var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+.r-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.r-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.r-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+}
+
+/* ---------- twinkling marks ---------- */
+
+.r-glyphs {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 78vh;
+  pointer-events: none;
+  z-index: 0;
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 18px;
+}
+
+.r-glyphs span {
+  position: absolute;
+  opacity: 0.12;
+}
+
+/* ---------- the hero: object, name ---------- */
+
+.r-hero {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.r-stage {
+  position: relative;
+  height: clamp(250px, 44vh, 440px);
+  margin: 0 -20px;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.r-stage:active {
+  cursor: grabbing;
+}
+
+.r-stage::before {
+  content: '';
+  position: absolute;
+  inset: 12% 18%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--accent), transparent);
+  opacity: 0.18;
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.r-stage canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.r-stage[data-fallback] {
+  background: radial-gradient(circle at 50% 50%, var(--accent) 0, transparent 34%);
+  opacity: 0.6;
+}
+
+.r-name {
+  position: relative;
+  margin: -0.38em 0 0;
+  font-size: clamp(50px, 15vw, 104px);
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.r-who {
+  margin: 14px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 13px/1 var(--mono);
+  color: var(--muted);
 }
 
 .r-ai {
   display: inline-grid;
   place-items: center;
-  min-width: 30px;
-  height: 22px;
+  height: 20px;
   padding: 0 7px;
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.02em;
+  font: 700 11px/1 var(--mono);
+  letter-spacing: 0.04em;
 }
 
-.r-who {
-  color: var(--muted);
+.r-hero-small .r-stage {
+  height: clamp(150px, 22vh, 220px);
 }
 
-.r-handle {
-  color: var(--ink);
-  font-weight: 600;
+.r-hero-small .r-name {
+  font-size: clamp(34px, 9vw, 60px);
 }
+
+/* ---------- body ---------- */
 
 .r-main {
-  flex: 1;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding-top: 28px;
-}
-
-.r-name {
-  margin: 0;
-  overflow-wrap: anywhere;
+  gap: 22px;
+  padding-top: 26px;
 }
 
 .r-greeting {
-  margin: 0;
+  margin: 0 auto;
   max-width: 34ch;
+  text-align: center;
+  font-size: 19px;
+  line-height: 1.45;
 }
 
-.r-hero {
+.r-hero-media {
   margin: 0;
 }
 
-.r-hero img,
-.r-hero video {
+.r-hero-media img,
+.r-hero-media video {
   display: block;
   width: 100%;
-  max-height: 70vh;
+  max-height: 64vh;
   object-fit: cover;
+  border-radius: var(--radius);
+}
+
+.r-suggest {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.r-card {
+  min-height: 64px;
+  padding: 14px 14px 16px;
+  text-align: left;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 15px/1.35 var(--sans);
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.r-card:hover {
+  border-color: var(--accent-text);
+}
+
+.r-card:active {
+  transform: scale(0.98);
 }
 
 .r-links {
@@ -150,11 +285,13 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  min-height: 60px;
+  min-height: 58px;
   padding: 16px 2px;
   border-top: 1px solid var(--line);
   color: var(--ink);
   text-decoration: none;
+  font-size: 18px;
+  font-weight: 650;
 }
 
 .r-link:last-child {
@@ -163,31 +300,103 @@ body {
 
 .r-link-host {
   flex-shrink: 0;
-  font-family: var(--sans);
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 450;
+  font: 500 12px/1 var(--mono);
   color: var(--muted);
 }
 
-.r-kris {
+/* ---------- chat ---------- */
+
+.r-chat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.r-msg {
+  display: flex;
   gap: 10px;
-  padding: 18px;
-  border-radius: 16px;
-  background: var(--raise);
-  border: 1px solid var(--line);
+  align-items: flex-end;
+  max-width: 92%;
 }
 
-.r-kris-title {
+.r-msg p {
   margin: 0;
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 700;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.r-kris-copy,
+.r-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 800 13px/1 var(--mono);
+}
+
+.r-bubble {
+  padding: 11px 14px;
+  border-radius: var(--bubble, 18px);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.r-kris .r-bubble {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 6px;
+}
+
+.r-visitor {
+  align-self: flex-end;
+}
+
+.r-visitor .r-bubble {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-bottom-right-radius: 6px;
+}
+
+.r-pending {
+  opacity: 0.6;
+}
+
+.r-msg-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.r-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent-text);
+  color: var(--accent-text);
+  font: 650 14px/1 var(--sans);
+  text-decoration: none;
+}
+
+.r-typing {
+  display: inline-flex;
+  gap: 6px;
+  font-family: var(--mono);
+  color: var(--accent-text);
+}
+
+.r-check:empty {
+  display: none;
+}
+
 .r-small {
   margin: 0;
   font-size: 14px;
@@ -199,8 +408,56 @@ body {
   margin: 0 0 10px;
 }
 
-.r-check:empty {
-  display: none;
+/* ---------- composer ---------- */
+
+.r-compose {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  width: 100%;
+  max-width: 640px;
+  margin: 18px auto 0;
+  padding: 12px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: linear-gradient(to bottom, transparent, var(--bg) 30%);
+}
+
+.r-input {
+  min-width: 0;
+  height: 54px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 16px/1 var(--sans);
+}
+
+.r-input::placeholder {
+  color: var(--muted);
+}
+
+.r-input:focus {
+  outline: none;
+  border-color: var(--accent-text);
+}
+
+.r-send {
+  height: 54px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 15px/1 var(--sans);
+  cursor: pointer;
+}
+
+.r-send:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .r-btn {
@@ -208,7 +465,7 @@ body {
   min-height: 48px;
   padding: 0 20px;
   border: 1.5px solid var(--ink);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--ink);
   font: 650 15px/1 var(--sans);
@@ -222,117 +479,166 @@ body {
 }
 
 .r-foot {
-  padding-top: 40px;
-  font-size: 13px;
+  padding-top: 10px;
+  padding-bottom: 20px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
 
 .r-foot p {
   margin: 0 0 6px;
-  max-width: 52ch;
+  max-width: 56ch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.r-foot a,
+.r-linkish {
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 a:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-text);
   outline-offset: 3px;
 }
 
-/* ---------- creator ---------- */
+/* ---------- the six looks ---------- */
 
-.r-creator .r-name {
-  font-size: clamp(52px, 16vw, 108px);
-  font-weight: 820;
-  line-height: 0.92;
-  letter-spacing: -0.045em;
+/* Ruler: Bodoni, gold, sharp corners, a hairline under the name. */
+.r-ruler {
+  --radius: 2px;
+  --bubble: 3px;
 }
-
-.r-creator .r-name span {
-  background: var(--accent);
-  color: var(--on-accent);
-  padding: 0.02em 0.14em 0.06em;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-  border-radius: 0.08em;
-}
-
-.r-creator .r-greeting {
-  font-size: 19px;
-  line-height: 1.45;
-  font-weight: 450;
-}
-
-.r-creator .r-hero img,
-.r-creator .r-hero video {
-  border-radius: 20px;
-}
-
-.r-creator .r-link {
-  font-size: 18px;
-  font-weight: 650;
-}
-
-.r-creator .r-link:active {
-  box-shadow: inset 4px 0 0 var(--accent);
-}
-
-/* ---------- creator, 18+ ---------- */
-
-.r-creator_adult .r-name {
+.r-ruler .r-name {
   font-family: var(--serif);
   font-optical-sizing: auto;
-  font-size: clamp(56px, 18vw, 124px);
   font-weight: 600;
-  line-height: 0.95;
   letter-spacing: -0.02em;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--accent);
 }
-
-.r-creator_adult .r-greeting {
+.r-ruler .r-greeting {
   font-family: var(--serif);
   font-style: italic;
   font-size: 22px;
-  line-height: 1.5;
 }
-
-.r-creator_adult .r-hero {
+.r-ruler .r-card {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 17px;
+}
+.r-ruler .r-link {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 22px;
+}
+.r-ruler .r-hero-media {
   padding: 6px;
   border: 1px solid var(--accent);
 }
 
-.r-creator_adult .r-hero img,
-.r-creator_adult .r-hero video {
-  border-radius: 0;
+/* Creator: condensed Bricolage, soft cards. */
+.r-creator {
+  --radius: 16px;
+}
+.r-creator .r-name {
+  font-family: var(--grotesk);
+  font-weight: 800;
+  font-stretch: 78%;
+  letter-spacing: -0.035em;
 }
 
-.r-creator_adult .r-link {
+/* Jester: wide Bricolage, cards set slightly askew, bouncy. */
+.r-jester {
+  --radius: 20px;
+}
+.r-jester .r-name {
+  font-family: var(--grotesk);
+  font-weight: 800;
+  font-stretch: 100%;
+  letter-spacing: -0.03em;
+}
+.r-jester .r-card:nth-child(odd) {
+  transform: rotate(-1deg);
+}
+.r-jester .r-card:nth-child(even) {
+  transform: rotate(1deg);
+}
+.r-jester .r-card {
+  border-color: var(--ink);
+  border-width: 2px;
+}
+
+/* Rebel: heavy mono, square, hard offset shadows. */
+.r-rebel {
+  --radius: 0px;
+  --bubble: 0px;
+}
+.r-rebel .r-name {
+  font-family: var(--mono);
+  font-weight: 800;
+  letter-spacing: -0.06em;
+}
+.r-rebel .r-card,
+.r-rebel .r-input {
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.r-rebel .r-card {
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+/* Sage: Bodoni italic, calm, rounded. */
+.r-sage {
+  --radius: 18px;
+}
+.r-sage .r-name {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 23px;
   font-weight: 500;
-  border-color: var(--line);
+  letter-spacing: -0.015em;
+}
+.r-sage .r-greeting {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 21px;
 }
 
-.r-creator_adult .r-link:active {
-  color: var(--accent);
+/* Lover: Bodoni italic, soft pill shapes. */
+.r-lover {
+  --radius: 22px;
+}
+.r-lover .r-name {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.r-lover .r-greeting {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 21px;
 }
 
-.r-creator_adult .r-kris {
-  border-radius: 2px;
-  border-color: var(--line);
-}
-
-.r-creator_adult .r-btn {
-  border-radius: 2px;
-}
-
-/* ---------- the 18+ step and notes ---------- */
+/* ---------- 18+ step, notes, safety page ---------- */
 
 .r-gate,
 .r-note {
-  flex: 1;
+  position: relative;
+  z-index: 1;
+  min-height: 90dvh;
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
@@ -340,26 +646,34 @@ button:focus-visible {
   flex-direction: column;
   justify-content: center;
   gap: 18px;
-  padding: 40px 0;
+  padding: 32px 20px;
+}
+
+.r-gate-stage .r-stage {
+  height: 34vh;
+  margin: 0 -20px -12px;
 }
 
 .r-gate-handle {
   margin: 0;
+  font: 500 13px/1 var(--mono);
   color: var(--muted);
-  font-size: 15px;
 }
 
 .r-gate-title,
 .r-note-title {
   margin: 0;
+  font-family: var(--grotesk);
   font-size: clamp(40px, 12vw, 72px);
   line-height: 0.95;
   letter-spacing: -0.03em;
   font-weight: 800;
 }
 
-.r-creator_adult .r-gate-title,
-.r-creator_adult .r-note-title {
+.r-ruler .r-gate-title,
+.r-sage .r-gate-title,
+.r-lover .r-gate-title,
+.r-ruler .r-note-title {
   font-family: var(--serif);
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -379,15 +693,90 @@ button:focus-visible {
   gap: 12px;
 }
 
-/* One moment of motion: the name settles in on arrival. */
+.r-docmain {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.r-docmain h2 {
+  margin: 32px 0 6px;
+  font: 700 20px/1.3 var(--sans);
+}
+
+.r-docmain p {
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* ---------- motion, only for people who have not asked for less ---------- */
+
 @media (prefers-reduced-motion: no-preference) {
+  .r-glyphs span {
+    animation: r-twinkle 4s ease-in-out infinite;
+  }
+  @keyframes r-twinkle {
+    0%,
+    100% {
+      opacity: 0.08;
+      transform: scale(0.85);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(1.1);
+    }
+  }
+  .r-dot::after {
+    animation: r-pulse 2.2s ease-out infinite;
+  }
+  @keyframes r-pulse {
+    0% {
+      opacity: 0.7;
+      transform: scale(0.6);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.8);
+    }
+  }
   .r-name {
-    animation: r-settle 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: r-settle 620ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
   @keyframes r-settle {
     from {
       opacity: 0;
-      transform: translateY(14px);
+      transform: translateY(16px);
+    }
+  }
+  .r-msg {
+    animation: r-in 260ms ease-out both;
+  }
+  @keyframes r-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  .r-typing span {
+    animation: r-hop 900ms ease-in-out infinite;
+  }
+  .r-typing span:nth-child(2) {
+    animation-delay: 120ms;
+  }
+  .r-typing span:nth-child(3) {
+    animation-delay: 240ms;
+  }
+  @keyframes r-hop {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.5;
+    }
+    50% {
+      transform: translateY(-4px);
+      opacity: 1;
     }
   }
 }
