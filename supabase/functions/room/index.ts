@@ -49,13 +49,18 @@ function headers(req: Request): Record<string, string> {
 }
 
 /**
- * The visitor's address as the platform's proxy saw it. X-Forwarded-For can carry
- * entries the sender made up, with the proxy's own entry added last, so only the last
- * entry is used. (Checked against a live request after deploy; see the K1 notes.)
+ * The visitor's address as Cloudflare saw it. Tested live on Oct 24, 2026 (positions and
+ * test values only, no real addresses logged): the platform sits behind Cloudflare, which
+ * sets CF-Connecting-IP and refused a request that tried to supply its own (403).
+ * X-Forwarded-For arrived with three entries, the visitor first and internal hops after,
+ * and an X-Forwarded-For sent by the caller was replaced, not kept. So the last entry is
+ * an internal hop, never the visitor.
  */
 function visitorAddress(req: Request): string {
-  const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  return xff[xff.length - 1] ?? req.headers.get('cf-connecting-ip') ?? 'unknown';
+  const cf = req.headers.get('cf-connecting-ip')?.trim();
+  if (cf) return cf;
+  const first = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim();
+  return first || 'unknown';
 }
 
 let saltCache: { day: string; salt: string } | null = null;
@@ -152,23 +157,12 @@ async function verifyTurnstile(token: string, req: Request): Promise<{ ok: boole
   return { ok: true };
 }
 
-let loggedHeaders = false;
-
 Deno.serve(async (req) => {
   const h = headers(req);
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: h });
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: h });
   if (req.method !== 'POST') return reply(405, { error: 'POST only' });
   if (!h['Access-Control-Allow-Origin']) return reply(403, { error: 'Not allowed' });
-
-  // Diagnostic (temporary): where the platform puts the caller's address. Positions and
-  // test-value matches only, never an address.
-  if (!loggedHeaders || req.headers.get('x-room-diag') === '1') {
-    loggedHeaders = true;
-    const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-    const cf = req.headers.get('cf-connecting-ip') ?? '';
-    console.log(`room: address headers xff_entries=${xff.length} cf_present=${Boolean(cf)} cf_at=${xff.indexOf(cf)} test_xff_at=${xff.indexOf('1.2.3.4')} cf_is_test=${cf === '9.9.9.9'} real_ip_present=${Boolean(req.headers.get('x-real-ip'))} real_ip_is_cf=${req.headers.get('x-real-ip') === cf}`);
-  }
 
   const raw = await req.text();
   if (raw.length > MAX_BODY) return reply(413, { error: 'Too large' });
