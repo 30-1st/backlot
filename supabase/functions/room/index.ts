@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
       const { data: saved, error: sErr } = await serviceClient()
         .from('room_messages')
         .insert([
-          { visit_id: visit.id, seq: last + 1, role: 'visitor', body: text, source: 'visitor' },
+          { visit_id: visit.id, seq: last + 1, role: 'visitor', body: text, links: [], source: 'visitor' },
           { visit_id: visit.id, seq: last + 2, role: 'kris', body: rep.body, links: rep.links, source: rep.source },
         ])
         .select('seq, role, body, links, source');
