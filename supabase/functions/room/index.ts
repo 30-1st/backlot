@@ -8,7 +8,8 @@
 //   * the bot check (Cloudflare Turnstile) is verified here, never trusted from the page
 //
 // It returns only what a room shows: name, handle, look, greeting, buttons (approved
-// links only) and a short-lived link to a hero file marked OK for Kris. Never client or
+// links only) and a short-lived link to a hero file marked OK for Kris (in adult rooms,
+// only one the team confirmed is not explicit). Never client or
 // workspace ids, never the brand kit beyond those links.
 //
 // Actions (POST JSON with "action"):
@@ -82,13 +83,13 @@ async function withinLimits(limits: Array<{ key: string; window: number; limit: 
   return data === true;
 }
 
-type Room = { client_id: string; workspace_id: string; slug: string; status: string; preset: string; accent: string; greeting: string; buttons: unknown; hero_id: string | null };
+type Room = { client_id: string; workspace_id: string; slug: string; status: string; preset: string; accent: string; greeting: string; buttons: unknown; hero_id: string | null; hero_clean_by: string | null };
 
 /** The room if this caller may see it: anyone for an open room, otherwise a valid preview ticket. */
 async function viewable(slug: string, preview: string | undefined): Promise<Room | null> {
   const { data, error } = await serviceClient()
     .from('rooms')
-    .select('client_id, workspace_id, slug, status, preset, accent, greeting, buttons, hero_id')
+    .select('client_id, workspace_id, slug, status, preset, accent, greeting, buttons, hero_id, hero_clean_by')
     .eq('slug', slug)
     .maybeSingle();
   if (error) throw new Error(`Could not read the room: ${error.message}`);
@@ -114,7 +115,8 @@ async function view(room: Room) {
     .filter(Boolean);
 
   let hero: { kind: 'photo' | 'video'; url: string } | null = null;
-  if (!adult && room.hero_id) {
+  // Adult rooms show a file only if the team confirmed it shows no nudity or sexual activity.
+  if (room.hero_id && (!adult || room.hero_clean_by)) {
     const { data: item } = await db
       .from('library_items')
       .select('path, kind, kris_ok, status, removed_at, client_id')

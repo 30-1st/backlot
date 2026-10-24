@@ -297,6 +297,16 @@ button:focus-visible {
   line-height: 1.5;
 }
 
+.r-creator_adult .r-hero {
+  padding: 6px;
+  border: 1px solid var(--accent);
+}
+
+.r-creator_adult .r-hero img,
+.r-creator_adult .r-hero video {
+  border-radius: 0;
+}
+
 .r-creator_adult .r-link {
   font-family: var(--serif);
   font-style: italic;

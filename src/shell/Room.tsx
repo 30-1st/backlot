@@ -12,7 +12,7 @@ const ROOMS_URL = 'https://backlot-rooms.pages.dev';
 
 type Status = 'draft' | 'preview' | 'open' | 'closed';
 type Button = { label: string; link: number };
-type Room = { slug: string; status: Status; preset: 'creator' | 'creator_adult'; accent: string; greeting: string; buttons: Button[]; heroId: string | null };
+type Room = { slug: string; status: Status; preset: 'creator' | 'creator_adult'; accent: string; greeting: string; buttons: Button[]; heroId: string | null; heroClean: boolean };
 type Media = { id: string; kind: 'photo' | 'video'; note: string | null; tags: string[] };
 
 const STATUS: Array<[Status, string, string]> = [
@@ -47,13 +47,13 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
     setNote('');
     void (async () => {
       const [r, m] = await Promise.all([
-        supabase!.from('rooms').select('slug, status, preset, accent, greeting, buttons, hero_id').eq('client_id', client.id).maybeSingle(),
+        supabase!.from('rooms').select('slug, status, preset, accent, greeting, buttons, hero_id, hero_clean_by').eq('client_id', client.id).maybeSingle(),
         supabase!.from('library_items').select('id, kind, note, tags').eq('client_id', client.id).eq('kris_ok', true).neq('status', 'retired').is('removed_at', null).order('created_at', { ascending: false }).limit(30),
       ]);
       if (r.error) return setError(r.error.message);
       const start: Room = r.data
-        ? { slug: r.data.slug, status: r.data.status, preset: r.data.preset, accent: r.data.accent, greeting: r.data.greeting, buttons: Array.isArray(r.data.buttons) ? r.data.buttons : [], heroId: r.data.hero_id }
-        : { slug: slugFrom(client.handle), status: 'draft', preset: adult ? 'creator_adult' : 'creator', accent: adult ? '#d8b98a' : '#3048e8', greeting: '', buttons: [], heroId: null };
+        ? { slug: r.data.slug, status: r.data.status, preset: r.data.preset, accent: r.data.accent, greeting: r.data.greeting, buttons: Array.isArray(r.data.buttons) ? r.data.buttons : [], heroId: r.data.hero_id, heroClean: Boolean(r.data.hero_clean_by) }
+        : { slug: slugFrom(client.handle), status: 'draft', preset: adult ? 'creator_adult' : 'creator', accent: adult ? '#d8b98a' : '#3048e8', greeting: '', buttons: [], heroId: null, heroClean: false };
       setRoom(start);
       setSaved(r.data ? start : null);
       setMedia((m.data ?? []) as Media[]);
@@ -85,6 +85,9 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
   const changed = JSON.stringify(room) !== JSON.stringify(saved);
   const publicUrl = `${ROOMS_URL}/k/${saved?.slug ?? room.slug}`;
   const buttonsOk = room.buttons.every((b) => b.label.trim() && links[b.link]);
+  // In an adult room, a newly picked file needs the team's word that it is not explicit.
+  const needsClean = adult && !!room.heroId && !(saved && saved.heroId === room.heroId && saved.heroClean);
+  const cleanOk = !needsClean || room.heroClean;
 
   async function save() {
     if (!supabase) return;
@@ -99,7 +102,8 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
       p_accent: room!.accent.toLowerCase(),
       p_greeting: room!.greeting.trim(),
       p_buttons: room!.buttons.map((b) => ({ label: b.label.trim(), link: b.link })),
-      p_hero: adult ? null : room!.heroId,
+      p_hero: room!.heroId,
+      p_hero_clean: needsClean ? room!.heroClean : false,
     });
     setBusy(false);
     if (e) return setError(e.message);
@@ -198,7 +202,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
             </fieldset>
             {room.status === 'open' && adult && (
               <p className="bl-small bl-knob-warn" role="note">
-                Adult room: visitors confirm they are 18 or older before seeing anything, the page shows no photos or videos, and search engines are asked not to list it.
+                Adult room: visitors confirm they are 18 or older before seeing anything, any photo or video must be confirmed as not explicit, and search engines are asked not to list it.
               </p>
             )}
           </section>
@@ -260,30 +264,34 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
             )}
           </section>
 
-          {!adult && (
-            <section className="bl-glass-card bl-brand-group" aria-labelledby="room-hero">
+          <section className="bl-glass-card bl-brand-group" aria-labelledby="room-hero">
               <h2 id="room-hero" className="bl-section-title">Photo or video</h2>
               {media.length === 0 ? (
                 <p className="bl-small" style={{ margin: 0 }}>
-                  Mark a file OK for Kris in Media to use it here.
+                  Upload a photo or video in Media and mark it OK for Kris to use it here.
                 </p>
               ) : (
                 <div className="bl-room-media">
                   <label className="bl-brand-check">
-                    <input type="radio" name="room-hero" checked={!room.heroId} onChange={() => set({ heroId: null })} />
+                    <input type="radio" name="room-hero" checked={!room.heroId} onChange={() => set({ heroId: null, heroClean: false })} />
                     <span>None</span>
                   </label>
                   {media.map((m) => (
                     <label key={m.id} className="bl-room-pick">
-                      <input type="radio" name="room-hero" checked={room.heroId === m.id} onChange={() => set({ heroId: m.id })} />
+                      <input type="radio" name="room-hero" checked={room.heroId === m.id} onChange={() => set({ heroId: m.id, heroClean: false })} />
                       <PostMedia id={m.id} size="thumb" />
                       <span className="bl-small">{m.note || m.tags.join(', ') || (m.kind === 'video' ? 'Video' : 'Photo')}</span>
                     </label>
                   ))}
                 </div>
               )}
+              {needsClean && (
+                <label className="bl-brand-check bl-knob-warn">
+                  <input type="checkbox" checked={room.heroClean} onChange={(e) => set({ heroClean: e.target.checked })} />
+                  <span>I confirm this photo or video shows no nudity or sexual activity. Explicit media on a public page can bring in state age-check laws.</span>
+                </label>
+              )}
             </section>
-          )}
 
           {error && (
             <p className="bl-error" role="alert">
@@ -295,7 +303,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
               {note}
             </p>
           )}
-          <button type="button" className="bl-btn bl-wide" disabled={busy || !changed || !buttonsOk || !room.slug} onClick={() => void save()}>
+          <button type="button" className="bl-btn bl-wide" disabled={busy || !changed || !buttonsOk || !cleanOk || !room.slug} onClick={() => void save()}>
             {busy ? 'Saving' : !changed ? 'No changes' : room.status === 'open' && saved?.status !== 'open' ? 'Save and open the room' : 'Save'}
           </button>
         </>
