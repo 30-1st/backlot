@@ -10,6 +10,8 @@ import type { ScreenProps } from './Shell';
 type Goal = { goal: string; detail: string; target?: string };
 type Faq = { q: string; a: string };
 type Link = { label: string; url: string };
+type Deal = { code: string; note: string; ends: string };
+type Offer = { name: string; what: string; price: string; forWho: string; link: string; deal: Deal };
 type Kit = {
   displayName: string;
   niche: string;
@@ -30,6 +32,7 @@ type Kit = {
   humorStyles: HumorStyle[];
   faq: Faq[];
   links: Link[];
+  offers: Offer[];
 };
 
 const GOALS: Array<[string, string]> = [
@@ -61,6 +64,7 @@ export const LABELS: Record<keyof Kit, string> = {
   humorStyles: 'Humor styles',
   faq: 'Questions people ask',
   links: 'Links',
+  offers: 'Offers',
 };
 
 function kitOf(p: Record<string, unknown>): Kit {
@@ -85,6 +89,36 @@ function kitOf(p: Record<string, unknown>): Kit {
     humorStyles: Array.isArray(p.humorStyles) ? (p.humorStyles as HumorStyle[]) : [],
     faq: Array.isArray(p.faq) ? (p.faq as Faq[]).map((f) => ({ q: String(f.q ?? ''), a: String(f.a ?? '') })) : [],
     links: Array.isArray(p.links) ? (p.links as Link[]).map((l) => ({ label: String(l.label ?? ''), url: String(l.url ?? '') })) : [],
+    offers: Array.isArray(p.offers)
+      ? (p.offers as Array<Record<string, unknown>>).map((o) => {
+          const d = (o.deal ?? {}) as Record<string, unknown>;
+          return {
+            name: String(o.name ?? ''),
+            what: String(o.what ?? ''),
+            price: String(o.price ?? ''),
+            forWho: String(o.forWho ?? ''),
+            link: String(o.link ?? ''),
+            deal: { code: String(d.code ?? ''), note: String(d.note ?? ''), ends: String(d.ends ?? '') },
+          };
+        })
+      : [],
+  };
+}
+
+const EMPTY_OFFER: Offer = { name: '', what: '', price: '', forWho: '', link: '', deal: { code: '', note: '', ends: '' } };
+
+/** The offer as the server stores it: blank optional fields left out. */
+function cleanOffer(o: Offer): Record<string, unknown> {
+  const t = (v: string) => v.trim();
+  const deal = { code: t(o.deal.code), note: t(o.deal.note), ends: t(o.deal.ends) };
+  const hasDeal = deal.code || deal.note;
+  return {
+    name: t(o.name),
+    what: t(o.what),
+    ...(t(o.price) ? { price: t(o.price) } : {}),
+    ...(t(o.forWho) ? { forWho: t(o.forWho) } : {}),
+    ...(t(o.link) ? { link: t(o.link) } : {}),
+    ...(hasDeal ? { deal: { ...(deal.code ? { code: deal.code } : {}), ...(deal.note ? { note: deal.note } : {}), ...(deal.ends ? { ends: deal.ends } : {}) } } : {}),
   };
 }
 
@@ -132,7 +166,10 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
     competitors: words(lists.rivals, cleanHandle).slice(0, 10),
     faq: kit.faq.map((f) => ({ q: f.q.trim(), a: f.a.trim() })).filter((f) => f.q && f.a),
     links: kit.links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.label && l.url),
+    offers: kit.offers.filter((o) => o.name.trim() && o.what.trim()),
   };
+  const badCode = current.offers.find((o) => o.deal.code.trim() && !/^[A-Za-z0-9_-]{3,24}$/.test(o.deal.code.trim()));
+  const halfOffer = kit.offers.find((o) => (o.name.trim() || o.what.trim()) && !(o.name.trim() && o.what.trim()));
   const badLink = current.links.find((l) => !/^https:\/\/[^\s/]+\.[^\s]+$/.test(l.url));
   const base = isTeam ? saved : startFrom!;
   const changed = (Object.keys(current) as Array<keyof Kit>).filter((k) => !same(current[k], base[k]));
@@ -144,7 +181,13 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
     setNote('');
     try {
       const edits: Record<string, unknown> = {};
-      for (const k of changed) edits[k] = k === 'goals' ? current.goals.map((g) => ({ goal: g.goal, detail: g.detail.trim(), ...(g.target?.trim() ? { target: g.target.trim() } : {}) })) : current[k];
+      for (const k of changed)
+        edits[k] =
+          k === 'goals'
+            ? current.goals.map((g) => ({ goal: g.goal, detail: g.detail.trim(), ...(g.target?.trim() ? { target: g.target.trim() } : {}) }))
+            : k === 'offers'
+              ? current.offers.map(cleanOffer)
+              : current[k];
       const r = await bil.brandSave(client!.id, edits);
       await ws.refresh();
       setNote(r.waiting ? 'Sent. Your team will look at it before Bil uses it.' : 'Saved. Bil uses it from the next plan.');
@@ -170,11 +213,30 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
   }
 
   const dials = kit.dials ?? DEFAULT_DIALS;
+  // Dial upgrade 1: where their best posts sit, from Bil's last "measure what works".
+  const start = (() => {
+    const card = ws.data?.voices.find((v) => v.clientId === client.id)?.card as { whatWorks?: { dialStart?: { top: Dials; matters: Array<keyof Dials>; posts: { top: number } } } } | undefined;
+    const d = card?.whatWorks?.dialStart;
+    return d && d.top && DIALS.every((x) => typeof d.top[x.key] === 'number') ? d : null;
+  })();
   const setDial = (k: keyof Dials, v: number) => set({ dials: { ...dials, [k]: v } });
   const toggleHumor = (h: HumorStyle) =>
     set({ humorStyles: kit.humorStyles.includes(h) ? kit.humorStyles.filter((x) => x !== h) : [...kit.humorStyles, h].slice(-2) });
   const setFaq = (i: number, patch: Partial<Faq>) => set({ faq: kit.faq.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
-  const setLink = (i: number, patch: Partial<Link>) => set({ links: kit.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+  // An offer points at a link by its address, so editing or removing a link carries over.
+  const setLink = (i: number, patch: Partial<Link>) => {
+    const old = kit.links[i]?.url ?? '';
+    const links = kit.links.map((l, j) => (j === i ? { ...l, ...patch } : l));
+    const offers = patch.url !== undefined && old ? kit.offers.map((o) => (o.link === old ? { ...o, link: patch.url ?? '' } : o)) : kit.offers;
+    set({ links, offers });
+  };
+  const removeLink = (i: number) => {
+    const old = kit.links[i]?.url ?? '';
+    set({ links: kit.links.filter((_, j) => j !== i), offers: kit.offers.map((o) => (o.link === old ? { ...o, link: '' } : o)) });
+  };
+  const setOffer = (i: number, patch: Partial<Offer>) => set({ offers: kit.offers.map((o, j) => (j === i ? { ...o, ...patch } : o)) });
+  const setDeal = (i: number, patch: Partial<Deal>) => setOffer(i, { deal: { ...kit.offers[i].deal, ...patch } });
+  const linkChoices = current.links.filter((l) => /^https:\/\/[^\s/]+\.[^\s]+$/.test(l.url));
 
   const goals = kit.goals.length ? kit.goals : [{ goal: 'sales', detail: '', target: '' }];
   const setGoal = (i: number, patch: Partial<Goal>) => set({ goals: goals.map((g, j) => (j === i ? { ...g, ...patch } : g)) });
@@ -290,6 +352,22 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
           How every post should feel, from 1 to 7. Bil and Kris write at these levels, give or take one notch, and never go above controversy or spice.
           {!kit.dials && ' These are the starting levels until someone sets them.'}
         </p>
+        {start && (
+          <div className="bl-wash bl-dial-start">
+            <span className="bl-small">
+              <b>From their best posts.</b> When Bil measured what works, their top {start.posts.top} posts sat at{' '}
+              {DIALS.map((d) => `${d.name} ${start.top[d.key]}`).join(', ')}.
+              {start.matters.length > 0 && ` The dials that set their best posts apart: ${start.matters.map((k) => DIALS.find((d) => d.key === k)?.name ?? k).join(', ')}.`}
+            </span>
+            {DIALS.some((d) => dials[d.key] !== start.top[d.key]) ? (
+              <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ dials: { ...start.top } })}>
+                Start from these
+              </button>
+            ) : (
+              <span className="bl-small">The dials match them now.</span>
+            )}
+          </div>
+        )}
         {DIALS.map((d) => (
           <label key={d.key} className="bl-knob">
             <span className="bl-knob-top">
@@ -324,7 +402,7 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
       <section className="bl-glass-card bl-brand-group" aria-labelledby="faq">
         <h2 id="faq" className="bl-section-title">Questions people ask</h2>
         <p className="bl-small" style={{ margin: 0 }}>
-          Kris answers from these, and says she will check with you on anything else.
+          Kris answers from these and never makes up the rest.
         </p>
         {kit.faq.map((f, i) => (
           <div key={i} className="bl-brand-goal">
@@ -351,7 +429,7 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
           <div key={i} className="bl-brand-goal">
             <input className="bl-input" aria-label={`Link ${i + 1} name`} value={l.label} maxLength={60} placeholder="Name, like Shop or Booking" onChange={(e) => setLink(i, { label: e.target.value })} />
             <input className="bl-input" aria-label={`Link ${i + 1} address`} type="url" inputMode="url" value={l.url} maxLength={500} placeholder="https://" onChange={(e) => setLink(i, { url: e.target.value })} />
-            <button type="button" className="bl-linkish" onClick={() => set({ links: kit.links.filter((_, j) => j !== i) })}>
+            <button type="button" className="bl-linkish" onClick={() => removeLink(i)}>
               Remove
             </button>
           </div>
@@ -364,6 +442,61 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
         {badLink && (
           <p className="bl-error" role="alert">
             {badLink.label}: use a full address that starts with https://
+          </p>
+        )}
+      </section>
+
+      <section className="bl-glass-card bl-brand-group" aria-labelledby="offers">
+        <h2 id="offers" className="bl-section-title">Offers</h2>
+        <p className="bl-small" style={{ margin: 0 }}>
+          What they sell. Kris points visitors to the one that fits, and Bil names them in posts. Neither makes up an offer, a price or a deal.
+        </p>
+        {kit.offers.map((o, i) => (
+          <div key={i} className="bl-brand-goal bl-offer">
+            <input className="bl-input" aria-label={`Offer ${i + 1} name`} value={o.name} maxLength={60} placeholder="Name, like Monthly subscription" onChange={(e) => setOffer(i, { name: e.target.value })} />
+            <textarea className="bl-input" aria-label={`Offer ${i + 1}, what is included`} rows={2} value={o.what} maxLength={300} placeholder="What is included" onChange={(e) => setOffer(i, { what: e.target.value })} />
+            <div className="bl-brand-row">
+              <input className="bl-input" aria-label={`Offer ${i + 1} price`} value={o.price} maxLength={40} placeholder="Price, like $15 a month (optional)" onChange={(e) => setOffer(i, { price: e.target.value })} />
+              <input className="bl-input" aria-label={`Offer ${i + 1}, who it suits`} value={o.forWho} maxLength={120} placeholder="Who it suits (optional)" onChange={(e) => setOffer(i, { forWho: e.target.value })} />
+            </div>
+            <label className="bl-field">
+              <span className="bl-label">Where to get it</span>
+              <select className="bl-input" value={linkChoices.some((l) => l.url === o.link) ? o.link : ''} onChange={(e) => setOffer(i, { link: e.target.value })}>
+                <option value="">{linkChoices.length ? 'Pick one of their links' : 'Add a link above first'}</option>
+                {linkChoices.map((l) => (
+                  <option key={l.url} value={l.url}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <details className="bl-offer-deal" open={Boolean(o.deal.code || o.deal.note)}>
+              <summary>Deal or code (optional)</summary>
+              <div className="bl-brand-row">
+                <input className="bl-input" aria-label={`Offer ${i + 1} deal code`} value={o.deal.code} maxLength={24} placeholder="Code, like WELCOME20" onChange={(e) => setDeal(i, { code: e.target.value.replace(/\s/g, '') })} />
+                <input className="bl-input" aria-label={`Offer ${i + 1} deal ends`} type="date" value={o.deal.ends} onChange={(e) => setDeal(i, { ends: e.target.value })} />
+              </div>
+              <input className="bl-input" aria-label={`Offer ${i + 1} deal note`} value={o.deal.note} maxLength={80} placeholder="What it is, like 20% off the first month" onChange={(e) => setDeal(i, { note: e.target.value })} />
+              <span className="bl-small">Kris shares a code only until its end date. No end date means until you remove it.</span>
+            </details>
+            <button type="button" className="bl-linkish" onClick={() => set({ offers: kit.offers.filter((_, j) => j !== i) })}>
+              Remove
+            </button>
+          </div>
+        ))}
+        {kit.offers.length < 8 && (
+          <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ offers: [...kit.offers, { ...EMPTY_OFFER, deal: { ...EMPTY_OFFER.deal } }] })}>
+            Add an offer
+          </button>
+        )}
+        {halfOffer && (
+          <p className="bl-small" role="status">
+            An offer needs both a name and what is included before it saves.
+          </p>
+        )}
+        {badCode && (
+          <p className="bl-error" role="alert">
+            {badCode.name}: codes use letters, numbers, - or _, 3 to 24 long.
           </p>
         )}
       </section>
@@ -414,7 +547,7 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
           {note}
         </p>
       )}
-      <button type="button" className="bl-btn bl-wide" disabled={busy || changed.length === 0 || !!badLink} onClick={() => void save()}>
+      <button type="button" className="bl-btn bl-wide" disabled={busy || changed.length === 0 || !!badLink || !!badCode} onClick={() => void save()}>
         {busy ? 'Saving' : changed.length === 0 ? 'No changes' : isTeam ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Send to your team'}
       </button>
     </main>

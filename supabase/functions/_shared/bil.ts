@@ -27,6 +27,7 @@ import {
   DEFAULT_DIALS,
   DIAL_ANCHORS,
   riskyDials,
+  targetDials,
   type Dials,
   Personality,
   PostTypeLibrary,
@@ -55,7 +56,7 @@ import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts
 import { measure, type Performance, postLine, statsText } from './bil-performance.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
 import { krisNote } from './kris-notes.ts';
-import { checkDials, DIAL_CHECK_PER_POST, dialBudget, type DialResult } from './dial-check.ts';
+import { checkDials, DIAL_CHECK_PER_POST, dialBudget, dialLifts, dialTestFor, measureDialStart, testLine, type DialResult, type DialStart, type DialTest } from './dial-check.ts';
 import { ENVIRONMENT, withTracing } from './observability.ts';
 
 // ---------- limits ----------
@@ -526,7 +527,7 @@ export async function onboardClient(userDb: SupabaseClient, ownerId: string, req
         .map((t) => ({ situation: t.situation, guidance: cut(t.guidance, 300) }))
         .filter((t, i, all) => t.guidance && all.findIndex((x) => x.situation === t.situation) === i),
       clientSamples: req.voice.samples,
-      whatWorks: whatWorksOf(draft.whatWorks, perf),
+      whatWorks: whatWorksOf(draft.whatWorks, perf, await dialStartFor(budget, perf)),
       learnedFrom: { intake: true, xPostsRead: read.postsRead, clientEdits: 0 },
       approvedByClient: false,
       updatedAt: now,
@@ -576,9 +577,10 @@ function linesWithin(perf: Performance): string[] {
 }
 
 /** Grok's reading of the numbers plus the numbers themselves; undefined when no post had numbers. */
-function whatWorksOf(draft: WhatWorksDraft, perf: Performance) {
+function whatWorksOf(draft: WhatWorksDraft, perf: Performance, dialStart?: DialStart) {
   if (perf.stats.postsMeasured === 0) return undefined;
   return {
+    ...(dialStart ? { dialStart } : {}),
     summary: cut(draft.summary, 600) ?? 'Not enough posts with numbers yet.',
     patterns: cutList(draft.patterns, 8, 200),
     doMore: cutList(draft.doMore, 6, 200),
@@ -587,6 +589,12 @@ function whatWorksOf(draft: WhatWorksDraft, perf: Performance) {
     topPostIds: perf.topPostIds,
     measuredAt: new Date().toISOString(),
   };
+}
+
+/** Dial upgrade 1: their scored posts, best first, into a suggested starting setting. */
+async function dialStartFor(budget: Budget, perf: Performance): Promise<DialStart | undefined> {
+  const ranked = perf.posts.filter((p) => p.score !== null).sort((a, b) => b.score! - a.score!);
+  return await measureDialStart(budget, ranked, 25_000);
 }
 
 export const LearnRequest = z.object({ requestId: id, clientId: id });
@@ -631,7 +639,7 @@ export async function learnWhatWorks(userDb: SupabaseClient, ownerId: string, re
       functionId: 'bil-learn',
       privateCall: true,
     });
-    const card = VoiceCard.parse({ ...kit.card, whatWorks: whatWorksOf(output, perf), updatedAt: new Date().toISOString() });
+    const card = VoiceCard.parse({ ...kit.card, whatWorks: whatWorksOf(output, perf, await dialStartFor(budget, perf)), updatedAt: new Date().toISOString() });
     const { error } = await db.from('voice_cards').update({ card }).eq('client_id', req.clientId).eq('owner_id', ownerId);
     if (error) throw new Error(`Could not save what performs: ${error.message}`);
     return { clientId: req.clientId, whatWorks: card.whatWorks, postsRead: read.postsRead, spentUsd: Math.round(budget.spentUsd * 1e4) / 1e4 };
@@ -709,6 +717,34 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
     ]);
     const p = prev?.numbers as { posts?: number; impressions?: number; engagementRate?: number | null } | undefined;
 
+    // Dial upgrade 4: which of this month's posts came from Backlot drafts (linked with "I
+    // posted this"), what each tested, and how it scored. Added to the last two months'
+    // results, so a level needs a few posts before it can win.
+    const scored = new Map(perf.posts.filter((x) => x.score !== null).map((x) => [x.postId, x.score as number]));
+    const linked = scored.size
+      ? ((await db.from('campaign_posts').select('x_post_id, post').eq('owner_id', m.workspaceId).in('x_post_id', [...scored.keys()])).data ?? [])
+      : [];
+    const dialResults = linked
+      .map((r: any) => {
+        const d = r.post?.dials;
+        if (!d?.target || !scored.has(r.x_post_id)) return null;
+        return { postId: String(r.x_post_id), score: scored.get(r.x_post_id)!, ...(d.test ? { dial: d.test.dial, delta: d.test.delta } : {}) };
+      })
+      .filter(Boolean) as Array<{ postId: string; score: number; dial?: keyof Dials; delta?: 1 | -1 }>;
+    const months = [1, 2].map((k) => {
+      const d = new Date(Date.UTC(y, mo - 1 - k, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    });
+    const { data: older } = await db.from('client_reports').select('numbers').eq('client_id', req.clientId).in('month', months);
+    const pool = new Map<string, (typeof dialResults)[number]>();
+    for (const r of older ?? []) for (const x of ((r.numbers as any)?.dialResults ?? []) as typeof dialResults) pool.set(x.postId, x);
+    for (const x of dialResults) pool.set(x.postId, x);
+    const setting = { ...DEFAULT_DIALS, ...(kit.profile.dials ?? {}) };
+    const dialSuggestions = dialLifts(
+      [...pool.values()].map((x) => ({ test: x.dial && x.delta ? { dial: x.dial, delta: x.delta } : null, target: null, score: x.score })),
+      setting,
+    );
+
     const numbers = {
       month: req.month,
       timezone: tz,
@@ -734,12 +770,14 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
       backlotPosted: posted ?? 0,
       previous: p && typeof p.posts === 'number' ? { posts: p.posts, impressions: p.impressions ?? 0, engagementRate: p.engagementRate ?? null } : null,
       weights: perf.weights,
+      dialResults,
+      dialSuggestions,
     };
 
     let summary: z.infer<typeof ReportDraft> | null = null;
     if (perf.stats.postsMeasured > 0) {
       const lines = linesWithin(perf);
-      const { previous, weights: _w, ...shown } = numbers;
+      const { previous, weights: _w, dialResults: _r, ...shown } = numbers;
       const prompt = [
         snapshotText(kit),
         `# ${req.month} in numbers (worked out in code from X's public numbers${numbers.complete ? '' : '; the month is not over yet'})`,
@@ -1032,6 +1070,7 @@ export const BrandEdits = ClientProfileBase.pick({
   humorStyles: true,
   faq: true,
   links: true,
+  offers: true,
 }).partial();
 
 export const BrandSaveRequest = z.object({ clientId: id, edits: BrandEdits });
@@ -1946,11 +1985,13 @@ ${list.join('\n')}
 - What performs on their page (whatWorks) is the floor, not the ceiling. Keep their voice and brand, and make each post the strongest version for X's ranking: a first line that stops the scroll, a real reason to reply or quote, value worth sharing.
 - Hashtags: at most 2, only from: ${tags.length ? tags.map((t) => '#' + t).join(' ') : '(none, so use no hashtags)'}. Required tags (#ad, contest tags) do not count.
 - Links: only their approved links${kit.profile.links?.length ? ` (${kit.profile.links.map((l) => l.url).join(', ')})` : ' (none set, so no links)'}.
+- Offers: when a post names an offer, use their offers list exactly (name, price, deal). A deal or code may appear only if its end date is today or later (today is ${new Date().toISOString().slice(0, 10)} UTC; no end date means it runs). Never invent a price, a discount, a code or a deadline.
 - Never ask people to like, repost, follow or save. Make the post worth replying to, saving or sharing on its own.
 - Paid, gifted or rewarded posts start with #ad. Giveaway posts carry the reward's tag${plan.reward?.disclosureTag ? ` (${plan.reward.disclosureTag})` : ''}. Anything that could read as financial advice ends with "Education only, not financial advice."
 - Do not open the same way as these hooks already used: ${hooks.length ? hooks.map((h) => JSON.stringify(h)).join(' | ') : '(none yet)'}
 - algorithmScore and signals use the X ranking settings above. voiceMatch and drift check the draft against the voice card honestly.
 - When a slot has media, write the post for that exact photo or video (its tags say what is in it), and use mediaIdea to say how to post it (crop, first frame, caption placement). Without media, mediaIdea describes what to shoot.
+- When a slot has dialTest, write that one dial at the level it gives and every other dial as usual. It is a small test of which level their audience prefers; do not mention it in the post.
 - When a slot has detailFromClient, it is the real fact this post was waiting on (a price, a link, a date). Use it exactly as given and invent nothing beyond it. If it still is not enough, say what is missing in compliance.blockedReasons.
 - If a post cannot be written within the rules, still return the slot with the reason in compliance.blockedReasons.`;
 }
@@ -1997,14 +2038,14 @@ function heldPost(s: PlanSlot, reasons: string[]) {
  * dial is more than a notch off; after that, save it with its readings, or hold it when
  * controversy or spice still run hot. No reading (the check failed): save as is.
  */
-function dialVerdict(post: Record<string, unknown>, read: DialResult | undefined, retried: boolean):
+function dialVerdict(post: Record<string, unknown>, read: DialResult | undefined, retried: boolean, test?: DialTest):
   | { kind: 'ok'; post: Record<string, unknown> }
   | { kind: 'redo'; fixes: string[] }
   | { kind: 'blocked'; reasons: string[] } {
   if (!read) return { kind: 'ok', post };
   if (read.fixes.length && !retried) return { kind: 'redo', fixes: read.fixes };
   if (read.overLimit) return { kind: 'blocked', reasons: ['Controversy or spice still runs above the client\'s setting after a rewrite.', ...read.fixes].slice(0, 10) };
-  return { kind: 'ok', post: { ...post, dials: { readings: read.readings, target: read.target } } };
+  return { kind: 'ok', post: { ...post, dials: { readings: read.readings, target: read.target, ...(test ? { test } : {}) } } };
 }
 
 type Judged =
@@ -2080,7 +2121,19 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
 
   const picked = slots.map((sl) => sl.mediaId).filter((m): m is string => Boolean(m));
   const mediaFiles = new Map((await loadLibraryFiles(db, kit.clientId, kit.ownerId, picked)).map((f) => [f.id, f]));
-  const prompt = draftPrompt(kit, plan, slots, redo, hooks, mediaFiles);
+  // Dial upgrade 4: about one post in five tests one dial a notch off the setting.
+  const baseDials = { ...DEFAULT_DIALS, ...(kit.profile.dials ?? {}) };
+  const matters = kit.card?.whatWorks?.dialStart?.matters;
+  const tests = new Map<number, DialTest>();
+  for (const sl of slots) {
+    const t = dialTestFor(c.id, sl.slot, baseDials, sl.stage, matters);
+    if (t) tests.set(sl.slot, t);
+  }
+  const promptSlots = slots.map((sl) => {
+    const t = tests.get(sl.slot);
+    return t ? ({ ...sl, dialTest: testLine(t, targetDials(baseDials, sl.stage)) } as PlanSlot) : sl;
+  });
+  const prompt = draftPrompt(kit, plan, promptSlots, redo, hooks, mediaFiles);
   const ctx = checkContextFor(kit, plan);
 
   const newRows: Array<{ campaign_id: string; owner_id: string; slot: number; status: 'ok' | 'blocked'; post: unknown }> = [];
@@ -2127,9 +2180,9 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     }
 
     // The separate dial check on every draft that passed the rule checks.
-    const read = await checkDials(dialBudget(c.id, db), kit.profile.dials, passed.map((x) => ({ slot: x.s.slot, stage: x.s.stage, draft: String(x.post.draft ?? '') })), timeLeft(deadline) - 15_000);
+    const read = await checkDials(dialBudget(c.id, db), kit.profile.dials, passed.map((x) => ({ slot: x.s.slot, stage: x.s.stage, draft: String(x.post.draft ?? ''), test: tests.get(x.s.slot) ?? null })), timeLeft(deadline) - 15_000);
     for (const x of passed) {
-      const verdict = dialVerdict(x.post, read.get(x.s.slot), x.earlier);
+      const verdict = dialVerdict(x.post, read.get(x.s.slot), x.earlier, tests.get(x.s.slot));
       if (verdict.kind === 'redo') nextRedo[String(x.s.slot)] = verdict.fixes;
       else if (verdict.kind === 'blocked') blockRow(x.s, verdict.reasons);
       else newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: x.s.slot, status: 'ok', post: verdict.post });

@@ -26,7 +26,7 @@ export const KNOWLEDGE_VERSION = {
   rein: 'k2',
   bil: 'k2',
   check: 'k1',
-  kris: 'k4',
+  kris: 'k5',
   dials: 'k1',
 } as const;
 

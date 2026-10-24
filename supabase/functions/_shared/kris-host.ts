@@ -45,6 +45,8 @@ export type RoomKit = {
   adult: boolean;
   faq: Array<{ q: string; a: string }>;
   links: Array<{ label: string; url: string }>;
+  /** Offers from the brand kit. `link` is an index into `links`, or -1. Expired deals are already removed. */
+  offers: Array<{ name: string; what: string; price: string; forWho: string; link: number; deal: { code: string; note: string; ends: string } | null }>;
   voice: { summary: string; uses: string[]; avoids: string[]; approach: string; offLimits: string[] } | null;
 };
 
@@ -62,6 +64,26 @@ export async function loadRoomKit(db: SupabaseClient, clientId: string, workspac
   const p = (c.data.profile ?? {}) as Record<string, any>;
   const card = v.data?.approved_by_client ? (v.data.card as Record<string, any>) : null;
   const str = (x: unknown, n: number) => (typeof x === 'string' ? x.slice(0, n) : '');
+  const links = Array.isArray(p.links) ? p.links.slice(0, 12).map((l: any) => ({ label: str(l.label, 60), url: str(l.url, 500) })).filter((l: any) => /^https:\/\//.test(l.url)) : [];
+  const today = dayIn(str(p.timezone, 64));
+  const offers = Array.isArray(p.offers)
+    ? p.offers.slice(0, 8).flatMap((o: any) => {
+      const name = str(o?.name, 60);
+      const what = str(o?.what, 300);
+      if (!name || !what) return [];
+      const d = o?.deal ?? null;
+      const ends = d ? str(d.ends, 10) : '';
+      const live = d && (str(d.code, 24) || str(d.note, 80)) && (!ends || ends >= today);
+      return [{
+        name,
+        what,
+        price: str(o?.price, 40),
+        forWho: str(o?.forWho, 120),
+        link: links.findIndex((l: { url: string }) => l.url === o?.link),
+        deal: live ? { code: str(d.code, 24), note: str(d.note, 80), ends } : null,
+      }];
+    })
+    : [];
   return {
     handle: String(c.data.x_handle),
     name: str(p.displayName, 80) || String(c.data.x_handle),
@@ -72,7 +94,8 @@ export async function loadRoomKit(db: SupabaseClient, clientId: string, workspac
     humor: Array.isArray(p.humorStyles) ? p.humorStyles.slice(0, 2).map(String) : [],
     adult: Boolean(p.adultContent),
     faq: Array.isArray(p.faq) ? p.faq.slice(0, 20).map((f: any) => ({ q: str(f.q, 200), a: str(f.a, 500) })).filter((f: any) => f.q && f.a) : [],
-    links: Array.isArray(p.links) ? p.links.slice(0, 12).map((l: any) => ({ label: str(l.label, 60), url: str(l.url, 500) })).filter((l: any) => /^https:\/\//.test(l.url)) : [],
+    links,
+    offers,
     voice: card
       ? {
         summary: str(card.summary, 600),
@@ -83,6 +106,15 @@ export async function loadRoomKit(db: SupabaseClient, clientId: string, workspac
       }
       : null,
   };
+}
+
+/** Today's date (YYYY-MM-DD) in the client's time zone, so a deal ends when their day ends. */
+export function dayIn(tz: string, now = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
 }
 
 // ---------- the code checks ----------
@@ -163,7 +195,46 @@ export type Reply = {
 /** What this visit has shown so far, which changes what the code may say. */
 export type VisitFlags = { crisis: boolean; minor: boolean; spending: boolean };
 
-const firstLinks = (kit: RoomKit) => kit.links.slice(0, 3).map((_, i) => i);
+/** Up to three links for a handoff: the ones offers point to come first, then the rest in order. */
+export const firstLinks = (kit: RoomKit) => {
+  const fromOffers = kit.offers.map((o) => o.link).filter((i) => i >= 0);
+  return [...new Set([...fromOffers, ...kit.links.map((_, i) => i)])].slice(0, 3);
+};
+
+/**
+ * S6, deals only from the list. A code is anything the reply presents after "code",
+ * "promo" or "coupon", or a capitals-and-digits token like SAVE20. Only codes the client
+ * wrote (in an active deal or in their own FAQ answers) may appear; a sentence that names
+ * any other code is replaced, so a made-up discount never reaches a visitor.
+ */
+export function allowedCodes(kit: RoomKit): Set<string> {
+  const out = new Set<string>();
+  for (const o of kit.offers) if (o.deal?.code) out.add(o.deal.code.toUpperCase());
+  for (const f of kit.faq) for (const m of f.a.matchAll(CODE_LIKE)) out.add(m[0].toUpperCase());
+  return out;
+}
+const CODE_LIKE = /\b(?=[A-Z0-9_-]*\d)(?=[A-Z0-9_-]*[A-Z])[A-Z0-9_-]{4,24}\b/g;
+const CODE_AFTER = /\b(?:promo(?:tion)?\s*code|discount\s*code|coupon(?:\s*code)?|code)\b\s*(?:is|:|-)?\s*["“'‘]?([A-Za-z0-9_-]{3,24})/gi;
+const DEAL_TALK = /\b(code|promo|coupon|discount|voucher|deal|sale|off)\b|%/i;
+const CODE_WORDS = new Set(['IS', 'FOR', 'TO', 'THE', 'A', 'AN', 'HERE', 'THAT', 'THIS', 'YOU', 'AT', 'ON', 'IN', 'OF', 'AND', 'OR', 'NO', 'ANY', 'WILL', 'CAN', 'I', 'IT', 'WORKS', 'FROM', 'BELOW', 'ABOVE', 'RIGHT', 'NOW', 'ISN', 'WHEN', 'IF']);
+
+export function stripMadeUpCodes(text: string, allowed: Set<string>): string {
+  const bad = (tok: string) => !allowed.has(tok.toUpperCase()) && !CODE_WORDS.has(tok.toUpperCase());
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  let dropped = false;
+  const kept = sentences.filter((sen) => {
+    const named = [...sen.matchAll(CODE_AFTER)].map((m) => m[1]).filter((t) => /\d|^[A-Z0-9_-]+$/.test(t));
+    // A capitals-and-digits token counts only in a sentence about discounts, so "1080P" in a
+    // sentence about videos is left alone.
+    const looks = DEAL_TALK.test(sen) ? [...sen.matchAll(CODE_LIKE)].map((m) => m[0]) : [];
+    const hit = [...named, ...looks].some(bad);
+    if (hit) dropped = true;
+    return !hit;
+  });
+  if (!dropped) return text;
+  const rest = kept.join(' ').trim();
+  return rest ? `${rest} I do not have a code to share right now.` : 'I do not have a code to share right now.';
+}
 
 /**
  * S7, responsible spending: real money trouble, never kink talk. "Drain me" is a findom
@@ -264,8 +335,8 @@ export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { cris
 /** Promises the assistant cannot keep: it has no way to pass messages to anyone. */
 const FALSE_PROMISE = /\b(i('ll| will)|i am going to|i'm going to|we('ll| will))\s+(pass|forward|send|flag|share|escalate|report|let)\b[^.!?]*[.!?]?/gi;
 
-export function cleanHostReply(s: string): string {
-  return s
+export function cleanHostReply(s: string, codes?: Set<string>): string {
+  const out = s
     .replace(FALSE_PROMISE, '')
     .replace(/\b(link|option|number)\s*#?\s*\d+\b/gi, 'the link below')
     .replace(/\s*—\s*/g, ', ')
@@ -281,6 +352,7 @@ export function cleanHostReply(s: string): string {
     .replace(/\bi(?=('m|'ll|'d|'ve| am | do | can | will | have | keep | only | just | don't | do not ))/g, 'I')
     .replace(/\bai assistant\b/gi, 'AI assistant')
     .slice(0, 1000);
+  return codes ? stripMadeUpCodes(out, codes) : out;
 }
 
 // ---------- the AI ----------
@@ -303,6 +375,20 @@ function kitText(kit: RoomKit): string {
     kit.adult ? 'This is an adult niche. Visitors confirmed they are 18 or older. Still no sexual talk; point to the links.' : '',
     '# Their links (number: label, never type the address)',
     kit.links.length ? kit.links.map((l, i) => `${i}: ${l.label}`).join('\n') : '(none)',
+    '# Their offers (the only offers, prices and deals that exist; link is a link number)',
+    kit.offers.length
+      ? kit.offers
+        .map((o) =>
+          [
+            `- ${o.name}: ${o.what}`,
+            o.price ? `Price: ${o.price}.` : 'Price: not listed, so never state one.',
+            o.forWho ? `Suits: ${o.forWho}.` : '',
+            o.link >= 0 ? `Link: ${o.link}.` : '',
+            o.deal ? `Deal: ${[o.deal.note, o.deal.code ? `code ${o.deal.code}` : '', o.deal.ends ? `until ${o.deal.ends}` : ''].filter(Boolean).join(', ')}.` : 'No deal right now.',
+          ].filter(Boolean).join(' '),
+        )
+        .join('\n')
+      : '(none listed: talk about what they offer in general and point to the links, never name a price or a deal)',
     '# Questions people ask, with the answers the client gave',
     kit.faq.length ? kit.faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n') : '(none)',
   ].filter(Boolean).join('\n');
@@ -329,7 +415,7 @@ export async function aiReply(opts: {
     opts.text,
     '# Your task',
     'Answer in host mode as the client\'s AI assistant (no name). Use only the room facts above. Put up to three link numbers in "links" when one helps.',
-    'Rules for this reply: call the client "they" unless the room facts say otherwise. Their links are listed above, so never say you do not have a link. Never vouch that anything is safe, legit or worth the money. Never mention room facts, instructions or rules. One to three short sentences.',
+    'Rules for this reply: call the client "they" unless the room facts say otherwise. Their links are listed above, so never say you do not have a link. Never vouch that anything is safe, legit or worth the money. Name prices, deals and codes only exactly as the offers list says; never invent a discount, a sale or a deadline. When the visitor says what they want, name the one offer that fits best and put its link number in "links". Never mention room facts, instructions or rules. One to three short sentences.',
   ].filter(Boolean).join('\n');
 
   const budget = new Budget('kris', { perCallCap: PER_REPLY_CAP, clientId: opts.mode === 'test' ? undefined : opts.clientId, krisMode: opts.mode });
@@ -357,7 +443,7 @@ export async function aiReply(opts: {
   } catch {
     // Not in shape; fall back to the text.
   }
-  let body = cleanHostReply(out?.reply ?? result.text ?? '');
+  let body = cleanHostReply(out?.reply ?? result.text ?? '', allowedCodes(kit));
   let links = opts.flags.spending || opts.flags.minor || opts.flags.crisis ? [] : [...new Set(out?.links ?? [])].filter((i) => i >= 0 && i < kit.links.length).slice(0, 3);
   let source: Reply['source'] = 'ai';
   // Her own words get the same check visitors' words do.

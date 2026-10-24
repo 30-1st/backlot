@@ -5,7 +5,7 @@
 // Only the card is stored; text read from X is not. Samples the client pastes in
 // themselves are their own content and may be kept.
 
-import { z, id, isoDateTime, shortText, slug, text, xPostId, FunnelStage } from './common.ts';
+import { z, id, isoDate, isoDateTime, shortText, slug, text, xPostId, FunnelStage } from './common.ts';
 
 // ---------- client profile ----------
 
@@ -100,6 +100,28 @@ export function targetDials(d: Dials, stage?: string): Dials {
 /** Humor styles from the Humor Styles Questionnaire, as the Kris Roadmap names them. */
 export const HumorStyle = z.enum(['warm', 'self_deprecating', 'at_ideas', 'hard_moments']);
 
+/**
+ * One thing the client sells. Every fact here is written by the client or the team, so Kris
+ * and Bil can name prices and deals without inventing any. The link must be one of the
+ * client's approved links; a deal code is shared only while its end date has not passed.
+ */
+export const Offer = z.object({
+  name: shortText(60),
+  what: text(300).describe('What is included, in plain words.'),
+  price: shortText(40).optional().describe('As the client writes it, e.g. "$15 a month" or "from $40".'),
+  forWho: shortText(120).optional().describe('Who it suits, e.g. "first-timers" or "regulars who want more".'),
+  link: z.string().url().max(500).regex(/^https:\/\//).optional().describe('Must match one of the client\'s approved links.'),
+  deal: z
+    .object({
+      code: z.string().regex(/^[A-Za-z0-9_-]{3,24}$/, 'Codes use letters, numbers, - or _, 3 to 24 long').optional(),
+      note: shortText(80).optional().describe('What the deal is, e.g. "20% off the first month".'),
+      ends: isoDate.optional().describe('Last day the deal runs, in the client\'s time zone.'),
+    })
+    .refine((d) => d.code || d.note, 'A deal needs a code or a short note')
+    .optional(),
+});
+export type Offer = z.infer<typeof Offer>;
+
 /** The profile's fields without its cross-field rules, so forms can reuse a subset of them. */
 export const ClientProfileBase = z.object({
     clientId: id,
@@ -148,6 +170,11 @@ export const ClientProfileBase = z.object({
       .max(12)
       .optional()
       .describe('The only links Bil and Kris may point people to.'),
+    offers: z
+      .array(Offer)
+      .max(8)
+      .optional()
+      .describe('What the client sells, one entry per offer. Kris matches visitors to these and Bil names them in posts; neither invents offers, prices or deals.'),
     readConsentAt: isoDateTime
       .optional()
       .describe('When the person confirmed they own or manage this X account and allowed Bil to read its public posts. No read happens without it.'),
@@ -162,6 +189,12 @@ export const ClientProfile = ClientProfileBase.superRefine((p, ctx) => {
         message: 'Adult niches need the client to confirm everyone is 18+ and consenting.',
       });
     }
+    const urls = new Set((p.links ?? []).map((l) => l.url));
+    (p.offers ?? []).forEach((o, i) => {
+      if (o.link && !urls.has(o.link)) {
+        ctx.addIssue({ code: 'custom', path: ['offers', i, 'link'], message: `The link for "${o.name}" is not one of the approved links.` });
+      }
+    });
     if (p.kind === 'professional' && !p.licensing) {
       ctx.addIssue({
         code: 'custom',
@@ -213,6 +246,15 @@ export const WhatWorks = z
         .describe('The same score split by time of day, media and length.'),
     }),
     topPostIds: z.array(xPostId).max(5).describe('Their best posts by score, shown with X\'s embed.'),
+    dialStart: z
+      .object({
+        top: Dials,
+        bottom: Dials,
+        matters: z.array(z.enum(['controversy', 'cringe', 'brainrot', 'hype', 'salesPush', 'insider', 'usefulness', 'trendChasing', 'spice'])).max(9),
+        posts: z.object({ top: z.number().int().min(1).max(5), bottom: z.number().int().min(1).max(5) }),
+      })
+      .optional()
+      .describe('Dial upgrade 1: where their best and weakest posts sit on the dials, as a suggested starting setting. A suggestion only; the dials change when someone saves them.'),
     measuredAt: isoDateTime,
   })
   .describe('What performs on their page today.');

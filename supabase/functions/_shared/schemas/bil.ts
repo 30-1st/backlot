@@ -139,7 +139,14 @@ export const CampaignPost = z.object({
   voice: VoiceCheck,
   compliance: ComplianceFlags,
   /** The separate dial check (upgrade 3): what each dial read on this draft, and the setting it was held to. */
-  dials: z.object({ readings: Dials, target: Dials }).optional(),
+  dials: z
+    .object({
+      readings: Dials,
+      target: Dials,
+      /** Dial upgrade 4: this post tested one dial a notch off the setting. */
+      test: z.object({ dial: z.enum(['controversy', 'cringe', 'brainrot', 'hype', 'salesPush', 'insider', 'usefulness', 'trendChasing', 'spice']), delta: z.union([z.literal(1), z.literal(-1)]) }).optional(),
+    })
+    .optional(),
 });
 
 export const Campaign = z

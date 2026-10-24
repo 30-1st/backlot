@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
+import { DEFAULT_DIALS, DIALS, type Dials } from '../lib/dials';
 
 // Monthly reports: how each month went on X, from X's own public numbers. Code works out
 // every number; Bil writes the plain-words part. The team makes them; clients read them.
@@ -25,6 +26,8 @@ type Numbers = {
   top: Array<{ postId: string; score: number; impressions: number; replies: number; quotes: number; reposts: number; likes: number }>;
   backlotPosted: number;
   previous: { posts: number; impressions: number; engagementRate: number | null } | null;
+  /** Dial upgrade 4: levels that beat the setting in tests, from this month and the two before. */
+  dialSuggestions?: Array<{ dial: keyof Dials; from: number; to: number; testPosts: number; basePosts: number; liftPct: number }>;
 };
 type Summary = { headline: string; worked: string[]; tryNext: string[] };
 type Report = { id: string; month: string; numbers: Numbers; summary: Summary | null; costUsd: number; createdAt: string };
@@ -186,12 +189,72 @@ export function ReportsScreen({ ws, single, isTeam }: ScreenProps) {
         </div>
       )}
 
-      {shown && <ReportView r={shown} isTeam={isTeam} />}
+      {shown && <ReportView r={shown} isTeam={isTeam} clientId={client.id} dials={{ ...DEFAULT_DIALS, ...((client.profile.dials as Partial<Dials> | undefined) ?? {}) }} refresh={ws.refresh} />}
     </main>
   );
 }
 
-function ReportView({ r, isTeam }: { r: Report; isTeam: boolean }) {
+/**
+ * Dial upgrade 4. A tested level that beat the setting is offered to the client, who says
+ * yes here; like any client edit to the brand kit, it then waits for the team's OK.
+ */
+function DialTests({ r, isTeam, clientId, dials, refresh }: { r: Report; isTeam: boolean; clientId: string; dials: Dials; refresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const list = (r.numbers.dialSuggestions ?? []).filter((x) => DIALS.some((d) => d.key === x.dial));
+  if (!list.length) return null;
+  const name = (k: keyof Dials) => DIALS.find((d) => d.key === k)?.name ?? k;
+  async function use(dial: keyof Dials, to: number) {
+    setBusy(dial);
+    setError('');
+    try {
+      const r2 = await bil.brandSave(clientId, { dials: { ...dials, [dial]: to } });
+      await refresh();
+      setNote(r2.waiting ? 'Sent. Your team will OK it, then Bil writes to the new level.' : 'Saved. Bil writes to the new level from the next plan.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the change.');
+    } finally {
+      setBusy('');
+    }
+  }
+  return (
+    <section className="bl-glass-card" aria-labelledby={`d-${r.id}`}>
+      <b id={`d-${r.id}`}>What the dial tests found</b>
+      <span className="bl-small">About one post in five tries one dial a notch off the setting. These levels did better on your posts.</span>
+      <ul className="bl-report-list">
+        {list.map((x) => (
+          <li key={x.dial} className="bl-dial-lift">
+            <span>
+              {name(x.dial)} at {x.to} beat {x.from} by {x.liftPct}% ({x.testPosts} test posts against {x.basePosts} at the setting).
+            </span>
+            {dials[x.dial] === x.to ? (
+              <span className="bl-small">Already set to {x.to}.</span>
+            ) : isTeam ? (
+              <span className="bl-small">The client can switch to it from their Reports.</span>
+            ) : (
+              <button type="button" className="bl-ghost" disabled={!!busy} onClick={() => void use(x.dial, x.to)}>
+                {busy === x.dial ? 'Sending' : `Use ${name(x.dial)} ${x.to}`}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {note && (
+        <p className="bl-small" role="status" style={{ margin: 0 }}>
+          {note}
+        </p>
+      )}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ReportView({ r, isTeam, clientId, dials, refresh }: { r: Report; isTeam: boolean; clientId: string; dials: Dials; refresh: () => Promise<void> }) {
   const n = r.numbers;
   const tiles: Array<[string, string, React.ReactNode]> = [
     ['Posts', fmt(n.posts), <Change key="p" now={n.posts} before={n.previous?.posts} />],
@@ -266,6 +329,7 @@ function ReportView({ r, isTeam }: { r: Report; isTeam: boolean }) {
           </ul>
         </section>
       )}
+      <DialTests r={r} isTeam={isTeam} clientId={clientId} dials={dials} refresh={refresh} />
       {n.posts === 0 && <p className="bl-small">No original posts that month, so there is nothing to report.</p>}
       <p className="bl-small" style={{ margin: 0 }}>
         Made {new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}

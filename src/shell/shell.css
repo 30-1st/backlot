@@ -2330,3 +2330,28 @@ html[data-vt='back']::view-transition-new(root) {
   .bl-pill-mark { animation: none !important; }
   .bl-pill-mark path { animation: none !important; stroke-dashoffset: 0; }
 }
+
+/* ---------- offers in the brand kit ---------- */
+
+.bl-offer-deal {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.bl-offer-deal > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+.bl-offer-deal[open] > summary { margin-bottom: 4px; }
+@media (max-width: 420px) {
+  .bl-offer .bl-brand-row { grid-template-columns: 1fr; }
+}
+.bl-dial-start { display: flex; flex-direction: column; gap: 8px; }
+.bl-dial-lift { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
