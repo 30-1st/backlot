@@ -161,13 +161,13 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return reply(405, { error: 'POST only' });
   if (!h['Access-Control-Allow-Origin']) return reply(403, { error: 'Not allowed' });
 
-  // Once per worker: which address headers the platform sends, as counts only, never values.
-  if (!loggedHeaders) {
+  // Diagnostic (temporary): where the platform puts the caller's address. Positions and
+  // test-value matches only, never an address.
+  if (!loggedHeaders || req.headers.get('x-room-diag') === '1') {
     loggedHeaders = true;
-    const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').filter((s) => s.trim()).length;
-    const cf = req.headers.get('cf-connecting-ip');
-    const last = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean).pop();
-    console.log(`room: address headers xff_entries=${xff} cf_present=${Boolean(cf)} cf_matches_last=${Boolean(cf && last && cf === last)}`);
+    const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const cf = req.headers.get('cf-connecting-ip') ?? '';
+    console.log(`room: address headers xff_entries=${xff.length} cf_present=${Boolean(cf)} cf_at=${xff.indexOf(cf)} test_xff_at=${xff.indexOf('1.2.3.4')} cf_is_test=${cf === '9.9.9.9'} real_ip_present=${Boolean(req.headers.get('x-real-ip'))} real_ip_is_cf=${req.headers.get('x-real-ip') === cf}`);
   }
 
   const raw = await req.text();
