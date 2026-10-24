@@ -1212,10 +1212,11 @@ export function xPostIdFrom(url: string): string | null {
 export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostRequest>) {
   const db = serviceClient();
   const { data: c, error: cError } = await db
-    .from('campaigns').select('id, client_id').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
+    .from('campaigns').select('id, client_id, discarded_at').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
   if (cError) throw new Error(`Could not read the campaign: ${cError.message}`);
   if (!c) throw new BilInputError('No such campaign.', 404);
   requireClientAccess(m, c.client_id);
+  if (c.discarded_at) throw new BilInputError('This campaign was discarded. Restore it first.', 409);
 
   const { data: post, error: pError } = await db
     .from('campaign_posts').select('status, review, post').eq('campaign_id', req.campaignId).eq('slot', req.slot).maybeSingle();
@@ -1394,10 +1395,11 @@ export const FillDetailRequest = z.object({
 export async function fillDetail(m: Member, req: z.infer<typeof FillDetailRequest>) {
   const db = serviceClient();
   const { data: campaign, error: cError } = await db
-    .from('campaigns').select('id, client_id, owner_id, status, request, plan').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
+    .from('campaigns').select('id, client_id, owner_id, status, request, plan, discarded_at').eq('id', req.campaignId).eq('owner_id', m.workspaceId).maybeSingle();
   if (cError) throw new Error(`Could not read the campaign: ${cError.message}`);
   if (!campaign) throw new BilInputError('No such campaign.', 404);
   requireClientAccess(m, campaign.client_id);
+  if ((campaign as { discarded_at?: string | null }).discarded_at) throw new BilInputError('This campaign was discarded. Restore it first.', 409);
   const c = campaign as Campaign;
 
   const { data: row, error: pError } = await db
