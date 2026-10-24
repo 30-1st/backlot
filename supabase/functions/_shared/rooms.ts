@@ -34,7 +34,8 @@ async function roomKey(): Promise<CryptoKey> {
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
 
-export type Ticket = { kind: 'preview' | 'visit'; slug: string; exp: number };
+/** vid: the visit's random id (visit tickets only), so chats are kept apart. */
+export type Ticket = { kind: 'preview' | 'visit'; slug: string; exp: number; vid?: string };
 
 export async function signTicket(t: Ticket, key?: CryptoKey): Promise<string> {
   const payload = b64url(new TextEncoder().encode(JSON.stringify(t)));

@@ -17,7 +17,7 @@ export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign' | 'rep
 /** Thrown when a reservation would go over a cap. Nothing was spent. */
 export class SpendLimitError extends Error {
   constructor(
-    readonly reason: 'run' | 'month' | 'no_limit' | 'call' | 'client' | 'agent_month',
+    readonly reason: 'run' | 'month' | 'no_limit' | 'call' | 'client' | 'agent_month' | 'test_month',
     readonly detail: Record<string, unknown>,
   ) {
     super(
@@ -28,9 +28,11 @@ export class SpendLimitError extends Error {
           : reason === 'call'
             ? `This call's estimate ($${detail.estimate}) is over the $${detail.cap} per-call limit`
           : reason === 'client'
-            ? `This client's monthly allowance is used up ($${detail.used} of $${detail.cap})`
+            ? `This client's monthly Kris allowance is used up`
           : reason === 'agent_month'
-            ? `This agent's monthly budget is used up ($${detail.used} of $${detail.cap})`
+            ? `This agent's monthly budget is used up`
+          : reason === 'test_month'
+            ? `This month's test-chat budget is used up`
           : String(detail.detail ?? 'No spending limit is set'),
     );
     this.name = 'SpendLimitError';
@@ -99,8 +101,13 @@ export type BudgetOptions = {
   /** Refuse any single call whose estimate is above this, in USD. */
   perCallCap?: number;
   db?: SupabaseClient;
-  /** Meter this run against the client's own monthly allowance too (scopes <agent>_client and <agent>_month). */
+  /** Kris only: the client whose allowance pays for this call. */
   clientId?: string;
+  /**
+   * Kris only: whose chat this is. "client" (their own chat in Backlot, up to the full
+   * $3), "room" (visitors, stopping $0.50 short) or "test" (the separate test budget).
+   */
+  krisMode?: 'client' | 'room' | 'test';
 };
 
 export class Budget {
@@ -110,6 +117,7 @@ export class Budget {
   private readonly perCallCap?: number;
   private readonly db: SupabaseClient;
   private readonly clientId?: string;
+  private readonly krisMode?: 'client' | 'room' | 'test';
 
   constructor(
     readonly agent: AgentName,
@@ -119,6 +127,7 @@ export class Budget {
     this.perCallCap = options.perCallCap;
     this.db = options.db ?? serviceClient();
     this.clientId = options.clientId;
+    this.krisMode = options.krisMode ?? (options.clientId ? 'client' : undefined);
   }
 
   /**
@@ -141,8 +150,8 @@ export class Budget {
       throw new SpendLimitError('call', { estimate, cap: this.perCallCap });
     }
     const args = { run: this.runId, agent: this.agent, kind, estimate, trace: getActiveTraceId() ?? null };
-    const { data, error } = this.clientId
-      ? await this.db.rpc('agent_spend_reserve_client', { ...args, client: this.clientId })
+    const { data, error } = this.krisMode
+      ? await this.db.rpc('kris_spend_reserve', { run: args.run, kind, estimate, trace: args.trace, client: this.clientId ?? null, mode: this.krisMode })
       : await this.db.rpc('agent_spend_reserve', args);
     if (error) throw new Error(`Spend meter unavailable: ${error.message}`);
     if (!data?.ok) throw new SpendLimitError(data?.reason ?? 'no_limit', data ?? {});
