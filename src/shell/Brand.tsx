@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { bil } from '../lib/team';
+import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, riskyDials, type Dials, type HumorStyle } from '../lib/dials';
 import type { ScreenProps } from './Shell';
 
 // The brand kit: everything Bil reads about a client before he plans or writes, on one
@@ -7,6 +8,8 @@ import type { ScreenProps } from './Shell';
 // nothing Bil plans from changes without someone on the team seeing it first.
 
 type Goal = { goal: string; detail: string; target?: string };
+type Faq = { q: string; a: string };
+type Link = { label: string; url: string };
 type Kit = {
   displayName: string;
   niche: string;
@@ -23,6 +26,10 @@ type Kit = {
   competitors: string[];
   adultContent: boolean;
   adultsOnlyConfirmed: boolean;
+  dials: Dials | null;
+  humorStyles: HumorStyle[];
+  faq: Faq[];
+  links: Link[];
 };
 
 const GOALS: Array<[string, string]> = [
@@ -50,6 +57,10 @@ export const LABELS: Record<keyof Kit, string> = {
   competitors: 'Competitor accounts',
   adultContent: 'Adult content',
   adultsOnlyConfirmed: 'Adults only',
+  dials: 'Dials',
+  humorStyles: 'Humor styles',
+  faq: 'Questions people ask',
+  links: 'Links',
 };
 
 function kitOf(p: Record<string, unknown>): Kit {
@@ -70,6 +81,10 @@ function kitOf(p: Record<string, unknown>): Kit {
     competitors: arr(p.competitors),
     adultContent: Boolean(p.adultContent),
     adultsOnlyConfirmed: Boolean(p.adultsOnlyConfirmed),
+    dials: p.dials && typeof p.dials === 'object' ? { ...DEFAULT_DIALS, ...(p.dials as Partial<Dials>) } : null,
+    humorStyles: Array.isArray(p.humorStyles) ? (p.humorStyles as HumorStyle[]) : [],
+    faq: Array.isArray(p.faq) ? (p.faq as Faq[]).map((f) => ({ q: String(f.q ?? ''), a: String(f.a ?? '') })) : [],
+    links: Array.isArray(p.links) ? (p.links as Link[]).map((l) => ({ label: String(l.label ?? ''), url: String(l.url ?? '') })) : [],
   };
 }
 
@@ -115,7 +130,10 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
     allowedHashtags: words(lists.tags, cleanTag).slice(0, 15),
     nicheKeywords: words(lists.keys, cleanWord).slice(0, 12),
     competitors: words(lists.rivals, cleanHandle).slice(0, 10),
+    faq: kit.faq.map((f) => ({ q: f.q.trim(), a: f.a.trim() })).filter((f) => f.q && f.a),
+    links: kit.links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.label && l.url),
   };
+  const badLink = current.links.find((l) => !/^https:\/\/[^\s/]+\.[^\s]+$/.test(l.url));
   const base = isTeam ? saved : startFrom!;
   const changed = (Object.keys(current) as Array<keyof Kit>).filter((k) => !same(current[k], base[k]));
   const pendingKeys = pending ? (Object.keys(pending) as Array<keyof Kit>).filter((k) => k in LABELS && !same(pending[k], saved[k])) : [];
@@ -150,6 +168,13 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
       setBusy(false);
     }
   }
+
+  const dials = kit.dials ?? DEFAULT_DIALS;
+  const setDial = (k: keyof Dials, v: number) => set({ dials: { ...dials, [k]: v } });
+  const toggleHumor = (h: HumorStyle) =>
+    set({ humorStyles: kit.humorStyles.includes(h) ? kit.humorStyles.filter((x) => x !== h) : [...kit.humorStyles, h].slice(-2) });
+  const setFaq = (i: number, patch: Partial<Faq>) => set({ faq: kit.faq.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
+  const setLink = (i: number, patch: Partial<Link>) => set({ links: kit.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
   const goals = kit.goals.length ? kit.goals : [{ goal: 'sales', detail: '', target: '' }];
   const setGoal = (i: number, patch: Partial<Goal>) => set({ goals: goals.map((g, j) => (j === i ? { ...g, ...patch } : g)) });
@@ -259,6 +284,85 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
         </p>
       </section>
 
+      <section className="bl-glass-card bl-brand-group" aria-labelledby="dials">
+        <h2 id="dials" className="bl-section-title">Dials</h2>
+        <p className="bl-small" style={{ margin: 0 }}>
+          How every post should feel, from 1 to 7. Bil and Kris write at these levels, give or take one notch, and never go above controversy or spice.
+          {!kit.dials && ' These are the starting levels until someone sets them.'}
+        </p>
+        {DIALS.map((d) => (
+          <label key={d.key} className="bl-knob">
+            <span className="bl-knob-top">
+              <span className="bl-label">{d.name}</span>
+              <b className="num">{dials[d.key]}</b>
+            </span>
+            <input type="range" min={1} max={7} step={1} value={dials[d.key]} aria-valuetext={`${dials[d.key]}, ${anchorFor(d.at, dials[d.key])}`} onChange={(e) => setDial(d.key, Number(e.target.value))} />
+            <span className="bl-small">{anchorFor(d.at, dials[d.key])}</span>
+          </label>
+        ))}
+        {riskyDials(dials) && (
+          <p className="bl-small bl-knob-warn" role="note">
+            At this controversy and spice, {isTeam ? 'the client approves each post themselves' : 'you approve each post yourself'}. Jokes aimed at real people are never written, at any level.
+          </p>
+        )}
+        <fieldset className="bl-knob-humor">
+          <legend className="bl-label">Humor style, pick up to 2</legend>
+          {HUMOR.map(([h, label]) => (
+            <label key={h} className="bl-brand-check">
+              <input type="checkbox" checked={kit.humorStyles.includes(h)} onChange={() => toggleHumor(h)} />
+              <span>{label}</span>
+            </label>
+          ))}
+        </fieldset>
+      </section>
+
+      <section className="bl-glass-card bl-brand-group" aria-labelledby="faq">
+        <h2 id="faq" className="bl-section-title">Questions people ask</h2>
+        <p className="bl-small" style={{ margin: 0 }}>
+          Kris answers from these, and says she will check with you on anything else.
+        </p>
+        {kit.faq.map((f, i) => (
+          <div key={i} className="bl-brand-goal">
+            <input className="bl-input" aria-label={`Question ${i + 1}`} value={f.q} maxLength={200} placeholder="The question" onChange={(e) => setFaq(i, { q: e.target.value })} />
+            <textarea className="bl-input" aria-label={`Answer ${i + 1}`} rows={2} value={f.a} maxLength={500} placeholder="The answer" onChange={(e) => setFaq(i, { a: e.target.value })} />
+            <button type="button" className="bl-linkish" onClick={() => set({ faq: kit.faq.filter((_, j) => j !== i) })}>
+              Remove
+            </button>
+          </div>
+        ))}
+        {kit.faq.length < 20 && (
+          <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ faq: [...kit.faq, { q: '', a: '' }] })}>
+            Add a question
+          </button>
+        )}
+      </section>
+
+      <section className="bl-glass-card bl-brand-group" aria-labelledby="links">
+        <h2 id="links" className="bl-section-title">Links</h2>
+        <p className="bl-small" style={{ margin: 0 }}>
+          The only links Bil and Kris may put in a post. Anything else gets rewritten.
+        </p>
+        {kit.links.map((l, i) => (
+          <div key={i} className="bl-brand-goal">
+            <input className="bl-input" aria-label={`Link ${i + 1} name`} value={l.label} maxLength={60} placeholder="Name, like Shop or Booking" onChange={(e) => setLink(i, { label: e.target.value })} />
+            <input className="bl-input" aria-label={`Link ${i + 1} address`} type="url" inputMode="url" value={l.url} maxLength={500} placeholder="https://" onChange={(e) => setLink(i, { url: e.target.value })} />
+            <button type="button" className="bl-linkish" onClick={() => set({ links: kit.links.filter((_, j) => j !== i) })}>
+              Remove
+            </button>
+          </div>
+        ))}
+        {kit.links.length < 12 && (
+          <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ links: [...kit.links, { label: '', url: '' }] })}>
+            Add a link
+          </button>
+        )}
+        {badLink && (
+          <p className="bl-error" role="alert">
+            {badLink.label}: use a full address that starts with https://
+          </p>
+        )}
+      </section>
+
       <section className="bl-glass-card bl-brand-group" aria-labelledby="posting">
         <h2 id="posting" className="bl-section-title">Posting</h2>
         <div className="bl-brand-row">
@@ -305,7 +409,7 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
           {note}
         </p>
       )}
-      <button type="button" className="bl-btn bl-wide" disabled={busy || changed.length === 0} onClick={() => void save()}>
+      <button type="button" className="bl-btn bl-wide" disabled={busy || changed.length === 0 || !!badLink} onClick={() => void save()}>
         {busy ? 'Saving' : changed.length === 0 ? 'No changes' : isTeam ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Send to your team'}
       </button>
     </main>

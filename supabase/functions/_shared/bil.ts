@@ -24,6 +24,10 @@ import { isTeam, type Member, requireClientAccess, requireTeam } from './workspa
 import {
   ClientProfile,
   ClientProfileBase,
+  DEFAULT_DIALS,
+  DIAL_ANCHORS,
+  riskyDials,
+  type Dials,
   Personality,
   PostTypeLibrary,
   ToneSliders,
@@ -335,8 +339,24 @@ export async function loadTikTokNotes(db: SupabaseClient, clientId: string, owne
  * The client as Grok sees them. Built the same way for every step of a campaign, so it
  * stays part of the cached opening. Times are left out: they change nothing Bil decides.
  */
+/** The client's dials as Grok reads them: each number with what its level means. */
+function dialsText(kit: Kit): string {
+  const d: Dials = { ...DEFAULT_DIALS, ...(kit.profile.dials ?? {}) };
+  const lines = (Object.keys(DIAL_ANCHORS) as Array<keyof Dials>).map((k) => {
+    const [lo, mid, hi] = DIAL_ANCHORS[k];
+    return `- ${k}: ${d[k]} of 7 (1 = ${lo}; 4 = ${mid}; 7 = ${hi})`;
+  });
+  const humor = kit.profile.humorStyles?.length ? kit.profile.humorStyles.join(', ') : 'warm';
+  return [
+    `# Their voice dials${kit.profile.dials ? '' : ' (defaults; the client has not set them yet)'}`,
+    ...lines,
+    `Humor styles they are comfortable with: ${humor}. Humor is never aimed at people.`,
+    'Write every post at these levels, give or take one notch. Controversy and spice never go above their setting.',
+  ].join('\n');
+}
+
 function snapshotText(kit: Kit): string {
-  const { updatedAt: _p, readConsentAt: _c, ...profile } = kit.profile;
+  const { updatedAt: _p, readConsentAt: _c, dials: _d, humorStyles: _h, ...profile } = kit.profile;
   const card = kit.card ? (({ updatedAt: _u, ...rest }) => rest)(kit.card) : null;
   return [
     '# The client',
@@ -345,6 +365,7 @@ function snapshotText(kit: Kit): string {
     card ? JSON.stringify(card) : '(none yet)',
     '# Their post-type library',
     kit.library ? JSON.stringify(kit.library.types) : '(none yet)',
+    dialsText(kit),
   ].join('\n');
 }
 
@@ -996,6 +1017,10 @@ export const BrandEdits = ClientProfileBase.pick({
   competitors: true,
   adultContent: true,
   adultsOnlyConfirmed: true,
+  dials: true,
+  humorStyles: true,
+  faq: true,
+  links: true,
 }).partial();
 
 export const BrandSaveRequest = z.object({ clientId: id, edits: BrandEdits });
@@ -1143,6 +1168,13 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   }
   if (req.decision === 'posted' && post.review !== 'approved' && post.review !== 'posted') {
     throw new BilInputError('Approve this post before marking it as posted.', 409);
+  }
+  if (req.decision === 'approved' && isTeam(m)) {
+    const { data: cl, error: clError } = await db.from('clients').select('profile').eq('id', c.client_id).eq('owner_id', m.workspaceId).maybeSingle();
+    if (clError) throw new Error(`Could not read the client: ${clError.message}`);
+    if (riskyDials((cl?.profile as { dials?: Dials } | null)?.dials)) {
+      throw new BilInputError('At these controversy and spice levels, the client approves each post themselves.', 409);
+    }
   }
   const note = req.note && req.note.length > 0 ? req.note : null;
   if (req.decision === 'changes' && !note) throw new BilInputError('Say what should change.');
@@ -1868,6 +1900,8 @@ ${list.join('\n')}
 - Write in their voice card's voice and their language (${kit.profile.language}). ${limit}
 - What performs on their page (whatWorks) is the floor, not the ceiling. Keep their voice and brand, and make each post the strongest version for X's ranking: a first line that stops the scroll, a real reason to reply or quote, value worth sharing.
 - Hashtags: at most 2, only from: ${tags.length ? tags.map((t) => '#' + t).join(' ') : '(none, so use no hashtags)'}. Required tags (#ad, contest tags) do not count.
+- Links: only their approved links${kit.profile.links?.length ? ` (${kit.profile.links.map((l) => l.url).join(', ')})` : ' (none set, so no links)'}.
+- Never ask people to like, repost, follow or save. Make the post worth replying to, saving or sharing on its own.
 - Paid, gifted or rewarded posts start with #ad. Giveaway posts carry the reward's tag${plan.reward?.disclosureTag ? ` (${plan.reward.disclosureTag})` : ''}. Anything that could read as financial advice ends with "Education only, not financial advice."
 - Do not open the same way as these hooks already used: ${hooks.length ? hooks.map((h) => JSON.stringify(h)).join(' | ') : '(none yet)'}
 - algorithmScore and signals use the X ranking settings above. voiceMatch and drift check the draft against the voice card honestly.
@@ -1904,6 +1938,7 @@ function checkContextFor(kit: Kit, plan: CampaignPlan): CheckContext {
     allowedHashtags: new Set([...kit.profile.allowedHashtags, ...plan.trendHashtags].map((t) => t.toLowerCase())),
     wordsTheyAvoid: kit.card?.wordsTheyAvoid ?? [],
     adultAllowed: kit.profile.adultContent && kit.profile.adultsOnlyConfirmed,
+    allowedLinks: (kit.profile.links ?? []).map((l) => l.url),
   };
 }
 

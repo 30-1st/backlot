@@ -1986,3 +1986,9 @@ a.bl-card:hover,
 .bl-tiktok-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .bl-tiktok-list li { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .bl-tiktok-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.bl-knob { display: flex; flex-direction: column; gap: 4px; }
+.bl-knob-top { display: flex; justify-content: space-between; align-items: baseline; }
+.bl-knob input[type='range'] { width: 100%; min-height: 32px; accent-color: var(--accent-text); }
+.bl-knob-warn { margin: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); }
+.bl-knob-humor { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-knob-humor legend { margin-bottom: 6px; padding: 0; }

@@ -23,6 +23,8 @@ const FORBIDDEN_FINANCE =
 const FINANCE_DISCLAIMER = /(not financial advice|education only|educational only|for educational purposes|not investment advice)/i;
 const AD_TAG = /(^|[^\w])#ad\b|paid partnership/i;
 const CONTEST_TAG = /#\w*(contest|sweepstakes)\b/i;
+/** Asking for likes, reposts, follows or saves: X's engagement-bait enforcement (Jul 2026). */
+const ENGAGEMENT_ASK = /\b(like|liking|repost|retweet|rt|follow|save|bookmark)\s+(this\s+)?(post\s+|tweet\s+|thread\s+)?(if|for|to win|and\s+i'?ll)\b/i;
 
 export type CheckContext = {
   premium: boolean;
@@ -30,6 +32,8 @@ export type CheckContext = {
   allowedHashtags: Set<string>;
   wordsTheyAvoid: string[];
   adultAllowed: boolean;
+  /** The client's approved links. When any are set, a draft may link only to them. */
+  allowedLinks?: string[];
 };
 
 export type DraftFlags = {
@@ -82,6 +86,17 @@ export function checkDraft(draft: string, flags: DraftFlags, ctx: CheckContext):
   if (flags.financialContent === 'looks_like_advice' && !FINANCE_DISCLAIMER.test(draft)) {
     redo.push('Could read as financial advice: add "Education only, not financial advice."');
   }
+
+  // Links: only the client's approved ones, when they have set any.
+  if (ctx.allowedLinks?.length) {
+    const okPrefixes = ctx.allowedLinks.map((u) => u.replace(/\/+$/, '').toLowerCase());
+    const urls = (twitter.extractUrls(draft) as string[]).map((u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`).toLowerCase());
+    const stray = urls.filter((u) => !okPrefixes.some((p) => u === p || u.startsWith(`${p}/`) || u.startsWith(`${p}?`)));
+    if (stray.length) redo.push(`Links to ${stray.slice(0, 2).join(', ')}, which is not on the client's approved links. Use one of theirs or none.`);
+  }
+
+  // Engagement bait: earn replies and saves, never ask for them.
+  if (ENGAGEMENT_ASK.test(draft)) redo.push('Asks people to like, repost, follow or save. X treats that as engagement bait; make it worth doing instead.');
 
   // Voice: words the client never uses.
   const avoided = ctx.wordsTheyAvoid.filter((w) => containsWord(draft, w));
