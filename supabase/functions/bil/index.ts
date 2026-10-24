@@ -21,6 +21,10 @@
 //   campaign       CampaignRequest            queues a campaign and returns at once                  team
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
+//   ways_copy      { requestId, clientId }  Kris writes bio, pinned post and reply text for the ways in (about half a cent)  team, client
+//   approve_all    { campaignId }  approve every written post still waiting for a yes (free)  team, client
+//   discard        { campaignId }  take a campaign off the schedule and stop its drafting; restorable (free)  team, client
+//   restore        { campaignId }  bring a discarded campaign back and resume drafting (free)  team, client
 //   ask            { requestId, text, clientId? }  the agent bar: Bil answers and may offer one next step (a few cents)  team
 //   desk           { requestId, clientId, replies? }  engagement desk: trend posts (free), replies to the client (about $0.005 a post)  team
 //   kris           { requestId, clientId, text }  Kris, the client's publicist, answers in her chat (about half a cent)  team, client
@@ -56,9 +60,13 @@ import {
   reviewBrand,
   reviewPost,
   startCampaign,
+  CampaignActionRequest,
+  approveAll,
+  discardCampaign,
+  restoreCampaign,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
-import { krisChat, KrisChatRequest } from '../_shared/kris.ts';
+import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
@@ -145,6 +153,17 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await krisChat(member, parse(KrisChatRequest, input)));
       case 'review_post':
         return reply(200, await reviewPost(member, parse(ReviewPostRequest, input)));
+      case 'ways_copy':
+        return reply(200, await waysCopy(member, parse(WaysCopyRequest, input)));
+      case 'approve_all':
+        return reply(200, await approveAll(member, parse(CampaignActionRequest, input)));
+      case 'discard':
+        return reply(200, await discardCampaign(member, parse(CampaignActionRequest, input)));
+      case 'restore': {
+        const r = await restoreCampaign(member, parse(CampaignActionRequest, input));
+        if (r.drafting) EdgeRuntime.waitUntil(kickWorker());
+        return reply(200, r);
+      }
       case 'brand_save':
         return reply(200, await saveBrand(member, parse(BrandSaveRequest, input)));
       case 'brand_review':
@@ -152,7 +171,7 @@ async function handle(req: Request): Promise<Response> {
       case 'fill_detail':
         return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, desk, ask, approve_voice, estimate, campaign, resume, review_post, fill_detail, kris, brand_save or brand_review.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, desk, ask, approve_voice, estimate, campaign, resume, review_post, fill_detail, kris, brand_save, brand_review, approve_all, discard, restore or ways_copy.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

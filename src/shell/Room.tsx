@@ -4,6 +4,7 @@ import { team } from '../lib/team';
 import { PostMedia } from './PostMedia';
 import { ARCHETYPES, type Archetype } from '../lib/archetypes';
 import type { ScreenProps } from './Shell';
+import { WaysIn, WAY_LABELS } from './WaysIn';
 
 // A client's room (K1): the page their audience opens from a bio link or an auto-reply,
 // hosted on its own site apart from Backlot. The team sets it up; the client can open
@@ -330,6 +331,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
           </button>
         </>
       )}
+      {saved && <WaysIn clientId={client.id} handle={client.handle} slug={saved.slug} open={saved.status === 'open'} isTeam={isTeam} />}
       <RoomActivity clientId={client.id} isTeam={isTeam} />
       {!isTeam && error && (
         <p className="bl-error" role="alert">
@@ -345,7 +347,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
   );
 }
 
-type Counts = { visits: number; chats: number; ai_replies: number; faq_taps: number; link_taps: number; redirects: number; handoffs: number; handoff_taps: number };
+type Counts = Record<'visits' | 'chats' | 'ai_replies' | 'faq_taps' | 'link_taps' | 'redirects' | 'handoffs' | 'handoff_taps' | `way_${'bio' | 'pinned' | 'post' | 'reply' | 'dm' | 'qr' | 'other' | 'direct'}`, number>;
 type Visit = { id: string; started_at: string; ai_replies: number; minor: boolean; crisis: boolean; spending: boolean; test: boolean };
 type Line = { seq: number; role: 'visitor' | 'kris'; body: string; source: string };
 
@@ -361,9 +363,13 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
     if (!supabase) return;
     const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
     void (async () => {
-      const c = await supabase!.from('room_counts').select('visits, chats, ai_replies, faq_taps, link_taps, redirects, handoffs, handoff_taps').eq('client_id', clientId).gte('day', since);
+      const c = await supabase!
+        .from('room_counts')
+        .select('visits, chats, ai_replies, faq_taps, link_taps, redirects, handoffs, handoff_taps, way_bio, way_pinned, way_post, way_reply, way_dm, way_qr, way_other, way_direct')
+        .eq('client_id', clientId)
+        .gte('day', since);
       if (c.error) return setError(c.error.message);
-      const sum: Counts = { visits: 0, chats: 0, ai_replies: 0, faq_taps: 0, link_taps: 0, redirects: 0, handoffs: 0, handoff_taps: 0 };
+      const sum: Counts = { visits: 0, chats: 0, ai_replies: 0, faq_taps: 0, link_taps: 0, redirects: 0, handoffs: 0, handoff_taps: 0, way_bio: 0, way_pinned: 0, way_post: 0, way_reply: 0, way_dm: 0, way_qr: 0, way_other: 0, way_direct: 0 };
       for (const row of c.data ?? []) for (const k of Object.keys(sum) as Array<keyof Counts>) sum[k] += Number((row as Record<string, unknown>)[k] ?? 0);
       setCounts(sum);
       if (isTeam) {
@@ -398,7 +404,7 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
         <dl className="bl-room-counts">
           {(
             [
-              ['visits', 'Visits'],
+              ['visits', 'Chats opened'],
               ['chats', 'Chats'],
               ['ai_replies', 'AI replies'],
               ['faq_taps', 'FAQ taps'],
@@ -416,6 +422,22 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
         </dl>
       ) : (
         <span className="bl-small" aria-busy="true">Loading.</span>
+      )}
+      {counts && (
+        <>
+          <h3 className="bl-label" style={{ margin: '8px 0 0' }}>
+            Room opens by way in
+          </h3>
+          <dl className="bl-room-counts">
+            {(['bio', 'pinned', 'post', 'reply', 'dm', 'qr', 'other', 'direct'] as const).map((w) => (
+              <div key={w}>
+                <dt className="bl-small">{WAY_LABELS[w]}</dt>
+                <dd className="num">{counts[`way_${w}`]}</dd>
+              </div>
+            ))}
+          </dl>
+          <span className="bl-small">Counted once per visitor session, as plain numbers. Who visited is never kept.</span>
+        </>
       )}
       {isTeam && (
         <>

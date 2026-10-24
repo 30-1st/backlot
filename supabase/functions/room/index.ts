@@ -13,7 +13,7 @@
 // workspace ids, never the brand kit beyond those links.
 //
 // Actions (POST JSON with "action"):
-//   open     { slug, preview? }                         the room as visitors see it
+//   open     { slug, preview?, way? }                   the room as visitors see it; way (bio, pinned, post, reply, dm, qr, other, direct) is counted once a session
 //   verify   { slug, token, preview? }                  a Turnstile pass starts a visit: a 2-hour ticket with a random visit id
 //   tap      { slug, kind: faq|link, preview? }         counts a tap (no ticket, nothing about the visitor kept)
 //   history  { slug, ticket, preview? }                 this visit's messages, after a reload
@@ -180,6 +180,9 @@ async function visitMessages(visitId: string, limit = 40): Promise<Msg[]> {
   return ((data ?? []) as Msg[]).reverse();
 }
 
+/** The ways in a room link can carry (?w=...). "direct" is a visit with none. */
+const WAYS = new Set(['bio', 'pinned', 'post', 'reply', 'dm', 'qr', 'other', 'direct']);
+
 async function count(clientId: string, field: string, n = 1) {
   const { error } = await serviceClient().rpc('room_count', { p_client: clientId, p_field: field, p_n: n });
   if (error) console.error('room count failed', field, error.message);
@@ -233,6 +236,12 @@ Deno.serve(async (req) => {
       const v = await viewable(slug, preview);
       // A room that does not exist and one that is private look the same from outside.
       if (!v) return reply(404, { state: 'private' });
+      // K3: which way they came in, sent once per browser session by the room site. Team
+      // previews never count, and one visitor counts at most a few ways an hour.
+      const way = typeof body.way === 'string' && WAYS.has(body.way) ? body.way : null;
+      if (way && !preview && (await withinLimits([{ key: `v:${who}:way`, window: 3_600, limit: 5 }]))) {
+        await count(v.room.client_id, `way_${way}`);
+      }
       return reply(200, await view(v));
     }
 

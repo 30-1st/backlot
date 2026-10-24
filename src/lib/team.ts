@@ -156,10 +156,17 @@ export type Decision = 'approved' | 'changes' | 'posted' | 'pending';
 export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string) =>
     call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}) }),
-  /** Saves brand kit edits: straight in for the team, waiting for the team's OK for a client. */
   /** One chat turn with Kris: returns what was saved (the person's message and hers). */
   kris: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'kris', { requestId: crypto.randomUUID(), clientId, text }),
+  /** Kris writes bio, pinned post and reply options for the ways into the room (about half a cent). */
+  waysCopy: (clientId: string) =>
+    call<{ bio: string[]; pinned: string[]; reply: string[]; links: Record<string, string>; costUsd: number }>('bil', 'ways_copy', { requestId: crypto.randomUUID(), clientId }),
+  /** Approves every written post still waiting for a yes; leaves posts needing a detail or a change. */
+  approveAll: (campaignId: string) => call<{ campaignId: string; approved: number; needDetail: number; changes: number }>('bil', 'approve_all', { campaignId }),
+  discard: (campaignId: string) => call<{ campaignId: string; discarded: boolean }>('bil', 'discard', { campaignId }),
+  restore: (campaignId: string) => call<{ campaignId: string; restored: boolean; drafting: boolean }>('bil', 'restore', { campaignId }),
+  /** Saves brand kit edits: straight in for the team, waiting for the team's OK for a client. */
   brandSave: (clientId: string, edits: Record<string, unknown>) => call<{ saved: boolean; waiting: boolean }>('bil', 'brand_save', { clientId, edits }),
   /** The team takes or drops a client's suggested brand kit changes. */
   brandReview: (clientId: string, approve: boolean) => call<{ approved: boolean }>('bil', 'brand_review', { clientId, approve }),

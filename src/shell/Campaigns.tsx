@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DIALS } from '../lib/dials';
+import { DIALS, riskyDials, type Dials } from '../lib/dials';
 import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
 import { DayView, DetailBox, MonthView } from './Schedule';
@@ -40,6 +40,8 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
   if (!ws.data) return <main aria-busy="true" />;
   const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
   if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
+  const thrown = campaignId ? ws.data.discarded.find((c) => c.id === campaignId) : null;
+  if (campaignId && thrown) return <DiscardedView {...props} campaign={thrown} />;
   const timed = timedPosts(ws.data, focus).length > 0;
   if (!campaignId && view === 'month' && timed) {
     return (
@@ -114,6 +116,83 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
           );
         })
       )}
+      <DiscardedList {...props} />
+    </main>
+  );
+}
+
+/** Discarded campaigns for the clients in view, each one tap from coming back. */
+function DiscardedList({ ws, go, focus }: ScreenProps) {
+  const gone = (ws.data?.discarded ?? []).filter((c) => !focus || c.clientId === focus);
+  if (!gone.length) return null;
+  return (
+    <details className="bl-discarded">
+      <summary>Discarded ({gone.length})</summary>
+      <ul className="bl-rows">
+        {gone.map((c) => (
+          <li key={c.id}>
+            <a
+              href={`#campaigns.${c.id}`}
+              className="bl-linkish"
+              onClick={(e) => {
+                e.preventDefault();
+                go(`campaigns.${c.id}`);
+              }}
+            >
+              {campaignTitle(c)}
+            </a>
+            <span className="bl-small"> discarded {new Date(c.discardedAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** A discarded campaign: what that means, and the way back. */
+function DiscardedView({ ws, go, campaign }: ScreenProps & { campaign: Campaign }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function restore() {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.restore(campaign.id);
+      await ws.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not restore it.');
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="bl-flow">
+      <a
+        href="#campaigns"
+        className="bl-ghost bl-round"
+        aria-label="All campaigns"
+        onClick={(e) => {
+          e.preventDefault();
+          go('campaigns');
+        }}
+      >
+        <Back />
+      </a>
+      <h1 className="bl-h1">{campaignTitle(campaign)}</h1>
+      <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <b>This campaign is discarded.</b>
+        <span className="bl-small">
+          It is off the schedule, Today and Kris&rsquo;s drafts, and Bil writes nothing more for it. Its posts are kept, so restoring brings everything back
+          {campaign.status === 'planning' || campaign.status === 'drafting' ? ' and Bil picks up where he stopped' : ''}.
+        </span>
+        <button type="button" className="bl-btn bl-start" disabled={busy} onClick={() => void restore()}>
+          {busy ? 'Restoring' : 'Restore it'}
+        </button>
+      </div>
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
     </main>
   );
 }
@@ -133,6 +212,8 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [bulkNote, setBulkNote] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<number | null>(null);
 
@@ -180,6 +261,41 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
       window.setTimeout(() => setCopied((s) => (s === p.slot ? null : s)), 1800);
     } catch {
       setError('Copying is blocked here. Press and hold the text to copy it instead.');
+    }
+  }
+
+  const clientDials = ws.data!.clients.find((c) => c.id === campaign.clientId)?.profile.dials as Dials | undefined;
+  const teamLocked = isTeam && riskyDials(clientDials);
+
+  async function approveEvery() {
+    setBusy(true);
+    setError('');
+    setBulkNote('');
+    try {
+      const r = await bil.approveAll(campaign.id);
+      await ws.refresh();
+      setConfirmAll(false);
+      setBulkNote(
+        `Approved ${r.approved} ${r.approved === 1 ? 'post' : 'posts'}.` +
+          (r.needDetail ? ` ${r.needDetail} still ${r.needDetail === 1 ? 'needs' : 'need'} a detail.` : '') +
+          (r.changes ? ` ${r.changes} with a change request ${r.changes === 1 ? 'was' : 'were'} left for Bil.` : ''),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not approve them.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function discard() {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.discard(campaign.id);
+      await ws.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not discard it.');
+      setBusy(false);
     }
   }
 
@@ -262,6 +378,37 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
       <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} disabled={opening} onClick={() => void seeOnX()}>
         {opening ? 'Opening' : 'See it on the X profile'}
       </button>
+
+      {queue.length > 0 && (
+        <div className="bl-bulk">
+          {!confirmAll ? (
+            <button type="button" className="bl-btn" style={{ alignSelf: 'flex-start' }} disabled={busy || teamLocked} onClick={() => setConfirmAll(true)}>
+              Approve all {queue.length}
+            </button>
+          ) : (
+            <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <span>
+                Approve all {queue.length} {queue.length === 1 ? 'post' : 'posts'} waiting for a yes?
+                {blocked.length ? ` ${blocked.length} still ${blocked.length === 1 ? 'needs' : 'need'} a detail and stay as they are.` : ''} You can undo any one of them after.
+              </span>
+              <div className="bl-row-actions">
+                <button type="button" className="bl-ghost" disabled={busy} onClick={() => setConfirmAll(false)}>
+                  Cancel
+                </button>
+                <button type="button" className="bl-btn" disabled={busy} onClick={() => void approveEvery()}>
+                  {busy ? 'Approving' : `Approve ${queue.length}`}
+                </button>
+              </div>
+            </div>
+          )}
+          {teamLocked && <span className="bl-small">At this client&rsquo;s controversy and spice, they approve each post themselves.</span>}
+        </div>
+      )}
+      {bulkNote && (
+        <p className="bl-small" role="status" style={{ margin: 0 }}>
+          {bulkNote}
+        </p>
+      )}
 
       {campaign.hold && isTeam && (
         <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -408,6 +555,15 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           {posts.length === 0 && <li className="bl-small">No posts written yet.</li>}
         </ul>
       )}
+
+      <div className="bl-discard-row">
+        <button type="button" className="bl-linkish bl-danger-link" disabled={busy} onClick={() => void discard()}>
+          Discard this campaign
+        </button>
+        <span className="bl-small">
+          It leaves the schedule{working ? ' and Bil stops writing' : ''}. You can restore it.
+        </span>
+      </div>
     </main>
   );
 }

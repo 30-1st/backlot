@@ -53,7 +53,7 @@ async function call<T>(body: Record<string, unknown>, attempt = 0): Promise<T> {
   return data as T;
 }
 
-export const openRoom = (slug: string, preview?: string) => call<RoomView>({ action: 'open', slug, preview });
+export const openRoom = (slug: string, preview?: string, way?: string) => call<RoomView>({ action: 'open', slug, preview, ...(way ? { way } : {}) });
 export const verifyVisit = (slug: string, token: string, preview?: string) => call<{ ticket: string; expiresAt: string }>({ action: 'verify', slug, token, preview });
 export const chat = (slug: string, ticket: string, text: string, after: number, preview?: string) =>
   call<{ messages: Msg[]; closed?: boolean; deleted?: boolean }>({ action: 'chat', slug, ticket, text, after, preview });

@@ -178,6 +178,8 @@ const OTHER_WORDS: Record<string, string> = {
   'brand:suggested': 'suggested brand kit changes',
   'brand:approved': 'took the suggested brand kit changes',
   'brand:dropped': 'dropped the suggested brand kit changes',
+  'campaign:discarded': 'discarded a campaign',
+  'campaign:restored': 'restored a campaign',
 };
 
 /**
@@ -214,7 +216,7 @@ function buildNews(me: Me, ws: Workspace, focus: string | null, seenAt: string |
         path = a.campaignId && c ? `campaigns.${a.campaignId}` : 'approvals';
       } else {
         title = `${who} ${OTHER_WORDS[`${a.what}:${a.decision}`] ?? 'made a change'}`;
-        path = a.what === 'brand' ? 'brand' : 'insights';
+        path = a.what === 'brand' ? 'brand' : a.what === 'campaign' ? 'campaigns' : 'insights';
       }
     } else if (a.kind === 'media') {
       title = isTeam ? `${n} new ${n === 1 ? 'file' : 'files'} in @${h}'s Media` : `Your team added ${n} ${n === 1 ? 'file' : 'files'} to Media`;

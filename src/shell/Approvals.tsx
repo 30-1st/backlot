@@ -9,7 +9,7 @@ import type { ScreenProps } from './Shell';
 
 type Line = {
   id: number;
-  kind: 'post' | 'voice' | 'brand';
+  kind: 'post' | 'voice' | 'brand' | 'campaign';
   decision: string;
   campaignId: string | null;
   slot: number | null;
@@ -28,6 +28,8 @@ const WORDS: Record<string, string> = {
   saved: 'Saved',
   suggested: 'Suggested changes',
   dropped: 'Dropped suggested changes',
+  discarded: 'Discarded',
+  restored: 'Restored',
 };
 
 const PAGE = 100;
@@ -92,6 +94,7 @@ export function ApprovalsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const what = (l: Line) => {
     if (l.kind === 'voice') return 'Voice card';
     if (l.kind === 'brand') return 'Brand kit';
+    if (l.kind === 'campaign') return `Campaign${l.subject ? `, ${l.subject}` : ''}`;
     const c = l.campaignId ? ws.data?.campaigns.find((x) => x.id === l.campaignId) : null;
     return `Post ${l.slot ?? ''}${c ? `, ${campaignTitle(c)}` : ''}`;
   };

@@ -31,11 +31,19 @@ function safe<T>(fn: () => T, fallback: T): T {
   }
 }
 
-/** /k/<name>, and a preview ticket from #preview=..., taken out of the address bar at once. */
-function readAddress(): { slug: string | null; preview?: string } {
+const WAYS = new Set(['bio', 'pinned', 'post', 'reply', 'dm', 'qr', 'other']);
+
+/**
+ * /k/<name>, a preview ticket from #preview=..., and the way in from ?w=..., all taken out
+ * of the address bar at once, so a shared or bookmarked link carries none of them.
+ */
+function readAddress(): { slug: string | null; preview?: string; way?: string } {
   const m = location.pathname.match(/^\/k\/([A-Za-z0-9_]{3,30})\/?$/);
   const slug = m ? m[1].toLowerCase() : null;
   let preview = new URLSearchParams(location.hash.slice(1)).get('preview') ?? undefined;
+  const w = (new URLSearchParams(location.search).get('w') ?? '').toLowerCase();
+  const way = WAYS.has(w) ? w : 'direct';
+  if (location.search) history_replace();
   if (slug) {
     const key = `room.preview.${slug}`;
     if (preview) {
@@ -45,7 +53,16 @@ function readAddress(): { slug: string | null; preview?: string } {
       preview = safe(() => sessionStorage.getItem(key) ?? undefined, undefined);
     }
   }
-  return { slug: slug && SLUG.test(slug) ? slug : null, preview };
+  return { slug: slug && SLUG.test(slug) ? slug : null, preview, way: preview ? undefined : way };
+}
+
+/** The way in is counted once per browser session; reloads and later pages send none. */
+function wayOnce(slug: string, way?: string): string | undefined {
+  if (!way) return undefined;
+  const key = `room.way.${slug}`;
+  if (safe(() => sessionStorage.getItem(key), null)) return undefined;
+  safe(() => sessionStorage.setItem(key, way), undefined);
+  return way;
 }
 function history_replace() {
   window.history.replaceState(null, '', location.pathname);
@@ -66,7 +83,7 @@ function RoomPage() {
 
   useEffect(() => {
     if (!address.slug) return setLoad({ kind: 'private' });
-    openRoom(address.slug, address.preview).then(
+    openRoom(address.slug, address.preview, wayOnce(address.slug, address.way)).then(
       (room) => setLoad({ kind: 'room', room }),
       (e: unknown) => setLoad(e instanceof DoorError && e.status === 404 ? { kind: 'private' } : { kind: 'error', message: e instanceof Error ? e.message : 'Something went wrong.' }),
     );

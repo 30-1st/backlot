@@ -28,6 +28,7 @@ export type Campaign = {
   postsDone: number;
   createdAt: string;
   updatedAt: string;
+  discardedAt: string | null;
 };
 export type Post = {
   campaignId: string;
@@ -46,13 +47,15 @@ export type StepDone = { clientId: string; step: OnboardingStep; doneAt: string 
 
 /** Something a person did that the other side may want to know about. */
 export type Activity =
-  | { kind: 'log'; clientId: string; at: string; actorId: string | null; actorRole: 'team' | 'client'; what: 'post' | 'voice' | 'brand'; decision: string; campaignId: string | null; slot: number | null }
+  | { kind: 'log'; clientId: string; at: string; actorId: string | null; actorRole: 'team' | 'client'; what: 'post' | 'voice' | 'brand' | 'campaign'; decision: string; campaignId: string | null; slot: number | null }
   | { kind: 'media' | 'board'; clientId: string; at: string; actorId: string | null };
 
 export type Workspace = {
   clients: Client[];
   voices: Voice[];
   campaigns: Campaign[];
+  /** Discarded campaigns, newest first. They stay out of everything else until restored. */
+  discarded: Campaign[];
   posts: Post[];
   /** Onboarding steps a person ticked. The rest are worked out from the data. */
   steps: StepDone[];
@@ -64,7 +67,7 @@ export type Workspace = {
   seenAt: string | null;
 };
 
-const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null };
+const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], discarded: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null };
 const ACTIVITY_DAYS = 14;
 
 async function load(): Promise<Workspace> {
@@ -75,7 +78,7 @@ async function load(): Promise<Workspace> {
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
       .from('campaigns')
-      .select('id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at')
+      .select('id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at, discarded_at')
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id').order('slot').limit(1000),
@@ -93,21 +96,25 @@ async function load(): Promise<Workspace> {
   ]);
   const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error ?? lg.error ?? md.error ?? bd.error ?? sn.error;
   if (error) throw new Error(error.message);
+  const campaigns: Campaign[] = (k.data ?? []).map((r: Json) => ({
+    id: r.id,
+    clientId: r.client_id,
+    status: r.status,
+    hold: r.hold ?? null,
+    request: r.request,
+    plan: r.plan,
+    postsTotal: r.posts_total,
+    postsDone: r.posts_done,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    discardedAt: r.discarded_at ?? null,
+  }));
+  const gone = new Set(campaigns.filter((x) => x.discardedAt).map((x) => x.id));
   return {
     clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null })),
     voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at })),
-    campaigns: (k.data ?? []).map((r: Json) => ({
-      id: r.id,
-      clientId: r.client_id,
-      status: r.status,
-      hold: r.hold ?? null,
-      request: r.request,
-      plan: r.plan,
-      postsTotal: r.posts_total,
-      postsDone: r.posts_done,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    })),
+    campaigns: campaigns.filter((x) => !x.discardedAt),
+    discarded: campaigns.filter((x) => x.discardedAt),
     steps: (s.data ?? []).map((r: Json) => ({ clientId: r.client_id, step: r.step, doneAt: r.done_at })),
     activity: [
       ...(lg.data ?? []).map(
@@ -131,7 +138,7 @@ async function load(): Promise<Workspace> {
       acc[r.client_id] = (acc[r.client_id] ?? 0) + 1;
       return acc;
     }, {}),
-    posts: (p.data ?? []).map((r: Json) => ({
+    posts: (p.data ?? []).filter((r: Json) => !gone.has(r.campaign_id)).map((r: Json) => ({
       campaignId: r.campaign_id,
       slot: r.slot,
       status: r.status,

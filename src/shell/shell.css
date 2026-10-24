@@ -2355,3 +2355,50 @@ html[data-vt='back']::view-transition-new(root) {
 }
 .bl-dial-start { display: flex; flex-direction: column; gap: 8px; }
 .bl-dial-lift { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* ---------- approve all, discard ---------- */
+
+.bl-bulk { display: flex; flex-direction: column; gap: 6px; }
+.bl-discard-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.bl-root .bl-danger-link { color: var(--danger); min-height: 36px; }
+.bl-discarded { border-top: 1px solid var(--line); padding-top: 12px; }
+.bl-discarded > summary { cursor: pointer; font-weight: 600; color: var(--ink-2); min-height: 36px; display: flex; align-items: center; }
+
+/* ---------- ways in (K3) ---------- */
+
+.bl-way-steps { margin: 0; padding-left: 22px; list-style: decimal; display: flex; flex-direction: column; gap: 16px; }
+.bl-way-steps > li { display: flex; flex-direction: column; gap: 6px; }
+.bl-way-steps > li::marker { font-weight: 600; color: var(--ink-2); }
+.bl-way-link { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bl-way-link code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--mist);
+  font-size: 12.5px;
+}
+.bl-way-options { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-way-options li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.bl-way-options p { flex: 1; margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bl-qr { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.bl-qr-canvas { width: min(240px, 100%); height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; }

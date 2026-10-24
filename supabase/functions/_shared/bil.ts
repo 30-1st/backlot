@@ -1017,8 +1017,8 @@ export async function askBil(m: Member, req: z.infer<typeof AskRequest>) {
 type LogLine = {
   workspaceId: string;
   clientId: string;
-  kind: 'post' | 'voice' | 'brand';
-  decision: 'approved' | 'changes' | 'posted' | 'undone' | 'saved' | 'suggested' | 'dropped';
+  kind: 'post' | 'voice' | 'brand' | 'campaign';
+  decision: 'approved' | 'changes' | 'posted' | 'undone' | 'saved' | 'suggested' | 'dropped' | 'discarded' | 'restored';
   campaignId?: string;
   slot?: number;
   subject?: string | null;
@@ -1275,6 +1275,109 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt, xPostId };
 }
 
+// =====================================================================================
+// Whole campaigns: approve every waiting post, discard, restore (team or the client)
+// =====================================================================================
+
+export const CampaignActionRequest = z.object({ campaignId: id });
+
+async function campaignFor(db: SupabaseClient, m: Member, campaignId: string) {
+  const { data: c, error } = await db
+    .from('campaigns')
+    .select('id, client_id, status, plan, request, discarded_at')
+    .eq('id', campaignId)
+    .eq('owner_id', m.workspaceId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read the campaign: ${error.message}`);
+  if (!c) throw new BilInputError('No such campaign.', 404);
+  requireClientAccess(m, c.client_id);
+  return c as { id: string; client_id: string; status: string; plan: any; request: any; discarded_at: string | null };
+}
+
+const titleOf = (c: { plan: any; request: any }) => String(c.plan?.title ?? c.request?.goal ?? 'Campaign').slice(0, 160);
+
+/**
+ * Approves every post in a campaign that is written and waiting for a yes. Posts that still
+ * need a detail, and posts someone asked to change, are left as they are. When the client's
+ * controversy and spice need their own yes on each post, only the client can do this.
+ */
+export async function approveAll(m: Member, req: z.infer<typeof CampaignActionRequest>) {
+  const db = serviceClient();
+  const c = await campaignFor(db, m, req.campaignId);
+  if (c.discarded_at) throw new BilInputError('This campaign was discarded. Restore it first.', 409);
+  if (isTeam(m)) {
+    const { data: cl, error } = await db.from('clients').select('profile').eq('id', c.client_id).eq('owner_id', m.workspaceId).maybeSingle();
+    if (error) throw new Error(`Could not read the client: ${error.message}`);
+    if (riskyDials((cl?.profile as { dials?: Dials } | null)?.dials)) {
+      throw new BilInputError('At these controversy and spice levels, the client approves each post themselves.', 409);
+    }
+  }
+  const { data: posts, error: pErr } = await db.from('campaign_posts').select('slot, status, review, post').eq('campaign_id', c.id).order('slot');
+  if (pErr) throw new Error(`Could not read the posts: ${pErr.message}`);
+  const waiting = (posts ?? []).filter((p: any) => p.status === 'ok' && p.review === 'pending');
+  const needDetail = (posts ?? []).filter((p: any) => p.status !== 'ok').length;
+  const changes = (posts ?? []).filter((p: any) => p.status === 'ok' && p.review === 'changes').length;
+  if (!waiting.length) return { campaignId: c.id, approved: 0, needDetail, changes };
+  const reviewedAt = new Date().toISOString();
+  // Only posts still pending flip, so a decision made a moment ago in another tab stands.
+  const { data: done, error } = await db
+    .from('campaign_posts')
+    .update({ review: 'approved', review_note: null, reviewed_by: m.userId, reviewed_at: reviewedAt })
+    .eq('campaign_id', c.id)
+    .eq('status', 'ok')
+    .eq('review', 'pending')
+    .in('slot', waiting.map((p: any) => p.slot))
+    .select('slot');
+  if (error) throw new Error(`Could not approve the posts: ${error.message}`);
+  const slots = new Set((done ?? []).map((r: any) => r.slot as number));
+  const role = isTeam(m) ? 'team' : 'client';
+  const rows = waiting
+    .filter((p: any) => slots.has(p.slot))
+    .map((p: any) => ({
+      workspace_id: m.workspaceId,
+      client_id: c.client_id,
+      kind: 'post',
+      decision: 'approved',
+      campaign_id: c.id,
+      slot: p.slot,
+      subject: String(p.post?.hook ?? p.post?.idea ?? '').slice(0, 160) || null,
+      note: 'Approved with "Approve all"',
+      actor_id: m.userId,
+      actor_role: role,
+    }));
+  if (rows.length) {
+    const { error: lErr } = await db.from('approval_log').insert(rows);
+    if (lErr) console.error('approval log write failed', lErr.message);
+  }
+  return { campaignId: c.id, approved: slots.size, needDetail, changes };
+}
+
+/** Discards a campaign: it leaves the schedule, Today and Kris's drafts, and drafting stops. Restorable. */
+export async function discardCampaign(m: Member, req: z.infer<typeof CampaignActionRequest>) {
+  const db = serviceClient();
+  const c = await campaignFor(db, m, req.campaignId);
+  if (c.discarded_at) return { campaignId: c.id, discarded: true };
+  const { error } = await db.from('campaigns').update({ discarded_at: new Date().toISOString(), discarded_by: m.userId }).eq('id', c.id).is('discarded_at', null);
+  if (error) throw new Error(`Could not discard the campaign: ${error.message}`);
+  const { error: sErr } = await db.rpc('bil_steps_park', { p_campaign: c.id });
+  if (sErr) console.error('bil: could not stop drafting for a discarded campaign', sErr.message);
+  await logApproval(db, { workspaceId: m.workspaceId, clientId: c.client_id, kind: 'campaign', decision: 'discarded', campaignId: c.id, subject: titleOf(c), actor: m });
+  return { campaignId: c.id, discarded: true };
+}
+
+/** Brings a discarded campaign back, and picks drafting up where it stopped. */
+export async function restoreCampaign(m: Member, req: z.infer<typeof CampaignActionRequest>) {
+  const db = serviceClient();
+  const c = await campaignFor(db, m, req.campaignId);
+  if (!c.discarded_at) return { campaignId: c.id, restored: true, drafting: false };
+  const { error } = await db.from('campaigns').update({ discarded_at: null, discarded_by: null }).eq('id', c.id);
+  if (error) throw new Error(`Could not restore the campaign: ${error.message}`);
+  const { data: resumed, error: sErr } = await db.rpc('bil_steps_unpark', { p_campaign: c.id });
+  if (sErr) console.error('bil: could not resume drafting for a restored campaign', sErr.message);
+  await logApproval(db, { workspaceId: m.workspaceId, clientId: c.client_id, kind: 'campaign', decision: 'restored', campaignId: c.id, subject: titleOf(c), actor: m });
+  return { campaignId: c.id, restored: true, drafting: Boolean(resumed) };
+}
+
 const MAX_DETAIL_TRIES = 5;
 
 export const FillDetailRequest = z.object({
@@ -1484,8 +1587,9 @@ export async function startCampaign(ownerId: string, req: CampaignRequest) {
 /** Resumes a campaign paused at the month's budget. */
 export async function resumeCampaign(ownerId: string, campaignId: string) {
   const db = serviceClient();
-  const { data } = await db.from('campaigns').select('id, hold').eq('id', campaignId).eq('owner_id', ownerId).maybeSingle();
+  const { data } = await db.from('campaigns').select('id, hold, discarded_at').eq('id', campaignId).eq('owner_id', ownerId).maybeSingle();
   if (!data) throw new BilInputError('No such campaign on this account', 404);
+  if (data.discarded_at) throw new BilInputError('This campaign was discarded. Restore it first.', 409);
   if (!data.hold) throw new BilInputError('This campaign is not paused.', 409);
   const { data: ok, error } = await db.rpc('bil_step_resume', { p_campaign: campaignId });
   if (error) throw new Error(`Could not resume: ${error.message}`);
@@ -1533,11 +1637,16 @@ export async function drain(bootAt: number): Promise<number> {
 async function runStep(db: SupabaseClient, step: Step, claimId: string, deadline: number) {
   const { data: campaign, error } = await db
     .from('campaigns')
-    .select('id, client_id, owner_id, status, request, plan')
+    .select('id, client_id, owner_id, status, request, plan, discarded_at')
     .eq('id', step.campaignId)
     .maybeSingle();
   if (error || !campaign) {
     await db.rpc('bil_step_fail', { p_id: step.id, p_claim: claimId, p_error: error?.message ?? 'Campaign not found' });
+    return;
+  }
+  // Discarded while queued or mid-step: park it, so no more money is spent on it.
+  if (campaign.discarded_at) {
+    await db.rpc('bil_steps_park', { p_campaign: campaign.id });
     return;
   }
   const c = campaign as Campaign;

@@ -18,6 +18,7 @@ import { grokOptions, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient } from './spend.ts';
 import { BilInputError, loadKit, snapshotText } from './bil.ts';
 import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
+import { ROOMS_SITE } from './rooms.ts';
 
 const KRIS_MODEL = AGENT_MODELS.kris;
 /** One reply's upper bound; the database refuses anything above the 'kris' scope too. */
@@ -81,6 +82,7 @@ async function waitingDrafts(db: SupabaseClient, clientId: string, workspaceId: 
     .eq('client_id', clientId)
     .eq('owner_id', workspaceId)
     .in('status', ['ready', 'approved'])
+    .is('discarded_at', null)
     .order('created_at', { ascending: false })
     .limit(5);
   if (error) throw new Error(`Could not read campaigns: ${error.message}`);
@@ -326,4 +328,85 @@ async function pitchOne(db: SupabaseClient, clientId: string, workspaceId: strin
     ref: `pitch:${day}`,
   });
   return Boolean(saved);
+}
+
+// ---------- K3: ready-to-paste text for the ways in ----------
+
+export const WaysCopyRequest = z.object({ requestId: id, clientId: id });
+
+const WaysCopyDraft = z.object({
+  bio: z.array(z.string()).max(3),
+  pinned: z.array(z.string()).max(3),
+  reply: z.array(z.string()).max(3),
+});
+
+/** The ways a room link can carry, and the link for each. */
+export const WAYS = ['bio', 'pinned', 'post', 'reply', 'dm', 'qr', 'other'] as const;
+export const wayLinks = (slug: string) =>
+  Object.fromEntries(WAYS.map((w) => [w, `https://${ROOMS_SITE}/k/${slug}?w=${w}`])) as Record<(typeof WAYS)[number], string>;
+
+/** X counts every link as 23 characters, whatever its length. */
+export const xLength = (s: string) => s.replace(/https?:\/\/\S+/g, 'x'.repeat(23)).length;
+
+const BAIT = /\b(like|repost|retweet|follow|bookmark|save)\s+(this|me|if|for|and|now)\b/i;
+
+/** Pure: Grok's options into what the client sees, every rule checked in code. Tested without the model. */
+export function cleanWaysCopy(d: z.infer<typeof WaysCopyDraft>, links: Record<string, string>, premium: boolean) {
+  const tidy = (s: string) => s.replace(/\s*—\s*/g, ', ').replace(/[ \t]{2,}/g, ' ').trim();
+  const withLink = (s: string, token: string, url: string) => {
+    const t = tidy(s).replace(/https?:\/\/\S+/g, '').trim();
+    return t.includes(token) ? t.split(token).join(url) : `${t} ${url}`;
+  };
+  const ok = (s: string) => s.length > 0 && !BAIT.test(s);
+  const bio = d.bio.map(tidy).map((s) => s.replace(/https?:\/\/\S+/g, '').trim()).filter((s) => ok(s) && s.length <= 160);
+  const pinned = d.pinned.map((s) => withLink(s, '{LINK}', links.pinned)).filter((s) => ok(s) && (premium || xLength(s) <= 280));
+  const reply = d.reply.map((s) => withLink(s, '{LINK}', links.reply)).filter((s) => ok(s) && xLength(s) <= 280);
+  return { bio: [...new Set(bio)].slice(0, 3), pinned: [...new Set(pinned)].slice(0, 3), reply: [...new Set(reply)].slice(0, 3) };
+}
+
+/**
+ * Kris writes three options each for the bio line, the pinned post and the reply people get
+ * when they ask for the link, in the client's voice. One call, on the client's own Kris
+ * allowance (about half a cent). Backlot never posts or sends any of it.
+ */
+export async function waysCopy(m: Member, req: z.infer<typeof WaysCopyRequest>) {
+  requireClientAccess(m, req.clientId);
+  const db = serviceClient();
+  const [kit, room] = await Promise.all([
+    loadKit(db, req.clientId, m.workspaceId),
+    db.from('rooms').select('slug').eq('client_id', req.clientId).eq('workspace_id', m.workspaceId).maybeSingle(),
+  ]);
+  if (room.error) throw new Error(`Could not read the room: ${room.error.message}`);
+  if (!room.data?.slug) throw new BilInputError('Set up the room first.', 409);
+  const links = wayLinks(room.data.slug);
+  const prompt = [
+    snapshotText(kit),
+    '# Your task: text for the ways into their room',
+    'Their room is a page with their AI assistant, where people ask questions and get pointed to the right link. Write in their voice and language, three options each:',
+    '- bio: a line for their X bio, at most 160 characters, no link (the link goes in the website field).',
+    `- pinned: a post they pin to their X profile that invites people into the room. Put {LINK} where the link goes. ${kit.profile.xPremium ? 'Keep it short even though long posts are allowed.' : 'At most 280 characters, counting the link as 23.'}`,
+    '- reply: what they send by hand when someone asks for the link, at most 240 characters. Put {LINK} where the link goes.',
+    'Rules: if the text mentions chatting, say it is their AI assistant, never that they reply personally. Never ask people to like, repost, follow or save. No hashtags, no em dashes, no promises of results, nothing explicit.',
+  ].join('\n');
+  const budget = new Budget('kris', { runId: req.requestId, perCallCap: PER_REPLY_CAP, clientId: req.clientId });
+  const estimate = grokEstimate(KRIS_MODEL, KRIS_KNOWLEDGE.length + prompt.length + 1500, 700, REASONING_ALLOWANCE);
+  const result = await budget.charge(
+    'grok',
+    Math.round(estimate * 1e6) / 1e6,
+    () =>
+      generateText({
+        model: xaiClient().responses(KRIS_MODEL),
+        system: KRIS_KNOWLEDGE,
+        prompt,
+        maxOutputTokens: 700,
+        output: Output.object({ schema: WaysCopyDraft }),
+        providerOptions: grokOptions('kris', 'low'),
+        abortSignal: AbortSignal.timeout(45_000),
+        telemetry: privateTelemetry('kris-ways-copy'),
+      }),
+    (r) => grokBilled(r) ?? grokCost(KRIS_MODEL, r.usage),
+  );
+  const parsed = WaysCopyDraft.safeParse(result.output);
+  if (!parsed.success) throw new Error('Kris did not return the text in shape. Try again.');
+  return { ...cleanWaysCopy(parsed.data, links, kit.profile.xPremium), links, costUsd: Math.round(budget.spentUsd * 1e4) / 1e4 };
 }
