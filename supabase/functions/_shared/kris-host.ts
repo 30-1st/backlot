@@ -175,8 +175,17 @@ const BUY_INTENT = /\b(how|where) (do|can) i (buy|order|pay|purchase|subscribe|b
 const ADULT_BUY = /\b(tribute|tributes|send (a )?tribute|pay ?pig|drain (me|my wallet)|wallet drain|customs?|custom content|cash ?meet|send money|spoil (you|her|him|them)|throne|wishlist)\b/i;
 
 /** Replies that never need the AI. Null means the AI should answer. */
+/** The client's name as it reads in a sentence: decorative symbols like ✧ dropped. */
+export function spokenName(kit: RoomKit): string {
+  const clean = kit.name.replace(/[^\p{L}\p{N}\s'&.\-]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return clean.length >= 2 ? clean : `@${kit.handle}`;
+}
+
+/** Price questions get an honest answer from the AI, not a handoff. */
+const PRICE_Q = /\b(how much|cost|costs|price|prices|pricing|rate|rates|\$)\b/i;
+
 export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { crisis: false, minor: false, spending: false }): Reply | null {
-  const who = kit.name || `@${kit.handle}`;
+  const who = spokenName(kit);
   const noSell = flags.crisis || flags.minor || flags.spending;
   if (CRISIS.test(text)) {
     return {
@@ -214,10 +223,15 @@ export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { cris
         source: 'redirect',
       };
   }
-  if (BUY_INTENT.test(text) || (kit.adult && ADULT_BUY.test(text))) {
-    return noSell
-      ? { body: `No rush at all. Take your time and look around.`, links: [], source: 'handoff' }
-      : { body: `Love that. Here is where to do it with ${who}:`, links: firstLinks(kit), source: 'handoff' };
+  if (!PRICE_Q.test(text) && (BUY_INTENT.test(text) || (kit.adult && ADULT_BUY.test(text)))) {
+    if (noSell) return { body: `No rush at all. Take your time and look around.`, links: [], source: 'handoff' };
+    // A question gets a plain answer; an exclamation gets matched energy.
+    const asking = /\?\s*$|^(how|where|can|could|do|does|is|what)\b/i.test(text.trim());
+    return {
+      body: asking ? `Here is where to do that with ${who}:` : `Love the energy. It all happens on ${who}'s page:`,
+      links: firstLinks(kit),
+      source: 'handoff',
+    };
   }
   const f = faqMatch(text, kit.faq);
   if (f) return { body: f.a, links: [], source: 'faq' };
@@ -225,8 +239,13 @@ export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { cris
 }
 
 /** Cleans Kris's words before anyone sees them. */
+/** Promises the assistant cannot keep: it has no way to pass messages to anyone. */
+const FALSE_PROMISE = /\b(i('ll| will)|i am going to|i'm going to|we('ll| will))\s+(pass|forward|send|flag|share|escalate|report|let)\b[^.!?]*[.!?]?/gi;
+
 export function cleanHostReply(s: string): string {
   return s
+    .replace(FALSE_PROMISE, '')
+    .replace(/\b(link|option|number)\s*#?\s*\d+\b/gi, 'the link below')
     .replace(/\s*—\s*/g, ', ')
     .replace(/https?:\/\/\S+/gi, '')
     .replace(/\bwww\.\S+/gi, '')
@@ -254,6 +273,7 @@ function kitText(kit: RoomKit): string {
     `Reply in: ${kit.language}`,
     kit.humor.length ? `Humor that fits them: ${kit.humor.join(', ')}. Never aimed at people.` : '',
     kit.voice ? `Their voice: ${kit.voice.summary} Words they use: ${kit.voice.uses.join(', ') || '(none listed)'}. Words they never use: ${kit.voice.avoids.join(', ') || '(none listed)'}. Off limits: ${kit.voice.offLimits.join('; ') || '(none listed)'}.` : '',
+    `Call them ${spokenName(kit)} or @${kit.handle}. Use "they" unless the facts above say otherwise.`,
     kit.adult ? 'This is an adult niche. Visitors confirmed they are 18 or older. Still no sexual talk; point to the links.' : '',
     '# Their links (number: label, never type the address)',
     kit.links.length ? kit.links.map((l, i) => `${i}: ${l.label}`).join('\n') : '(none)',
@@ -315,7 +335,7 @@ export async function aiReply(opts: {
   let source: Reply['source'] = 'ai';
   // Her own words get the same check visitors' words do.
   if (!body || wantsRedirect(body, kit.adult)) {
-    body = `Here is where to find ${kit.name || '@' + kit.handle}:`;
+    body = `Here is where to find ${spokenName(kit)}:`;
     links = opts.flags.spending || opts.flags.minor || opts.flags.crisis ? [] : firstLinks(kit);
     source = 'redirect';
   }

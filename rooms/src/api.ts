@@ -26,7 +26,12 @@ export class DoorError extends Error {
   }
 }
 
-async function call<T>(body: Record<string, unknown>): Promise<T> {
+/**
+ * One request to the room door, retried up to twice when the server could not start in
+ * time (a 503 BOOT_ERROR under a burst of visitors). Nothing is saved when that happens,
+ * so trying again is safe.
+ */
+async function call<T>(body: Record<string, unknown>, attempt = 0): Promise<T> {
   let res: Response;
   try {
     res = await fetch(ROOM_DOOR, {
@@ -40,6 +45,10 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
     throw new DoorError('This room cannot reach the assistant right now. Check your connection and try again.', 0);
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if ((data.code === 'BOOT_ERROR' || res.status === 502 || res.status === 504) && attempt < 2) {
+    await new Promise((r) => setTimeout(r, attempt === 0 ? 700 : 1600));
+    return call<T>(body, attempt + 1);
+  }
   if (!res.ok) throw new DoorError(String(data.error ?? (res.status === 404 ? 'private' : 'Something went wrong. Try again.')), res.status, data);
   return data as T;
 }

@@ -321,7 +321,7 @@ Deno.serve(async (req) => {
 
       const host = await import('../_shared/kris-host.ts');
       const kit = await host.loadRoomKit(serviceClient(), v.room.client_id, v.room.workspace_id);
-      const resting = { body: `I am taking a short break. Here is where to find ${kit.name}:`, links: visit.spending || visit.minor || visit.crisis ? [] : kit.links.slice(0, 3).map((_, i) => i), source: 'fixed' as const };
+      const resting = { body: `I am taking a short break. Here is where to find ${host.spokenName(kit)}:`, links: visit.spending || visit.minor || visit.crisis ? [] : kit.links.slice(0, 3).map((_, i) => i), source: 'fixed' as const };
       const flags = { crisis: visit.crisis, minor: visit.minor, spending: visit.spending };
       let rep: import('../_shared/kris-host.ts').Reply | null = host.codeReply(text, kit, flags);
       if (!rep) {
