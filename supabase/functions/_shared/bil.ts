@@ -54,6 +54,7 @@ import { callRein, REIN_ESTIMATE_USD } from './rein-client.ts';
 import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts';
 import { measure, type Performance, postLine, statsText } from './bil-performance.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
+import { krisNote } from './kris-notes.ts';
 import { ENVIRONMENT, withTracing } from './observability.ts';
 
 // ---------- limits ----------
@@ -355,7 +356,7 @@ function dialsText(kit: Kit): string {
   ].join('\n');
 }
 
-function snapshotText(kit: Kit): string {
+export function snapshotText(kit: Kit): string {
   const { updatedAt: _p, readConsentAt: _c, dials: _d, humorStyles: _h, ...profile } = kit.profile;
   const card = kit.card ? (({ updatedAt: _u, ...rest }) => rest)(kit.card) : null;
   return [
@@ -772,6 +773,14 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
       .select('id')
       .single();
     if (error) throw new Error(`Could not save the report: ${error.message}`);
+    const monthName = new Date(`${req.month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    await krisNote(db, {
+      workspaceId: m.workspaceId,
+      clientId: req.clientId,
+      ref: `report:${req.month}`,
+      body: summary?.headline ? `Your ${monthName} report is in. The short version: ${summary.headline}.` : `Your ${monthName} report is in, with the numbers from X.`,
+      link: 'reports',
+    });
     return { id: saved.id, numbers, summary, costUsd };
   });
 }
@@ -2114,6 +2123,16 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string) 
       createdAt: new Date().toISOString(),
     }
     : null;
+  if (status !== 'failed') {
+    const okCount = all.length - blocked;
+    await krisNote(db, {
+      workspaceId: c.owner_id,
+      clientId: c.client_id,
+      ref: `campaign:${c.id}:done`,
+      body: `Bil finished ${plan.success ? `"${plan.data.title}"` : 'your campaign'}: ${okCount} ${okCount === 1 ? 'post is' : 'posts are'} ready for your yes${blocked ? `, and ${blocked} need${blocked === 1 ? 's' : ''} a detail from you first` : ''}. Want me to show you a few here?`,
+      link: `campaigns.${c.id}`,
+    });
+  }
   await setStep(db, c.id, {
     status,
     step: null,

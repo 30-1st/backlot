@@ -26,6 +26,7 @@ export const KNOWLEDGE_VERSION = {
   rein: 'k2',
   bil: 'k2',
   check: 'k1',
+  kris: 'k1',
 } as const;
 
 export function xaiClient() {

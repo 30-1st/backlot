@@ -12,12 +12,12 @@ import { getActiveTraceId } from 'npm:@langfuse/tracing@6.0.0';
  * Each name is a scope in private.spend_limits. 'campaign' covers one whole campaign
  * (its run id is the campaign id, so the plan and every drafting batch add up).
  */
-export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign' | 'report' | 'desk';
+export type AgentName = 'rein' | 'bil' | 'check' | 'onboard' | 'campaign' | 'report' | 'desk' | 'kris';
 
 /** Thrown when a reservation would go over a cap. Nothing was spent. */
 export class SpendLimitError extends Error {
   constructor(
-    readonly reason: 'run' | 'month' | 'no_limit' | 'call',
+    readonly reason: 'run' | 'month' | 'no_limit' | 'call' | 'client' | 'agent_month',
     readonly detail: Record<string, unknown>,
   ) {
     super(
@@ -27,6 +27,10 @@ export class SpendLimitError extends Error {
           ? `This run would go over its $${detail.cap} limit`
           : reason === 'call'
             ? `This call's estimate ($${detail.estimate}) is over the $${detail.cap} per-call limit`
+          : reason === 'client'
+            ? `This client's monthly allowance is used up ($${detail.used} of $${detail.cap})`
+          : reason === 'agent_month'
+            ? `This agent's monthly budget is used up ($${detail.used} of $${detail.cap})`
           : String(detail.detail ?? 'No spending limit is set'),
     );
     this.name = 'SpendLimitError';
@@ -95,6 +99,8 @@ export type BudgetOptions = {
   /** Refuse any single call whose estimate is above this, in USD. */
   perCallCap?: number;
   db?: SupabaseClient;
+  /** Meter this run against the client's own monthly allowance too (scopes <agent>_client and <agent>_month). */
+  clientId?: string;
 };
 
 export class Budget {
@@ -103,6 +109,7 @@ export class Budget {
   spentUsd = 0;
   private readonly perCallCap?: number;
   private readonly db: SupabaseClient;
+  private readonly clientId?: string;
 
   constructor(
     readonly agent: AgentName,
@@ -111,6 +118,7 @@ export class Budget {
     this.runId = options.runId ?? crypto.randomUUID();
     this.perCallCap = options.perCallCap;
     this.db = options.db ?? serviceClient();
+    this.clientId = options.clientId;
   }
 
   /**
@@ -132,13 +140,10 @@ export class Budget {
     if (this.perCallCap !== undefined && estimate > this.perCallCap) {
       throw new SpendLimitError('call', { estimate, cap: this.perCallCap });
     }
-    const { data, error } = await this.db.rpc('agent_spend_reserve', {
-      run: this.runId,
-      agent: this.agent,
-      kind,
-      estimate,
-      trace: getActiveTraceId() ?? null,
-    });
+    const args = { run: this.runId, agent: this.agent, kind, estimate, trace: getActiveTraceId() ?? null };
+    const { data, error } = this.clientId
+      ? await this.db.rpc('agent_spend_reserve_client', { ...args, client: this.clientId })
+      : await this.db.rpc('agent_spend_reserve', args);
     if (error) throw new Error(`Spend meter unavailable: ${error.message}`);
     if (!data?.ok) throw new SpendLimitError(data?.reason ?? 'no_limit', data ?? {});
     const reservation = data.id as number;

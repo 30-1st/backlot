@@ -9,7 +9,8 @@
 // Who may do what (see _shared/workspace.ts):
 //   team (owner or team)  every action, for any client in the workspace
 //   client                approve_voice and review_post, for their own client only.
-//                         Clients never start paid work.
+//                         Clients never start paid work, except chatting with Kris, which comes
+//                         out of their own monthly Kris allowance.
 //
 // Actions (POST JSON with "action"):
 //   lookup         { handle }                 public profile facts to pre-fill intake ($0.01)       team
@@ -22,6 +23,7 @@
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
 //   ask            { requestId, text, clientId? }  the agent bar: Bil answers and may offer one next step (a few cents)  team
 //   desk           { requestId, clientId, replies? }  engagement desk: trend posts (free), replies to the client (about $0.005 a post)  team
+//   kris           { requestId, clientId, text }  Kris, the client's publicist, answers in her chat (about half a cent)  team, client
 //   report         { requestId, clientId, month }  monthly report from X numbers (about $0.005 a post + one Bil call)  team
 
 import {
@@ -56,6 +58,7 @@ import {
   startCampaign,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
+import { krisChat, KrisChatRequest } from '../_shared/kris.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
@@ -138,6 +141,8 @@ async function handle(req: Request): Promise<Response> {
         if (r.resumed) EdgeRuntime.waitUntil(kickWorker());
         return reply(200, r);
       }
+      case 'kris':
+        return reply(200, await krisChat(member, parse(KrisChatRequest, input)));
       case 'review_post':
         return reply(200, await reviewPost(member, parse(ReviewPostRequest, input)));
       case 'brand_save':
@@ -147,7 +152,7 @@ async function handle(req: Request): Promise<Response> {
       case 'fill_detail':
         return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
       default:
-        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, desk, ask, approve_voice, estimate, campaign, resume, review_post, fill_detail, brand_save or brand_review.' });
+        return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, desk, ask, approve_voice, estimate, campaign, resume, review_post, fill_detail, kris, brand_save or brand_review.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

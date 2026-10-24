@@ -32,6 +32,7 @@ import { withCors } from '../_shared/cors.ts';
 import { reusableBrief } from '../_shared/toolbox.ts';
 import { callRein, REIN_ESTIMATE_USD } from '../_shared/rein-client.ts';
 import { Region } from '../_shared/schemas/rein.ts';
+import { krisNote } from '../_shared/kris-notes.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -329,6 +330,14 @@ async function handle(req: Request): Promise<Response> {
           .select('created_at')
           .single();
         if (error) throw new Error(`Could not save the client's trends: ${error.message}`);
+        const top = Array.isArray(brief?.trends) ? brief.trends.slice(0, 2).map((t: any) => String(t?.topic ?? '').slice(0, 60)).filter(Boolean) : [];
+        await krisNote(db, {
+          workspaceId: member.workspaceId,
+          clientId: r.clientId,
+          ref: `trends:${brief.briefId}`,
+          body: top.length ? `Rein found what is rising in your niche: ${top.join(' and ')}. Ask me how we could play it.` : 'Rein checked what is rising in your niche. The full list is on What works.',
+          link: 'insights',
+        });
         return reply(200, { latest: { ...briefForApp(brief), savedAt: saved.created_at, region: r.region, source: 'update' }, reused: wasReused });
       }
 

@@ -66,6 +66,16 @@ export type People = {
   clients: { clientId: string; handle: string; hasLogin: boolean }[];
 };
 
+export type KrisMessage = {
+  id: number;
+  role: 'kris' | 'client' | 'team';
+  kind: 'chat' | 'note' | 'pitch';
+  body: string;
+  cards: Array<{ campaignId: string; slot: number }> | null;
+  link: string | null;
+  createdAt: string;
+};
+
 async function call<T>(fn: 'team' | 'bil', action: string, input: Record<string, unknown> = {}): Promise<T> {
   if (!supabase) throw new Error('This build is offline.');
   const { data, error } = await supabase.functions.invoke(fn, { body: { action, ...input } });
@@ -145,6 +155,9 @@ export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string) =>
     call<{ review: Decision }>('bil', 'review_post', { campaignId, slot, decision, note }),
   /** Saves brand kit edits: straight in for the team, waiting for the team's OK for a client. */
+  /** One chat turn with Kris: returns what was saved (the person's message and hers). */
+  kris: (clientId: string, text: string) =>
+    call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'kris', { requestId: crypto.randomUUID(), clientId, text }),
   brandSave: (clientId: string, edits: Record<string, unknown>) => call<{ saved: boolean; waiting: boolean }>('bil', 'brand_save', { clientId, edits }),
   /** The team takes or drops a client's suggested brand kit changes. */
   brandReview: (clientId: string, approve: boolean) => call<{ approved: boolean }>('bil', 'brand_review', { clientId, approve }),
