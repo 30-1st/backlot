@@ -279,6 +279,7 @@ export function cleanHostReply(s: string): string {
     // Sentences start with a capital, so replies read as careful, not careless.
     .replace(/(^|[.!?]\s+)([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase())
     .replace(/\bi(?=('m|'ll|'d|'ve| am | do | can | will | have | keep | only | just | don't | do not ))/g, 'I')
+    .replace(/\bai assistant\b/gi, 'AI assistant')
     .slice(0, 1000);
 }
 
