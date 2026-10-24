@@ -17,25 +17,42 @@ import { Shell, isShellPath } from './shell/Shell';
 import './shell/shell.css';
 import { liftSplash } from './lib/splash';
 
+/** How deep a screen sits: Home is 0, "campaigns" is 1, "campaigns.<id>" is 2. */
+function depth(path: string): number {
+  return !path || path === 'home' ? 0 : path.split('.').length;
+}
+
 /**
- * Changes the screen with a short cross-fade where the browser supports it. People who
- * ask their device for less motion get an instant change.
+ * Changes the screen with a short, directional transition where the browser supports it.
+ * Going deeper slides in from the right, going back slides in from the left, and moving
+ * sideways (between tabs) fades through. The header and dock hold still throughout, so
+ * only the content moves. People who ask their device for less motion get an instant change.
  */
-function withTransition(change: () => void): void {
+function withTransition(change: () => void, from = '', to = ''): void {
   let calm = false;
   try {
     calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch {
     calm = true;
   }
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
   if (calm || typeof doc.startViewTransition !== 'function' || document.visibilityState !== 'visible') {
     change();
     return;
   }
+  const a = depth(from);
+  const b = depth(to);
+  const root = document.documentElement;
+  root.dataset.vt = b > a ? 'forward' : b < a ? 'back' : 'side';
   try {
-    doc.startViewTransition(() => flushSync(change));
+    const t = doc.startViewTransition(() => flushSync(change));
+    t.finished
+      .finally(() => {
+        delete root.dataset.vt;
+      })
+      .catch(() => undefined);
   } catch {
+    delete root.dataset.vt;
     change();
   }
 }
@@ -112,18 +129,23 @@ export default function App() {
       const next = readPath();
       // go() already changed the screen; only Back, Forward and typed addresses animate here.
       if ((next || 'home') === (pathRef.current || 'home')) return;
-      withTransition(() => setPath(next));
+      withTransition(() => setPath(next), pathRef.current, next);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const go = useCallback((next: string, message?: string) => {
+    const from = pathRef.current;
     pathRef.current = next;
-    withTransition(() => {
-      setFlash(message ? { path: next, text: message } : null);
-      setPath(next);
-    });
+    withTransition(
+      () => {
+        setFlash(message ? { path: next, text: message } : null);
+        setPath(next);
+      },
+      from,
+      next,
+    );
     try {
       const hash = `#${next || 'home'}`;
       if (window.location.hash !== hash) window.location.hash = hash;
@@ -176,7 +198,7 @@ export default function App() {
   const account =
     login.status === 'in' ? { username: login.username, onSignOut, ...(inTeamSpace ? { onPeople: () => go('people') } : {}) } : {};
   const bil = login.status === 'in' && isTeamRole(role) ? { onBil: () => go('bil'), onBack: () => go('home') } : {};
-  const moving = login.status === 'in' ? <MoveGuestWork key={login.userId} onMoved={() => setMoved((n) => n + 1)} /> : null;
+  const moving = login.status === 'in' ? <MoveGuestWork key={`move:${login.userId}`} onMoved={() => setMoved((n) => n + 1)} /> : null;
   const withMove = (screen: ReactNode) => (
     <>
       {screen}

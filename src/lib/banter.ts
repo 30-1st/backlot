@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 
 export type Agent = 'bil' | 'rein' | 'kris';
 export type Turn = [Agent, string];
-export type Moment = 'open' | 'wait' | 'rein' | 'bil' | 'ask' | 'kris' | 'clear' | 'out';
+export type Moment = 'open' | 'wait' | 'rein' | 'bil' | 'ask' | 'kris' | 'clear' | 'out' | 'done';
 
 export const AGENT_NAMES: Record<Agent, string> = { bil: 'Bil', rein: 'Rein', kris: 'Kris' };
 
@@ -92,6 +92,14 @@ export const LINES: Record<Moment, Turn[][]> = {
     [['rein', 'All clear. Suspiciously clear.'], ['bil', 'That is called being organized.']],
     [['bil', 'Inbox zero. I would frame it.']],
     [['kris', 'Quiet days are good days.'], ['rein', 'Speak for yourself.']],
+  ],
+  // Bil just finished a campaign while the app was open. Kris leaves a note when that happens.
+  done: [
+    [['kris', 'Bil finished. I left you a note.'], ['bil', 'It is a good note.']],
+    [['bil', 'Done. Every post checked against the goal.'], ['kris', 'Your yes is the last step.']],
+    [['rein', 'Already done?'], ['bil', 'I do not rush. I finish.']],
+    [['kris', 'Fresh drafts, ready when you are.']],
+    [['bil', 'Finished.'], ['rein', 'That is it? No speech?'], ['bil', 'The posts are the speech.']],
   ],
   // An outside link is opening in a new tab.
   out: [

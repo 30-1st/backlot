@@ -2116,15 +2116,15 @@ a.bl-card:hover,
 }
 .bl-wait-chip { top: 14px; }
 .bl-out-note {
-  /* Clear of the dock at the bottom of most screens. */
-  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 84px);
+  /* At the top, clear of the dock and the agent pill at the bottom. */
+  top: max(14px, env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 .bl-out-note > span { font-weight: 600; }
 @keyframes bl-chip-in {
-  from { opacity: 0; transform: translate(-50%, 6px); }
+  from { opacity: 0; transform: translate(-50%, -8px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
@@ -2136,19 +2136,180 @@ a.bl-card:hover,
   scale: 0.97;
 }
 
-/* Screen changes: the old screen fades out quickly, the new one rises in. */
+/*
+ * Screen changes (see withTransition in App.tsx). The header, dock and agent pill keep
+ * their place while only the content moves. Timings follow the usual motion guidance:
+ * leaving is quick (about 0.2 s, speeding up), arriving is slower (about 0.34 s, settling).
+ *   forward  deeper into the app: content slides in from the right
+ *   back     up a level: content slides in from the left
+ *   side     between tabs: fade through, with a small rise
+ */
+.bl-top { view-transition-name: bl-top; }
+.bl-dock { view-transition-name: bl-dock; }
+.bl-pill { view-transition-name: bl-pill; }
+::view-transition-group(*) {
+  animation-duration: 0.34s;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
 ::view-transition-old(root) {
-  animation: bl-vt-out 0.14s ease-in both;
+  animation: bl-vt-fade-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
 }
 ::view-transition-new(root) {
-  animation: bl-vt-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: bl-vt-rise-in 0.34s cubic-bezier(0, 0, 0.2, 1) 0.08s both;
 }
-@keyframes bl-vt-out {
-  to { opacity: 0; }
+html[data-vt='forward']::view-transition-old(root) {
+  animation: bl-vt-out-left 0.22s cubic-bezier(0.4, 0, 1, 1) both;
 }
-@keyframes bl-vt-in {
-  from { opacity: 0; transform: translateY(6px); }
+html[data-vt='forward']::view-transition-new(root) {
+  animation: bl-vt-in-right 0.34s cubic-bezier(0, 0, 0.2, 1) both;
 }
+html[data-vt='back']::view-transition-old(root) {
+  animation: bl-vt-out-right 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+}
+html[data-vt='back']::view-transition-new(root) {
+  animation: bl-vt-in-left 0.34s cubic-bezier(0, 0, 0.2, 1) both;
+}
+@keyframes bl-vt-fade-out { to { opacity: 0; } }
+@keyframes bl-vt-rise-in { from { opacity: 0; transform: translateY(10px); } }
+@keyframes bl-vt-out-left { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes bl-vt-in-right { from { opacity: 0; transform: translateX(36px); } }
+@keyframes bl-vt-out-right { to { opacity: 0; transform: translateX(28px); } }
+@keyframes bl-vt-in-left { from { opacity: 0; transform: translateX(-36px); } }
+
+/* ---------- the agent pill ---------- */
+
+.bl-pill {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 60;
+  width: min(372px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 var(--highlight), 0 18px 40px -22px var(--shadow);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  transform: translateX(-50%);
+  animation: bl-pill-in 0.3s cubic-bezier(0, 0, 0.2, 1) both;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+/* Above the dock: 70 px dock, plus a 10 px gap. */
+.bl-pill.docked { bottom: calc(max(18px, env(safe-area-inset-bottom)) + 80px); }
+.bl-pill.leaving { animation: bl-pill-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
+.bl-pill.done { background: color-mix(in srgb, var(--accent-wash) 88%, transparent); border-color: var(--accent-edge); }
+.bl-pill.failed { background: color-mix(in srgb, var(--danger-wash) 92%, transparent); border-color: var(--danger); }
+@keyframes bl-pill-in {
+  from { opacity: 0; transform: translate(-50%, 14px) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes bl-pill-out {
+  to { opacity: 0; transform: translate(-50%, 10px) scale(0.98); }
+}
+.bl-pill-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 6px 4px 6px 6px;
+  border: 0;
+  background: none;
+  text-align: left;
+  border-radius: 14px;
+}
+.bl-pill-main .bl-dot { margin-left: 4px; }
+.bl-pill-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.bl-pill-text b {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-pill-text > span { color: var(--ink-2); }
+.bl-pill-text .bl-banter { margin-top: 4px; font-size: 12.5px; }
+.bl-pill-bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mist);
+  overflow: hidden;
+}
+.bl-pill-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.6s cubic-bezier(0.2, 0, 0, 1);
+}
+.bl-pill.done,
+.bl-pill.failed { align-items: flex-start; padding: 12px 6px 12px 12px; gap: 10px; }
+.bl-pill-mark {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  animation: bl-mark-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) 0.1s both;
+}
+.bl-pill.failed .bl-pill-mark { background: var(--danger); color: var(--paper); }
+.bl-pill-mark path { stroke-dasharray: 16; stroke-dashoffset: 16; animation: bl-mark-draw 0.4s cubic-bezier(0, 0, 0.2, 1) 0.3s forwards; }
+@keyframes bl-mark-pop { from { transform: scale(0.4); opacity: 0; } }
+@keyframes bl-mark-draw { to { stroke-dashoffset: 0; } }
+.bl-pill.done .bl-pill-text,
+.bl-pill.failed .bl-pill-text { flex: 1; }
+.bl-pill.done .bl-pill-text b,
+.bl-pill.failed .bl-pill-text b { white-space: normal; }
+.bl-pill-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
+.bl-pill .bl-pill-go {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 13px;
+}
+.bl-pill .bl-pill-link {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.bl-pill .bl-pill-x {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-3);
+  font-size: 20px;
+  line-height: 1;
+}
+.bl-pill .bl-pill-x:hover { background: var(--mist); color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
   .bl-banter-line,
@@ -2162,5 +2323,10 @@ a.bl-card:hover,
   .bl-progress.done { opacity: 0; }
   .bl-root :is(button, a, [role='button'], summary):active:not(:disabled) { scale: none; }
   ::view-transition-old(root),
-  ::view-transition-new(root) { animation: none; }
+  ::view-transition-new(root),
+  ::view-transition-group(*) { animation: none !important; }
+  .bl-pill,
+  .bl-pill.leaving,
+  .bl-pill-mark { animation: none !important; }
+  .bl-pill-mark path { animation: none !important; stroke-dashoffset: 0; }
 }

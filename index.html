@@ -21,7 +21,9 @@
          lifts it the moment the first screen is ready. It never adds waiting time. */
       #bl-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #f3f2ee; color: #111716; transition: opacity .32s ease, visibility .32s; font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif; }
       #bl-splash[data-theme='night'] { background: #0e1412; color: #ece7db; }
-      #bl-splash.gone { opacity: 0; visibility: hidden; }
+      #bl-splash.gone { opacity: 0; visibility: hidden; transform: scale(1.03); transition: opacity .42s cubic-bezier(.4,0,1,1), transform .42s cubic-bezier(.4,0,1,1), visibility .42s; }
+      #bl-splash .bl-s-in { transition: transform .42s cubic-bezier(.4,0,1,1); }
+      #bl-splash.gone .beam { opacity: .9; transform: scaleX(1.25); transition: opacity .3s, transform .42s; }
       #bl-splash .bl-s-in { display: grid; justify-items: center; gap: 14px; padding: 0 24px; text-align: center; }
       #bl-splash svg { width: 72px; height: 72px; overflow: visible; }
       #bl-splash .door { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-dasharray: 70; stroke-dashoffset: 70; animation: bl-s-draw .7s cubic-bezier(.2,.7,.2,1) forwards; }
@@ -29,14 +31,22 @@
       #bl-splash .pane { fill: #3fd0c1; opacity: 0; animation: bl-s-fade .4s .55s ease forwards; }
       #bl-splash[data-theme='night'] .beam, #bl-splash[data-theme='night'] .pane { fill: #c9a45a; }
       #bl-splash .word { font-family: 'Bodoni Moda', Didot, 'Times New Roman', serif; font-size: 30px; letter-spacing: .01em; opacity: 0; animation: bl-s-fade .5s .35s ease forwards; }
-      #bl-splash .line { min-height: 2.6em; max-width: 320px; font-size: 13px; line-height: 1.4; color: #4f5755; opacity: 0; animation: bl-s-fade .5s .8s ease forwards; }
+      #bl-splash .line { min-height: 4.2em; max-width: 320px; margin: 0; font-size: 13px; line-height: 1.4; color: #4f5755; }
+      #bl-splash .line span { display: block; opacity: 0; transform: translateY(4px); animation: bl-s-up .4s cubic-bezier(0,0,.2,1) forwards; }
+      #bl-splash .line span:nth-child(1) { animation-delay: .75s; }
+      #bl-splash .line span:nth-child(2) { animation-delay: 1.2s; }
+      #bl-splash .line span:nth-child(3) { animation-delay: 1.65s; }
+      #bl-splash .skip { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; font-size: 12px; color: #636b69; opacity: 0; animation: bl-s-fade .4s 1.4s ease forwards; }
+      #bl-splash[data-theme='night'] .skip { color: #8d978f; }
+      @keyframes bl-s-up { to { opacity: 1; transform: none; } }
       #bl-splash[data-theme='night'] .line { color: #aab2a9; }
       #bl-splash .line b { font-weight: 600; color: inherit; }
       @keyframes bl-s-draw { to { stroke-dashoffset: 0; } }
       @keyframes bl-s-beam { to { opacity: .35; transform: none; } }
       @keyframes bl-s-fade { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) {
-        #bl-splash .door, #bl-splash .beam, #bl-splash .pane, #bl-splash .word, #bl-splash .line { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+        #bl-splash .door, #bl-splash .beam, #bl-splash .pane, #bl-splash .word, #bl-splash .line span, #bl-splash .skip { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+        #bl-splash.gone, #bl-splash.gone .beam { transform: none; }
         #bl-splash .beam { opacity: .35; }
       }
     </style>
@@ -48,6 +58,7 @@
         <div class="word">Backlot</div>
         <p class="line" id="bl-splash-line"></p>
       </div>
+      <p class="skip" id="bl-splash-skip" hidden>Tap to skip</p>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

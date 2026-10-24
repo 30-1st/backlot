@@ -24,6 +24,7 @@ import { MeasureFlow, PlanFlow } from './PlanFlow';
 import { AddClientFlow } from './AddClientFlow';
 import { ReinScreen } from './Rein';
 import { liftSplash } from '../lib/splash';
+import { AgentPill } from './AgentPill';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -121,7 +122,13 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   }
 
   // Home has its own stage and no dock.
-  if (!preview && (head === 'home' || head === '')) return wrap(<HomeRooms me={me} go={go} needs={badge} />);
+  if (!preview && (head === 'home' || head === ''))
+    return wrap(
+      <>
+        <HomeRooms me={me} go={go} needs={badge} />
+        <AgentPill ws={ws} go={go} here="home" docked={false} isTeam={isTeam} />
+      </>,
+    );
 
   // Which room this screen belongs to.
   const room: RoomKey = preview
@@ -348,6 +355,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         {screen}
       </div>
       {dock}
+      {room !== 'play' && <AgentPill ws={ws} go={goIn} here={inner.join('.')} docked={dock !== null} isTeam={preview ? false : isTeam} />}
     </>,
   );
 }
