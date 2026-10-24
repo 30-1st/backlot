@@ -138,7 +138,7 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
       <div>
         <h1 className="bl-h1 bl-rise">Room</h1>
         <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          @{client.handle}&rsquo;s page for their audience, on its own site, where Kris hosts and answers.
+          @{client.handle}&rsquo;s page for their audience, on its own site, where Kris hosts and answers. Visitors never see her name, only that it is the client's AI assistant.
         </p>
       </div>
 
@@ -345,8 +345,8 @@ export function RoomScreen({ ws, single, isTeam }: ScreenProps) {
   );
 }
 
-type Counts = { visits: number; chats: number; ai_replies: number; faq_taps: number; link_taps: number; redirects: number };
-type Visit = { id: string; started_at: string; ai_replies: number; minor: boolean; crisis: boolean; test: boolean };
+type Counts = { visits: number; chats: number; ai_replies: number; faq_taps: number; link_taps: number; redirects: number; handoffs: number; handoff_taps: number };
+type Visit = { id: string; started_at: string; ai_replies: number; minor: boolean; crisis: boolean; spending: boolean; test: boolean };
 type Line = { seq: number; role: 'visitor' | 'kris'; body: string; source: string };
 
 /** The last 7 days of counts (team and client), and recent visitor chats (team only). */
@@ -361,13 +361,13 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
     if (!supabase) return;
     const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
     void (async () => {
-      const c = await supabase!.from('room_counts').select('visits, chats, ai_replies, faq_taps, link_taps, redirects').eq('client_id', clientId).gte('day', since);
+      const c = await supabase!.from('room_counts').select('visits, chats, ai_replies, faq_taps, link_taps, redirects, handoffs, handoff_taps').eq('client_id', clientId).gte('day', since);
       if (c.error) return setError(c.error.message);
-      const sum: Counts = { visits: 0, chats: 0, ai_replies: 0, faq_taps: 0, link_taps: 0, redirects: 0 };
+      const sum: Counts = { visits: 0, chats: 0, ai_replies: 0, faq_taps: 0, link_taps: 0, redirects: 0, handoffs: 0, handoff_taps: 0 };
       for (const row of c.data ?? []) for (const k of Object.keys(sum) as Array<keyof Counts>) sum[k] += Number((row as Record<string, unknown>)[k] ?? 0);
       setCounts(sum);
       if (isTeam) {
-        const v = await supabase!.from('room_visits').select('id, started_at, ai_replies, minor, crisis, test').eq('client_id', clientId).order('started_at', { ascending: false }).limit(20);
+        const v = await supabase!.from('room_visits').select('id, started_at, ai_replies, minor, crisis, spending, test').eq('client_id', clientId).order('started_at', { ascending: false }).limit(20);
         if (v.error) return setError(v.error.message);
         setVisits((v.data ?? []) as Visit[]);
       }
@@ -403,7 +403,9 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
               ['ai_replies', 'AI replies'],
               ['faq_taps', 'FAQ taps'],
               ['link_taps', 'Link taps'],
-              ['redirects', 'Steered to links'],
+              ['handoffs', 'Ready to buy'],
+              ['redirects', 'Steered from sexual talk'],
+              ['handoff_taps', 'Taps after a handoff'],
             ] as Array<[keyof Counts, string]>
           ).map(([k, label]) => (
             <div key={k}>
@@ -429,6 +431,7 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
                     {v.test ? ', test' : ''}
                     {v.crisis ? ', crisis words' : ''}
                     {v.minor ? ', said under 18' : ''}
+                    {v.spending ? ', money worries' : ''}
                   </button>
                   <button type="button" className="bl-linkish" onClick={() => void remove(v.id)}>
                     Delete

@@ -27,32 +27,32 @@ export const LOOKS: Record<Archetype, Look> = {
   ruler: {
     id: 'ruler', dark: true, bg: '#13080c', tint: 0.04, ink: '#f3e9de', muted: '#bfae9f',
     display: 'serif', glyphs: ['✦', '◆', '·'], object: 'crown', spin: 0.22, bob: 0.06, metal: 1, rough: 0.28,
-    placeholder: (n) => `Ask Kris about ${n}`,
+    placeholder: (n) => `Ask anything about ${n}`,
   },
   creator: {
     id: 'creator', dark: false, bg: '#fbfbff', tint: 0.1, ink: '#16131f', muted: '#575170',
     display: 'grotesk', glyphs: ['*', '✳', '·'], object: 'ribbon', spin: 0.35, bob: 0.08, metal: 0.2, rough: 0.35,
-    placeholder: (n) => `Ask Kris what ${n} is making`,
+    placeholder: (n) => `Ask what ${n} is making`,
   },
   jester: {
     id: 'jester', dark: false, bg: '#fffdf2', tint: 0.55, ink: '#141210', muted: '#3d3830',
     display: 'grotesk-wide', glyphs: ['+', '✶', '○'], object: 'dice', spin: 0.6, bob: 0.14, metal: 0, rough: 0.45,
-    placeholder: (n) => `Ask Kris something about ${n}`,
+    placeholder: (n) => `Ask something about ${n}`,
   },
   rebel: {
     id: 'rebel', dark: false, bg: '#e4e4e0', tint: 0.02, ink: '#0e0e0e', muted: '#4b4b48',
     display: 'mono', glyphs: ['/', '×', '#'], object: 'shard', spin: 0.45, bob: 0.05, metal: 0.9, rough: 0.18,
-    placeholder: (n) => `Ask Kris about ${n}`,
+    placeholder: (n) => `Ask anything about ${n}`,
   },
   sage: {
     id: 'sage', dark: true, bg: '#0a1124', tint: 0.05, ink: '#e8eefc', muted: '#9fb0d6',
     display: 'serif-italic', glyphs: ['✧', '·', '∘'], object: 'rings', spin: 0.18, bob: 0.04, metal: 0.8, rough: 0.3,
-    placeholder: (n) => `Ask Kris what ${n} knows`,
+    placeholder: (n) => `Ask what ${n} knows`,
   },
   lover: {
     id: 'lover', dark: false, bg: '#fff8fa', tint: 0.12, ink: '#2a0f19', muted: '#6d4a57',
     display: 'serif-italic', glyphs: ['♡', '·', '✧'], object: 'heart', spin: 0.28, bob: 0.07, metal: 0.1, rough: 0.12,
-    placeholder: (n) => `Ask Kris about ${n}`,
+    placeholder: (n) => `Ask anything about ${n}`,
   },
 };
 

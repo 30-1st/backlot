@@ -18,6 +18,7 @@
 //   tap      { slug, kind: faq|link, preview? }         counts a tap (no ticket, nothing about the visitor kept)
 //   history  { slug, ticket, preview? }                 this visit's messages, after a reload
 //   chat     { slug, ticket, text, after, preview? }    one message; code checks first, the AI only for what is left (K2)
+//   (tap also takes after: "handoff" for a link tapped from a warm handoff)
 //   delete   { slug, ticket, preview? }                 deletes this visit's chat at once
 //
 // Chat is live when the room's chat switch is on. Before that, a preview link can still
@@ -246,7 +247,7 @@ Deno.serve(async (req) => {
       const v = await viewable(slug, preview);
       if (!v) return reply(404, { state: 'private' });
       const mode = chatMode(v);
-      if (!mode) return reply(403, { error: 'Kris is not chatting here yet.' });
+      if (!mode) return reply(403, { error: 'Chat is not open here yet.' });
       const check = await verifyTurnstile(token, req);
       if (!check.ok) return reply(check.why === 'not_set_up' ? 503 : 403, { error: check.why === 'not_set_up' ? 'The bot check is not set up yet.' : 'The bot check did not pass. Try again.', why: check.why });
       // A new visit: a random id, nothing about the person.
@@ -264,7 +265,11 @@ Deno.serve(async (req) => {
       if (!ok) return reply(429, { error: 'Slow down a little.' });
       const v = await viewable(slug, preview);
       if (!v) return reply(404, { state: 'private' });
-      if (v.room.status === 'open') await count(v.room.client_id, body.kind === 'faq' ? 'faq_taps' : 'link_taps');
+      if (v.room.status === 'open') {
+        await count(v.room.client_id, body.kind === 'faq' ? 'faq_taps' : 'link_taps');
+        // A link tapped right after a warm handoff, so we can see whether handoffs turn into clicks.
+        if (body.kind === 'link' && body.after === 'handoff') await count(v.room.client_id, 'handoff_taps');
+      }
       return reply(200, { ok: true });
     }
 
@@ -276,7 +281,7 @@ Deno.serve(async (req) => {
       if (!v) return reply(404, { state: 'private' });
       const { data: visit, error: vErr } = await serviceClient()
         .from('room_visits')
-        .select('id, client_id, ai_replies, minor, crisis, test')
+        .select('id, client_id, ai_replies, minor, crisis, spending, test')
         .eq('id', ticket.vid)
         .maybeSingle();
       if (vErr) throw new Error(`Could not read the visit: ${vErr.message}`);
@@ -291,7 +296,7 @@ Deno.serve(async (req) => {
 
       // ---------- chat ----------
       const mode = chatMode(v);
-      if (!mode) return reply(403, { error: 'Kris is not chatting here yet.' });
+      if (!mode) return reply(403, { error: 'Chat is not open here yet.' });
       const adult = await (async () => {
         const { data } = await serviceClient().from('clients').select('profile').eq('id', v.room.client_id).maybeSingle();
         return Boolean((data?.profile as { adultContent?: boolean } | null)?.adultContent);
@@ -316,8 +321,9 @@ Deno.serve(async (req) => {
 
       const host = await import('../_shared/kris-host.ts');
       const kit = await host.loadRoomKit(serviceClient(), v.room.client_id, v.room.workspace_id);
-      const resting = { body: `Kris is resting for now. Here is where to find ${kit.name}:`, links: kit.links.slice(0, 3).map((_, i) => i), source: 'fixed' as const };
-      let rep: { body: string; links: number[]; source: 'ai' | 'faq' | 'fixed' | 'redirect'; flag?: 'crisis' | 'minor'; closeChat?: boolean } | null = host.codeReply(text, kit);
+      const resting = { body: `I am taking a short break. Here is where to find ${kit.name}:`, links: visit.spending || visit.minor || visit.crisis ? [] : kit.links.slice(0, 3).map((_, i) => i), source: 'fixed' as const };
+      const flags = { crisis: visit.crisis, minor: visit.minor, spending: visit.spending };
+      let rep: import('../_shared/kris-host.ts').Reply | null = host.codeReply(text, kit, flags);
       if (!rep) {
         const aiOk = visit.ai_replies < VISIT_AI_CAP &&
           (await withinLimits([
@@ -332,7 +338,7 @@ Deno.serve(async (req) => {
               kit,
               history: recent.map((m) => ({ role: m.role, body: m.body })),
               text,
-              flags: { crisis: visit.crisis, minor: visit.minor },
+              flags,
               clientId: v.room.client_id,
               mode,
             });
@@ -364,12 +370,14 @@ Deno.serve(async (req) => {
           ai_replies: visit.ai_replies + (rep.source === 'ai' ? 1 : 0),
           ...(rep.flag === 'crisis' ? { crisis: true } : {}),
           ...(rep.flag === 'minor' ? { minor: true } : {}),
+          ...(rep.flag === 'spending' ? { spending: true } : {}),
         })
         .eq('id', visit.id);
       if (mode === 'room') {
         if (last === 0) await count(v.room.client_id, 'chats');
         if (rep.source === 'ai') await count(v.room.client_id, 'ai_replies');
         if (rep.source === 'redirect') await count(v.room.client_id, 'redirects');
+        if (rep.source === 'handoff') await count(v.room.client_id, 'handoffs');
       }
       return reply(200, { messages: saved, closed: Boolean(rep.closeChat) });
     }

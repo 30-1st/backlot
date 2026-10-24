@@ -9,12 +9,12 @@ export type RoomView = {
   accent: string;
   greeting: string;
   buttons: Array<{ label: string; url: string }>;
-  /** Every approved link, by number, so Kris's link buttons can point at them. */
+  /** Every approved link, by number, so the assistant's link buttons can point at them. */
   links: Array<{ label: string; url: string } | null>;
   faq: Array<{ q: string; a: string }>;
   hero: { kind: 'photo' | 'video'; url: string } | null;
   ageGate: boolean;
-  /** room: Kris is live. test: a preview link, paid from the test budget. off: not yet. */
+  /** room: chat is live. test: a preview link, paid from the test budget. off: not yet. */
   chat: 'room' | 'test' | 'off';
 };
 
@@ -37,7 +37,7 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
       referrerPolicy: 'no-referrer',
     });
   } catch {
-    throw new DoorError('This room cannot reach Kris right now. Check your connection and try again.', 0);
+    throw new DoorError('This room cannot reach the assistant right now. Check your connection and try again.', 0);
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new DoorError(String(data.error ?? (res.status === 404 ? 'private' : 'Something went wrong. Try again.')), res.status, data);
@@ -51,6 +51,6 @@ export const chat = (slug: string, ticket: string, text: string, after: number, 
 export const history = (slug: string, ticket: string, preview?: string) => call<{ messages: Msg[] }>({ action: 'history', slug, ticket, preview });
 export const deleteChat = (slug: string, ticket: string, preview?: string) => call<{ deleted: boolean }>({ action: 'delete', slug, ticket, preview });
 /** Counting only; failures are ignored so a tap never feels slow. */
-export const tap = (slug: string, kind: 'faq' | 'link', preview?: string) => {
-  void call({ action: 'tap', slug, kind, preview }).catch(() => undefined);
+export const tap = (slug: string, kind: 'faq' | 'link', preview?: string, after?: 'handoff') => {
+  void call({ action: 'tap', slug, kind, preview, after }).catch(() => undefined);
 };

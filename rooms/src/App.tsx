@@ -6,9 +6,9 @@ import { runCheck } from './turnstile';
 import type { Mood } from './Stage';
 import { Safety } from './Safety';
 
-// A client's room: Kris's landing page. Everything from the server is shown as plain
+// A client's room: the landing page for the client's AI assistant (no name on the page). Everything from the server is shown as plain
 // text. Adult rooms ask for 18+ before anything else. FAQ answers come with the room,
-// so tapping one costs nothing; typed messages go to Kris once a bot check has passed.
+// so tapping one costs nothing; typed messages go to the assistant once a bot check has passed.
 
 const SLUG = /^[a-z0-9_]{3,30}$/;
 
@@ -142,7 +142,7 @@ function Shell({ look, room, children }: { look: Look; room: RoomView; children:
     if (!el) return;
     // Set through the style object, which the strict security policy allows.
     for (const [k, v] of Object.entries({ '--bg': p.bg, '--ink': p.ink, '--muted': p.muted, '--accent': p.accent, '--on-accent': p.onAccent, '--accent-text': p.accentText, '--surface': p.surface, '--line': p.line })) el.style.setProperty(k, v);
-    document.title = `${room.name}, with Kris`;
+    document.title = room.name;
     document.documentElement.style.background = p.bg;
   }, [p.bg, p.ink, p.muted, p.accent, p.onAccent, p.accentText, p.surface, p.line, room.name]);
   return (
@@ -267,7 +267,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
     const said = msg.trim();
     if (!said || busy || closed) return;
     if (!live) {
-      setNote('Kris starts chatting here soon. Tap a question above or one of the links.');
+      setNote('Chat opens here soon. Tap a question above or one of the links.');
       return;
     }
     setBusy(true);
@@ -308,7 +308,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
       } else {
         setLines((l) => l.filter((x) => x.source !== 'pending'));
         setText(said);
-        setNote(e instanceof Error ? e.message : 'Kris could not answer just now.');
+        setNote(e instanceof Error ? e.message : 'No answer just now. Try again.');
       }
     } finally {
       setBusy(false);
@@ -335,7 +335,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
       <header className="r-top">
         <span className="r-live">
           <span className="r-dot" aria-hidden="true" />
-          Kris is {live ? 'online' : 'getting ready'}
+          {live ? 'Online now' : 'Opening soon'}
         </span>
         <Clock />
       </header>
@@ -344,7 +344,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
         <Stage look={look} accent={room.accent} mood={mood} />
         <h1 className="r-name">{room.name}</h1>
         <p className="r-who">
-          <span className="r-ai">AI</span> Kris, @{room.handle}&rsquo;s host
+          <span className="r-ai">AI</span> @{room.handle}&rsquo;s assistant
         </p>
       </section>
 
@@ -358,7 +358,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
         )}
 
         {(room.faq.length > 0 || live) && (
-          <div className="r-suggest" role="group" aria-label="Ask Kris">
+          <div className="r-suggest" role="group" aria-label="Suggested questions">
             {room.faq.slice(0, started ? 2 : 4).map((f) => (
               <button key={f.q} type="button" className="r-card" onClick={() => askFaq(f)}>
                 {f.q}
@@ -384,12 +384,12 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
         )}
 
         {started && (
-          <ol className="r-chat" aria-label="Chat with Kris" aria-live="polite">
+          <ol className="r-chat" aria-label="Chat" aria-live="polite">
             {lines.map((l) => (
               <li key={l.key} className={`r-msg r-${l.role}${l.source === 'pending' ? ' r-pending' : ''}`}>
                 {l.role === 'kris' && (
                   <span className="r-avatar" aria-hidden="true">
-                    K
+                    {look.glyphs[0]}
                   </span>
                 )}
                 <div className="r-bubble">
@@ -399,7 +399,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
                       {l.links.map((i) => {
                         const link = room.links[i];
                         return link ? (
-                          <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="r-chip" onClick={() => tap(room.slug, 'link', preview)}>
+                          <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="r-chip" onClick={() => tap(room.slug, 'link', preview, l.source === 'handoff' || l.source === 'redirect' ? 'handoff' : undefined)}>
                             {link.label}
                           </a>
                         ) : null;
@@ -412,9 +412,9 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
             {busy && (
               <li className="r-msg r-kris" aria-busy="true">
                 <span className="r-avatar" aria-hidden="true">
-                  K
+                  {look.glyphs[0]}
                 </span>
-                <div className="r-bubble r-typing" aria-label="Kris is typing">
+                <div className="r-bubble r-typing" aria-label="Typing">
                   {look.glyphs.slice(0, 3).map((g, i) => (
                     <span key={i}>{g}</span>
                   ))}
@@ -457,7 +457,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
         }}
       >
         <label className="r-sr" htmlFor="r-ask">
-          Ask Kris
+          Ask a question
         </label>
         <input
           id="r-ask"
@@ -467,7 +467,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
           autoComplete="off"
           enterKeyHint="send"
           disabled={closed}
-          placeholder={closed ? 'This chat has ended' : live ? look.placeholder(room.name) : 'Kris starts chatting here soon'}
+          placeholder={closed ? 'This chat has ended' : live ? look.placeholder(room.name) : 'Chat opens here soon'}
           onChange={(e) => setText(e.target.value)}
         />
         <button type="submit" className="r-send" disabled={busy || closed || !text.trim()}>
@@ -476,7 +476,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
       </form>
 
       <footer className="r-foot">
-        <p>Kris is an AI host. She works for @{room.handle}, recommends their own links, and is not @{room.handle} or a person.</p>
+        <p>This is an AI assistant. It works for @{room.handle}, recommends their own links, and is not @{room.handle} or a person.</p>
         <p>
           <a href="/safety">Safety and privacy</a>
           {started && (
