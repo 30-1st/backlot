@@ -14,6 +14,7 @@ export const AGENT_MODELS = {
   rein: MODELS.light,
   bil: MODELS.strong,
   check: MODELS.light,
+  dials: MODELS.light,
   /** Kris chats on the cheaper model; hosting does not need Bil's. */
   kris: MODELS.light,
 } as const;

@@ -15,6 +15,7 @@ import {
   FunnelStage,
   XAction,
 } from './common.ts';
+import { Dials } from './client.ts';
 
 // ---------- review of a Rein brief ----------
 
@@ -137,6 +138,8 @@ export const CampaignPost = z.object({
   algorithm: AlgorithmScore,
   voice: VoiceCheck,
   compliance: ComplianceFlags,
+  /** The separate dial check (upgrade 3): what each dial read on this draft, and the setting it was held to. */
+  dials: z.object({ readings: Dials, target: Dials }).optional(),
 });
 
 export const Campaign = z

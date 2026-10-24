@@ -37,6 +37,8 @@ export type Post = {
   review: 'pending' | 'approved' | 'changes' | 'posted';
   reviewNote: string | null;
   reviewedAt: string | null;
+  /** The X post the client says this draft became (dial upgrade 5). */
+  xPostId?: string | null;
 };
 
 export type OnboardingStep = 'delegate' | 'first_call' | 'contract';
@@ -76,7 +78,7 @@ async function load(): Promise<Workspace> {
       .select('id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at')
       .order('created_at', { ascending: false })
       .limit(50),
-    supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at').order('slot').limit(1000),
+    supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id').order('slot').limit(1000),
     supabase.from('onboarding_steps').select('client_id, step, done_at'),
     supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
     supabase
@@ -137,6 +139,7 @@ async function load(): Promise<Workspace> {
       review: r.review,
       reviewNote: r.review_note,
       reviewedAt: r.reviewed_at,
+      xPostId: r.x_post_id ?? null,
     })),
   };
 }

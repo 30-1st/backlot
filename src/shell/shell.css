@@ -2003,3 +2003,6 @@ a.bl-card:hover,
 .bl-kris-compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; padding: 8px 0; background: transparent; }
 .bl-kris-compose textarea { resize: none; font: inherit; min-height: 48px; }
 .bl-kris-compose .bl-btn { min-height: 48px; }
+.bl-dial-reads { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 13px; }
+.bl-dial-reads li { display: flex; justify-content: space-between; gap: 8px; }
+.bl-dial-reads li.off { color: var(--danger, #c0392b); }

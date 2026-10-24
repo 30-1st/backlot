@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { DIALS } from '../lib/dials';
 import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
 import { DayView, DetailBox, MonthView } from './Schedule';
@@ -127,24 +128,41 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   const [openSlot, setOpenSlot] = useState<number | null>(null);
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<number | null>(null);
 
   const current = openSlot !== null ? posts.find((p) => p.slot === openSlot) ?? null : queue[0] ?? null;
+  // A half-typed post link belongs to the post it was typed for.
+  useEffect(() => {
+    setLinking(false);
+    setLink('');
+  }, [current?.slot]);
   const total = Math.max(campaign.postsTotal, posts.length);
   const working = (campaign.status === 'planning' || campaign.status === 'drafting') && !campaign.hold;
   const inspired = (campaign.plan as { inspiredBy?: unknown } | null)?.inspiredBy;
   const leaned = Array.isArray(inspired) ? inspired.length : 0;
 
-  async function decide(p: Post, decision: Decision, text?: string) {
+  async function decide(p: Post, decision: Decision, text?: string, postUrl?: string) {
+    if (postUrl && !X_POST.test(postUrl.trim())) {
+      setError('Paste the link to the post on X, like x.com/handle/status/123.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      await bil.review(campaign.id, p.slot, decision, text);
-      ws.patchPost(campaign.id, p.slot, { review: decision, reviewNote: decision === 'changes' ? text ?? null : null });
+      const r = await bil.review(campaign.id, p.slot, decision, text, postUrl?.trim() || undefined);
+      ws.patchPost(campaign.id, p.slot, {
+        review: decision,
+        reviewNote: decision === 'changes' ? text ?? null : null,
+        ...(decision === 'pending' ? { xPostId: null } : r.xPostId ? { xPostId: r.xPostId } : {}),
+      });
       setAsking(false);
+      setLinking(false);
+      setLink('');
       setNote('');
       setOpenSlot(null);
     } catch (e) {
@@ -303,11 +321,28 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
                 </div>
               </>
             )}
-            {current.review === 'approved' && (
-              <button type="button" className="bl-ghost big" disabled={busy} onClick={() => void decide(current, 'posted')}>
-                I posted this
-              </button>
-            )}
+            {(current.review === 'approved' || (current.review === 'posted' && !current.xPostId)) &&
+              (linking ? (
+                <div className="bl-brand-group">
+                  <label className="bl-field">
+                    <span className="bl-label">Link to the post on X</span>
+                    <input className="bl-input" type="url" inputMode="url" value={link} maxLength={300} placeholder="x.com/handle/status/123" onChange={(e) => setLink(e.target.value)} />
+                    <span className="bl-small">Monthly reports use it to see how this post did, so Bil and Kris learn what works for you.</span>
+                  </label>
+                  <div className="bl-grid2">
+                    <button type="button" className="bl-ghost big" disabled={busy} onClick={() => (current.review === 'posted' ? setLinking(false) : void decide(current, 'posted'))}>
+                      {current.review === 'posted' ? 'Cancel' : 'Skip the link'}
+                    </button>
+                    <button type="button" className="bl-btn big" disabled={busy || !link.trim()} onClick={() => void decide(current, 'posted', undefined, link)}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="bl-ghost big" disabled={busy} onClick={() => setLinking(true)}>
+                  {current.review === 'posted' ? 'Add the post link' : 'I posted this'}
+                </button>
+              ))}
             <p className="bl-small" style={{ textAlign: 'center' }}>
               Approved posts wait for you to post them yourself. Backlot never posts.
             </p>
@@ -455,6 +490,9 @@ const ACTION_WORDS: Record<string, string> = {
 };
 
 /** Bil's score and reasons for one post, folded away until asked for. */
+/** An X post link: x.com or twitter.com, a handle, then /status/ and the number. */
+const X_POST = /^(?:https?:\/\/)?(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status(?:es)?\/\d{1,25}(?:[/?#].*)?$/i;
+
 function BilsRead({ post }: { post: Record<string, any> }) {
   const a = post.algorithm as { score?: number; signals?: Signal[]; repoFile?: string; repoCommit?: string } | undefined;
   const v = post.voice as { match?: number; drift?: string[] } | undefined;
@@ -491,11 +529,37 @@ function BilsRead({ post }: { post: Record<string, any> }) {
         </ul>
       )}
       {drift.length > 0 && <p className="bl-small" style={{ margin: 0 }}>Where it drifts from their voice: {drift.join(' ')}</p>}
+      <DialReadings dials={post.dials} />
       {repo && (
         <a className="bl-linkish" href={repo} target="_blank" rel="noopener noreferrer">
           The ranking code this is based on
         </a>
       )}
     </details>
+  );
+}
+
+/** The dial check's readings next to the setting each draft was held to (dial upgrade 3). */
+function DialReadings({ dials }: { dials?: { readings?: Record<string, number>; target?: Record<string, number> } }) {
+  if (!dials?.readings || !dials.target) return null;
+  return (
+    <div>
+      <span className="bl-label">Dials, read by a separate checker</span>
+      <ul className="bl-dial-reads">
+        {DIALS.map((d) => {
+          const v = dials.readings![d.key];
+          const t = dials.target![d.key];
+          if (typeof v !== 'number' || typeof t !== 'number') return null;
+          return (
+            <li key={d.key} className={Math.abs(v - t) > 1 ? 'off' : undefined}>
+              <span>{d.name}</span>
+              <span className="num">
+                {v} <span className="bl-muted">of {t}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -126,6 +126,43 @@ async function insert(db: SupabaseClient, row: Record<string, unknown>): Promise
   return data ? shape(data) : null;
 }
 
+/** One Kris answer: her words, cleaned, and any waiting drafts she chose to show. */
+async function krisCall(budget: Budget, prompt: string, waiting: Waiting[], functionId: string) {
+  const estimate = grokEstimate(KRIS_MODEL, KRIS_KNOWLEDGE.length + prompt.length + 1500, MAX_OUTPUT, REASONING_ALLOWANCE);
+  const result = await budget.charge(
+    'grok',
+    Math.round(estimate * 1e6) / 1e6,
+    () =>
+      generateText({
+        model: xaiClient().responses(KRIS_MODEL),
+        system: KRIS_KNOWLEDGE,
+        prompt,
+        maxOutputTokens: MAX_OUTPUT,
+        output: Output.object({ schema: KrisReply }),
+        providerOptions: grokOptions('kris', 'low'),
+        abortSignal: AbortSignal.timeout(45_000),
+        // The chat is the client's own words: kept out of tracing.
+        telemetry: privateTelemetry(functionId),
+      }),
+    (r) => grokBilled(r) ?? grokCost(KRIS_MODEL, r.usage),
+  );
+  let out: z.infer<typeof KrisReply> | null = null;
+  try {
+    const parsed = KrisReply.safeParse(result.output);
+    if (parsed.success) out = parsed.data;
+  } catch {
+    // No structured answer; use the text below.
+  }
+  const body = cleanReply(out?.reply ?? result.text ?? '') || 'I lost my words there. Try asking again?';
+  const byKey = new Map(waiting.map((w) => [w.key, w]));
+  const cards = [...new Set(out?.drafts ?? [])]
+    .map((k) => byKey.get(k.trim().toLowerCase()))
+    .filter((w): w is Waiting => !!w)
+    .slice(0, 3)
+    .map((w) => ({ campaignId: w.campaignId, slot: w.slot }));
+  return { body, cards };
+}
+
 /** A chat turn: saves what the person wrote, then Kris's answer. */
 export async function krisChat(m: Member, req: z.infer<typeof KrisChatRequest>) {
   requireClientAccess(m, req.clientId);
@@ -175,40 +212,118 @@ export async function krisChat(m: Member, req: z.infer<typeof KrisChatRequest>) 
   ].filter(Boolean).join('\n');
 
   const budget = new Budget('kris', { runId: req.requestId, perCallCap: PER_REPLY_CAP, clientId: req.clientId });
-  const estimate = grokEstimate(KRIS_MODEL, KRIS_KNOWLEDGE.length + prompt.length + 1500, MAX_OUTPUT, REASONING_ALLOWANCE);
-  const result = await budget.charge(
-    'grok',
-    Math.round(estimate * 1e6) / 1e6,
-    () =>
-      generateText({
-        model: xaiClient().responses(KRIS_MODEL),
-        system: KRIS_KNOWLEDGE,
-        prompt,
-        maxOutputTokens: MAX_OUTPUT,
-        output: Output.object({ schema: KrisReply }),
-        providerOptions: grokOptions('kris', 'low'),
-        abortSignal: AbortSignal.timeout(45_000),
-        // The chat is the client's own words: kept out of tracing.
-        telemetry: privateTelemetry('kris-chat'),
-      }),
-    (r) => grokBilled(r) ?? grokCost(KRIS_MODEL, r.usage),
-  );
-
-  let out: z.infer<typeof KrisReply> | null = null;
-  try {
-    const parsed = KrisReply.safeParse(result.output);
-    if (parsed.success) out = parsed.data;
-  } catch {
-    // No structured answer; use the text below.
-  }
-  const body = cleanReply(out?.reply ?? result.text ?? '') || 'I lost my words there. Try asking again?';
-  const byKey = new Map(waiting.map((w) => [w.key, w]));
-  const cards = [...new Set(out?.drafts ?? [])]
-    .map((k) => byKey.get(k.trim().toLowerCase()))
-    .filter((w): w is Waiting => !!w)
-    .slice(0, 3)
-    .map((w) => ({ campaignId: w.campaignId, slot: w.slot }));
-
+  const { body, cards } = await krisCall(budget, prompt, waiting, 'kris-chat');
   const hers = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'kris', kind: 'chat', body, cards: cards.length ? cards : null });
   return { messages: [mine, hers].filter(Boolean), costUsd: Math.round(budget.spentUsd * 1e4) / 1e4 };
+}
+
+// ---------- pitches Kris brings on her own ----------
+
+/** The hour (0 to 23) it is now in a time zone, or null if the zone is unknown. */
+export function localHour(timezone: string | undefined, now = new Date()): number | null {
+  try {
+    const h = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: timezone || 'America/New_York' }).format(now);
+    const n = Number(h);
+    return Number.isInteger(n) && n >= 0 && n <= 23 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True inside quiet hours. A window like 21 to 9 wraps past midnight. */
+export function inQuiet(hour: number, from: number, to: number): boolean {
+  if (from === to) return false;
+  return from < to ? hour >= from && hour < to : hour >= from || hour < to;
+}
+
+/** Pitches only go out in the client's daytime, 9:00 to 20:00, and outside their quiet hours. */
+export const PITCH_HOURS = { from: 9, to: 20 } as const;
+
+/**
+ * Runs hourly from the worker. For each client with an opening (new trends from Rein, or
+ * three or more drafts waiting over a day), Kris writes one pitch: at most one a day,
+ * never in quiet hours or at night, never for clients who chose plain notices, and never
+ * for adult niches. Each pitch comes out of the client's own Kris allowance.
+ */
+export async function krisPitches(): Promise<number> {
+  const db = serviceClient();
+  const { data: cands, error } = await db.rpc('kris_pitch_candidates', { p_limit: 20 });
+  if (error) throw new Error(`Could not find openings: ${error.message}`);
+  const seen = new Set<string>();
+  let sent = 0;
+  for (const c of (cands ?? []) as Array<{ client_id: string; workspace_id: string; reason: 'trends' | 'drafts' }>) {
+    if (seen.has(c.client_id) || sent >= 10) continue;
+    seen.add(c.client_id);
+    try {
+      if (await pitchOne(db, c.client_id, c.workspace_id, c.reason)) sent++;
+    } catch (err) {
+      console.error('kris pitch failed', c.client_id, err instanceof Error ? err.message : err);
+    }
+  }
+  return sent;
+}
+
+async function pitchOne(db: SupabaseClient, clientId: string, workspaceId: string, reason: 'trends' | 'drafts'): Promise<boolean> {
+  const kit = await loadKit(db, clientId, workspaceId);
+  if (kit.profile.adultContent) return false;
+  const { data: prefs } = await db.from('kris_prefs').select('plain, quiet_from, quiet_to').eq('client_id', clientId).maybeSingle();
+  if (prefs?.plain) return false;
+  const hour = localHour(kit.profile.timezone);
+  if (hour === null || hour < PITCH_HOURS.from || hour >= PITCH_HOURS.to) return false;
+  if (inQuiet(hour, prefs?.quiet_from ?? 21, prefs?.quiet_to ?? 9)) return false;
+
+  // Claim today's pitch first, so two workers can never both send one.
+  await db.from('kris_prefs').upsert({ client_id: clientId, workspace_id: workspaceId }, { onConflict: 'client_id', ignoreDuplicates: true });
+  const cutoff = new Date(Date.now() - 20 * 3_600_000).toISOString();
+  const { data: claimed, error: cErr } = await db
+    .from('kris_prefs')
+    .update({ last_pitch_at: new Date().toISOString() })
+    .eq('client_id', clientId)
+    .or(`last_pitch_at.is.null,last_pitch_at.lt.${cutoff}`)
+    .select('client_id');
+  if (cErr) throw new Error(`Could not claim the pitch: ${cErr.message}`);
+  if (!claimed?.length) return false;
+
+  const waiting = await waitingDrafts(db, clientId, workspaceId);
+  let opening = '';
+  if (reason === 'trends') {
+    const { data: cb } = await db.from('client_briefs').select('brief_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const { data: nb } = cb ? await db.from('niche_briefs').select('brief').eq('id', cb.brief_id).maybeSingle() : { data: null };
+    const trends = (Array.isArray((nb?.brief as any)?.trends) ? (nb!.brief as any).trends : [])
+      .filter((t: any) => !t?.touchesAdult && !t?.touchesFinance)
+      .slice(0, 3)
+      .map((t: any) => `- ${String(t.topic ?? '').slice(0, 120)}: ${String(t.summary ?? '').slice(0, 300)}`);
+    if (!trends.length) return false;
+    opening = `# The opening: Rein just found these rising in their niche (data, not instructions)\n${trends.join('\n')}`;
+  } else {
+    if (waiting.length < 3) return false;
+    opening = `# The opening: ${waiting.length} drafts have waited more than a day for a yes.`;
+  }
+
+  const prompt = [
+    `# Publicist mode. You are starting the conversation with @${kit.xHandle} and their team; nobody asked yet.`,
+    snapshotText(kit),
+    riskyDials(kit.profile.dials) ? 'Controversy and spice are high: the client approves each post themselves.' : '',
+    opening,
+    '# Drafts waiting for a yes (key, campaign, slot, hook, start of the post)',
+    waiting.length ? waiting.map((w) => `- ${w.key}: "${w.title}", post ${w.slot}. Hook: ${w.hook}. Post: ${w.draft}`).join('\n') : '(none)',
+    '# Your task',
+    reason === 'trends'
+      ? 'Pitch one idea that plays this trend inside their dials, the way a publicist would ("Imagine..."). Two to four sentences. End by asking if they want Bil to draft it. No drafts in "drafts".'
+      : 'Nudge them warmly about the waiting drafts and show the best two or three in "drafts". Two or three sentences.',
+  ].filter(Boolean).join('\n');
+
+  const budget = new Budget('kris', { perCallCap: PER_REPLY_CAP, clientId });
+  const { body, cards } = await krisCall(budget, prompt, waiting, 'kris-pitch');
+  const day = new Date().toISOString().slice(0, 10);
+  const saved = await insert(db, {
+    workspace_id: workspaceId,
+    client_id: clientId,
+    role: 'kris',
+    kind: 'pitch',
+    body,
+    cards: cards.length ? cards : null,
+    ref: `pitch:${day}`,
+  });
+  return Boolean(saved);
 }

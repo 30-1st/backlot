@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { bil } from '../lib/team';
-import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, riskyDials, type Dials, type HumorStyle } from '../lib/dials';
+import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, dialClashes, riskyDials, type Dials, type HumorStyle } from '../lib/dials';
 import type { ScreenProps } from './Shell';
 
 // The brand kit: everything Bil reads about a client before he plans or writes, on one
@@ -305,6 +305,11 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
             At this controversy and spice, {isTeam ? 'the client approves each post themselves' : 'you approve each post yourself'}. Jokes aimed at real people are never written, at any level.
           </p>
         )}
+        {dialClashes(dials).map((w) => (
+          <p key={w} className="bl-small bl-knob-warn" role="note">
+            {w}
+          </p>
+        ))}
         <fieldset className="bl-knob-humor">
           <legend className="bl-label">Humor style, pick up to 2</legend>
           {HUMOR.map(([h, label]) => (

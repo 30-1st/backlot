@@ -79,6 +79,24 @@ export const DIAL_ANCHORS: Record<keyof Dials, [string, string, string]> = {
 export const riskyDials = (d: Pick<Dials, 'controversy' | 'spice'> | undefined) =>
   !!d && (d.controversy >= 6 || d.spice >= 6 || d.controversy + d.spice > 9);
 
+/**
+ * Context modifiers (dial upgrade 6): the funnel stage nudges the dials a notch, and no
+ * dial ever leaves 1 to 7. Discover: hype and brainrot +1. Consider: usefulness +1.
+ * Convert: sales push +1. Retain: no change.
+ */
+export const STAGE_NUDGES: Record<string, Partial<Record<keyof Dials, number>>> = {
+  discover: { hype: 1, brainrot: 1 },
+  consider: { usefulness: 1 },
+  convert: { salesPush: 1 },
+  retain: {},
+};
+export function targetDials(d: Dials, stage?: string): Dials {
+  const out = { ...d };
+  const nudge = (stage && STAGE_NUDGES[stage]) || {};
+  for (const [k, v] of Object.entries(nudge) as Array<[keyof Dials, number]>) out[k] = Math.max(1, Math.min(7, out[k] + v));
+  return out;
+}
+
 /** Humor styles from the Humor Styles Questionnaire, as the Kris Roadmap names them. */
 export const HumorStyle = z.enum(['warm', 'self_deprecating', 'at_ideas', 'hard_moments']);
 

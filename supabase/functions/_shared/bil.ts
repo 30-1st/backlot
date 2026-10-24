@@ -55,6 +55,7 @@ import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts
 import { measure, type Performance, postLine, statsText } from './bil-performance.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
 import { krisNote } from './kris-notes.ts';
+import { checkDials, DIAL_CHECK_PER_POST, dialBudget, type DialResult } from './dial-check.ts';
 import { ENVIRONMENT, withTracing } from './observability.ts';
 
 // ---------- limits ----------
@@ -353,6 +354,7 @@ function dialsText(kit: Kit): string {
     ...lines,
     `Humor styles they are comfortable with: ${humor}. Humor is never aimed at people.`,
     'Write every post at these levels, give or take one notch. Controversy and spice never go above their setting.',
+    'Funnel stage nudges a post a notch: discover adds 1 to hype and brainrot, consider adds 1 to usefulness, convert adds 1 to sales push. No dial goes past 7.',
   ].join('\n');
 }
 
@@ -1157,7 +1159,15 @@ export const ReviewPostRequest = z.object({
   // pending undoes a decision; posted is the client saying they posted it themselves.
   decision: z.enum(['approved', 'changes', 'posted', 'pending']),
   note: z.string().trim().max(500).optional(),
+  /** With "posted": the link to the X post, so reports can tie the draft to it (dial upgrade 5). */
+  postUrl: z.string().trim().max(300).optional(),
 });
+
+/** The post number from an X post link, or null if it is not one. */
+export function xPostIdFrom(url: string): string | null {
+  const m = url.trim().match(/^(?:https?:\/\/)?(?:www\.|mobile\.)?(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status(?:es)?\/(\d{1,25})(?:[/?#].*)?$/i);
+  return m ? m[1] : null;
+}
 
 /** Records a decision on one post. Backlot never posts; "posted" is only a note from the person. */
 export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostRequest>) {
@@ -1187,6 +1197,12 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   }
   const note = req.note && req.note.length > 0 ? req.note : null;
   if (req.decision === 'changes' && !note) throw new BilInputError('Say what should change.');
+  let xPostId: string | null = null;
+  if (req.postUrl) {
+    if (req.decision !== 'posted') throw new BilInputError('A post link goes with "I posted this" only.');
+    xPostId = xPostIdFrom(req.postUrl);
+    if (!xPostId) throw new BilInputError('Paste the link to the post on X, like x.com/handle/status/123.');
+  }
 
   const reviewedAt = new Date().toISOString();
   const { error } = await db
@@ -1196,10 +1212,15 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
       review_note: req.decision === 'changes' ? note : null,
       reviewed_by: req.decision === 'pending' ? null : m.userId,
       reviewed_at: req.decision === 'pending' ? null : reviewedAt,
+      // Undo clears the link; marking posted again without one keeps the link already saved.
+      ...(req.decision === 'pending' ? { x_post_id: null } : xPostId ? { x_post_id: xPostId } : {}),
     })
     .eq('campaign_id', req.campaignId)
     .eq('slot', req.slot);
-  if (error) throw new Error(`Could not save the decision: ${error.message}`);
+  if (error) {
+    if (error.code === '23505') throw new BilInputError('That X post is already linked to another draft.', 409);
+    throw new Error(`Could not save the decision: ${error.message}`);
+  }
   const first = (post.post as { hook?: unknown; idea?: unknown } | null) ?? {};
   await logApproval(db, {
     workspaceId: m.workspaceId,
@@ -1209,10 +1230,10 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
     campaignId: req.campaignId,
     slot: req.slot,
     subject: String(first.hook ?? first.idea ?? ''),
-    note: req.decision === 'changes' ? note : null,
+    note: req.decision === 'changes' ? note : xPostId ? `Linked to x.com/i/status/${xPostId}` : null,
     actor: m,
   });
-  return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt };
+  return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt, xPostId };
 }
 
 const MAX_DETAIL_TRIES = 5;
@@ -1289,6 +1310,18 @@ export async function fillDetail(m: Member, req: z.infer<typeof FillDetailReques
         continue;
       }
       judged = judgeDraft(slot, { ...p, slot: slot.slot }, kit, plan, mediaFiles, ctx);
+      if (judged.kind === 'ok') {
+        const post = judged.post as Record<string, unknown>;
+        const read = await checkDials(dialBudget(c.id, db), kit.profile.dials, [{ slot: slot.slot, stage: slot.stage, draft: String(post.draft ?? '') }], 30_000);
+        const verdict = dialVerdict(post, read.get(slot.slot), attempt > 0);
+        if (verdict.kind === 'redo') {
+          judged = { kind: 'redo', fixes: verdict.fixes };
+          redo = { [String(slot.slot)]: verdict.fixes };
+          continue;
+        }
+        judged = verdict.kind === 'blocked' ? { kind: 'blocked', post: heldPost(slot, verdict.reasons) } : { kind: 'ok', post: verdict.post };
+        break;
+      }
       if (judged.kind !== 'redo') break;
       redo = { [String(slot.slot)]: judged.fixes };
     }
@@ -1350,7 +1383,10 @@ export function estimateCampaign(posts: number, useTrends: boolean, snapshotChar
   for (let left = posts - BATCH_START; left > 0; left -= BATCH_MAX) batches += batchCost(Math.min(BATCH_MAX, left));
   batches *= 1.1;
   const campaignUsd = Math.round((review + plan + batches) * 1e4) / 1e4;
-  return { campaignUsd, reinUsd: useTrends ? REIN_ESTIMATE : 0, totalUsd: Math.round((campaignUsd + (useTrends ? REIN_ESTIMATE : 0)) * 1e4) / 1e4 };
+  // The separate dial check runs on its own meter (scope 'dials'): about $0.002 a post, plus redos.
+  const dialsUsd = Math.round(posts * DIAL_CHECK_PER_POST * 1e4) / 1e4;
+  const reinUsd = useTrends ? REIN_ESTIMATE : 0;
+  return { campaignUsd, reinUsd, dialsUsd, totalUsd: Math.round((campaignUsd + reinUsd + dialsUsd) * 1e4) / 1e4 };
 }
 
 /** Queues a campaign and returns at once. The worker does the rest. */
@@ -1956,6 +1992,21 @@ function heldPost(s: PlanSlot, reasons: string[]) {
   return { order: s.slot, dayOffset: s.dayOffset, postWindow: s.postWindow, postType: s.postType, pillar: s.pillar, stage: s.stage, idea: s.idea, ...(s.mediaId ? { mediaId: s.mediaId } : {}), blockedReasons: reasons.slice(0, 10) };
 }
 
+/**
+ * What the dial check means for one draft that passed the rules: rewrite it once when a
+ * dial is more than a notch off; after that, save it with its readings, or hold it when
+ * controversy or spice still run hot. No reading (the check failed): save as is.
+ */
+function dialVerdict(post: Record<string, unknown>, read: DialResult | undefined, retried: boolean):
+  | { kind: 'ok'; post: Record<string, unknown> }
+  | { kind: 'redo'; fixes: string[] }
+  | { kind: 'blocked'; reasons: string[] } {
+  if (!read) return { kind: 'ok', post };
+  if (read.fixes.length && !retried) return { kind: 'redo', fixes: read.fixes };
+  if (read.overLimit) return { kind: 'blocked', reasons: ['Controversy or spice still runs above the client\'s setting after a rewrite.', ...read.fixes].slice(0, 10) };
+  return { kind: 'ok', post: { ...post, dials: { readings: read.readings, target: read.target } } };
+}
+
 type Judged =
   | { kind: 'ok'; post: unknown }
   | { kind: 'blocked'; post: unknown }
@@ -2040,6 +2091,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: 'blocked', post: heldPost(s, reasons) });
 
   let ms = 0;
+  const passed: Array<{ s: PlanSlot; post: Record<string, unknown>; earlier: boolean }> = [];
   try {
     const result = await bilCall({
       budget,
@@ -2067,9 +2119,20 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
       if (judged.kind === 'redo') {
         if (earlier) blockRow(s, ['Still breaks a rule after a second try:', ...judged.fixes]);
         else nextRedo[String(s.slot)] = judged.fixes;
+      } else if (judged.kind === 'ok') {
+        passed.push({ s, post: judged.post as Record<string, unknown>, earlier: Boolean(earlier) });
       } else {
         newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: s.slot, status: judged.kind, post: judged.post });
       }
+    }
+
+    // The separate dial check on every draft that passed the rule checks.
+    const read = await checkDials(dialBudget(c.id, db), kit.profile.dials, passed.map((x) => ({ slot: x.s.slot, stage: x.s.stage, draft: String(x.post.draft ?? '') })), timeLeft(deadline) - 15_000);
+    for (const x of passed) {
+      const verdict = dialVerdict(x.post, read.get(x.s.slot), x.earlier);
+      if (verdict.kind === 'redo') nextRedo[String(x.s.slot)] = verdict.fixes;
+      else if (verdict.kind === 'blocked') blockRow(x.s, verdict.reasons);
+      else newRows.push({ campaign_id: c.id, owner_id: c.owner_id, slot: x.s.slot, status: 'ok', post: verdict.post });
     }
   } catch (err) {
     if (!(err instanceof RefusalError)) throw err;

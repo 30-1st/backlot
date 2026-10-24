@@ -2,6 +2,9 @@
 // is waiting (see migration bil_pipeline), and by the bil function right after a campaign
 // is queued.
 //
+// Once an hour pg_cron also calls it with { "job": "kris_pitches" }, only when some client
+// has an opening, so Kris can bring a pitch on her own (see migration kris_pitches).
+//
 // The caller must present the worker token from public.internal_config. The platform's
 // JWT check is off because the scheduler has no user session.
 //
@@ -11,6 +14,7 @@
 // in what this worker has left; otherwise a fresh worker picks it up on the next tick.
 
 import { drain } from '../_shared/bil.ts';
+import { krisPitches } from '../_shared/kris.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -34,7 +38,16 @@ Deno.serve(async (req) => {
     return reply(500, { error: 'server' });
   }
   if (!(await sameSecret(req.headers.get('x-bil-token') ?? '', expected))) return reply(401, { error: 'not allowed' });
-  await req.body?.cancel();
+  const body = await req.json().catch(() => null);
+
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'kris_pitches') {
+    EdgeRuntime.waitUntil(
+      krisPitches()
+        .then((n) => console.log(`bil-worker: Kris sent ${n} pitch${n === 1 ? '' : 'es'}`))
+        .catch((err) => console.error('bil-worker: Kris pitches failed', err instanceof Error ? err.message : err)),
+    );
+    return reply(202, { accepted: true, job: 'kris_pitches' });
+  }
 
   if (draining >= MAX_DRAINS) return reply(202, { accepted: false, reason: 'busy', uptimeMs: Date.now() - BOOT_AT });
   draining++;

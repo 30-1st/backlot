@@ -152,8 +152,8 @@ export function useCanLookup(enabled = true): boolean {
 export type Decision = 'approved' | 'changes' | 'posted' | 'pending';
 
 export const bil = {
-  review: (campaignId: string, slot: number, decision: Decision, note?: string) =>
-    call<{ review: Decision }>('bil', 'review_post', { campaignId, slot, decision, note }),
+  review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string) =>
+    call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}) }),
   /** Saves brand kit edits: straight in for the team, waiting for the team's OK for a client. */
   /** One chat turn with Kris: returns what was saved (the person's message and hers). */
   kris: (clientId: string, text: string) =>
@@ -181,7 +181,7 @@ export const bil = {
     call<XProfile>('bil', 'lookup', { handle, images }),
   onboard: (body: Record<string, unknown>) => call<Record<string, unknown>>('bil', 'onboard', body),
   estimate: (clientId: string, posts: number, useTrends: boolean) =>
-    call<{ campaignUsd: number; reinUsd: number; totalUsd: number }>('bil', 'estimate', { clientId, posts, useTrends }),
+    call<{ campaignUsd: number; reinUsd: number; dialsUsd?: number; totalUsd: number }>('bil', 'estimate', { clientId, posts, useTrends }),
   campaign: (r: {
     requestId: string;
     clientId: string;

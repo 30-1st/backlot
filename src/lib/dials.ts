@@ -32,3 +32,11 @@ export const riskyDials = (d: Dials | null | undefined) => !!d && (d.controversy
 
 /** The anchor for any level: 1 to 2 low, 3 to 5 middle, 6 to 7 high. */
 export const anchorFor = (at: [string, string, string], v: number) => (v <= 2 ? at[0] : v >= 6 ? at[2] : at[1]);
+
+/** Settings that pull against each other (dial upgrade 7): shown as a warning, never blocked. */
+export function dialClashes(d: Dials): string[] {
+  const out: string[] = [];
+  if (d.brainrot >= 6 && d.usefulness >= 6) out.push('Brainrot and usefulness are both high, so posts may feel like a joke and a how-to at once.');
+  if (d.salesPush >= 6 && d.insider >= 6) out.push('Sales push and insider are both high, so the offer may only make sense to fans who already know it.');
+  return out;
+}
