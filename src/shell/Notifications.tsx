@@ -7,6 +7,7 @@ import { shotsWanted } from './gaps';
 import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
+import { Banter } from './Banter';
 
 // Home: notifications on a signal rail, newest first, with the ones that need you on top.
 // Everything is worked out from the workspace data, so nothing here can drift out of step
@@ -432,6 +433,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
                 : 'No clients yet. Bring in your first client with Bil to begin.'
               : 'Nothing needs you right now. New posts from your team show up here.'}
           </span>
+          {(!isTeam || ws.data.clients.length > 0) && <Banter moment="clear" className="center" after={500} />}
           {isTeam && (
             <button type="button" className="bl-btn" onClick={() => go('create')}>
               Ask Bil

@@ -23,6 +23,7 @@ import { PlaygroundScreen } from './Playground';
 import { MeasureFlow, PlanFlow } from './PlanFlow';
 import { AddClientFlow } from './AddClientFlow';
 import { ReinScreen } from './Rein';
+import { liftSplash } from '../lib/splash';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -67,6 +68,10 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   useEffect(() => {
     void loadMe();
   }, []);
+  // The opening screen lifts once the first real screen can show.
+  useEffect(() => {
+    if (me || meError) liftSplash();
+  }, [me, meError]);
 
   const parts = path.split('.');
   const preview = parts[0] === 'client';

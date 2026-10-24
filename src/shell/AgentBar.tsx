@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { bil, team, type AskAction } from '../lib/team';
+import { Banter } from './Banter';
 
 // The agent bar: one box where the team asks Bil anything. He answers, and may offer one
 // next step. A step that costs money shows its price and runs only when you tap it.
@@ -148,6 +149,7 @@ export function AgentBar({ clientId, clients, go, pick }: { clientId: string | n
           </button>
         </div>
       </form>
+      {busy && !error && <Banter moment="ask" after={600} />}
 
       {error && (
         <p className="bl-error" role="alert">

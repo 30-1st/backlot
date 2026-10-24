@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { isReadyPlatform, type Platform } from './platforms';
 import { Home } from './components/Home';
 import { Accounts } from './components/Accounts';
@@ -14,6 +15,30 @@ import { MoveGuestWork } from './components/MoveGuestWork';
 import { Gate } from './shell/Gate';
 import { Shell, isShellPath } from './shell/Shell';
 import './shell/shell.css';
+import { liftSplash } from './lib/splash';
+
+/**
+ * Changes the screen with a short cross-fade where the browser supports it. People who
+ * ask their device for less motion get an instant change.
+ */
+function withTransition(change: () => void): void {
+  let calm = false;
+  try {
+    calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    calm = true;
+  }
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (calm || typeof doc.startViewTransition !== 'function' || document.visibilityState !== 'visible') {
+    change();
+    return;
+  }
+  try {
+    doc.startViewTransition(() => flushSync(change));
+  } catch {
+    change();
+  }
+}
 
 // Three screens, one inside the next:
 //   the homescreen            #home
@@ -71,6 +96,8 @@ function useRole(userId: string | null): Role | null {
 export default function App() {
   const login = useLogin();
   const [path, setPath] = useState(readPath);
+  const pathRef = useRef(path);
+  pathRef.current = path;
   const [guest, setGuestChoice] = useState(() => hosted && wasGuest());
   const role = useRole(login.status === 'in' ? login.userId : null);
   // Where narrations are kept is decided before any screen reads them.
@@ -81,14 +108,22 @@ export default function App() {
   const [moved, setMoved] = useState(0);
 
   useEffect(() => {
-    const onHash = () => setPath(readPath());
+    const onHash = () => {
+      const next = readPath();
+      // go() already changed the screen; only Back, Forward and typed addresses animate here.
+      if ((next || 'home') === (pathRef.current || 'home')) return;
+      withTransition(() => setPath(next));
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const go = useCallback((next: string, message?: string) => {
-    setFlash(message ? { path: next, text: message } : null);
-    setPath(next);
+    pathRef.current = next;
+    withTransition(() => {
+      setFlash(message ? { path: next, text: message } : null);
+      setPath(next);
+    });
     try {
       const hash = `#${next || 'home'}`;
       if (window.location.hash !== hash) window.location.hash = hash;
@@ -97,6 +132,11 @@ export default function App() {
       // Some embedded views lock the address. The screen still changes.
     }
   }, []);
+
+  const shellNext = login.status === 'in' && isShellPath(path);
+  useEffect(() => {
+    if (login.status !== 'loading' && !shellNext) liftSplash();
+  }, [login.status, shellNext]);
 
   if (login.status === 'loading') return <div className="app" aria-busy="true" />;
   // Just made a login or signed in from the Playground: straight back to the Playground.

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { trackedFetch } from './activity';
 
 // Backlot runs in one of two modes, decided when the site is built:
 //
@@ -9,7 +10,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_KEY;
 
-export const supabase: SupabaseClient | null = url && key ? createClient(url, key) : null;
+export const supabase: SupabaseClient | null = url && key ? createClient(url, key, { global: { fetch: trackedFetch } }) : null;
 
 /** True when this build talks to Supabase. */
 export const hosted = supabase !== null;

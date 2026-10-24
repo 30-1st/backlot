@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { bil, type KrisMessage } from '../lib/team';
 import type { Post } from './data';
 import type { ScreenProps } from './Shell';
+import { Banter } from './Banter';
 
 // Kris, the client's publicist (K0). One chat per client, shared by the client and the
 // team. She brings updates, pitches and drafts; the Approve and Change buttons on a draft
@@ -172,6 +173,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
           <li className="bl-kris-msg kris" aria-busy="true">
             <span className="bl-label">Kris</span>
             <p className="bl-kris-body bl-muted">Thinking</p>
+            <Banter moment="kris" after={700} />
           </li>
         )}
       </ol>

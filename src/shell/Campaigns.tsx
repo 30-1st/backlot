@@ -10,6 +10,7 @@ import { listAccounts } from '../lib/library';
 import { rememberLayer, setXIntent } from '../components/CampaignLayer';
 import { campaignTitle } from './Notifications';
 import type { ScreenProps } from './Shell';
+import { Banter } from './Banter';
 
 // Campaigns: the list, and one campaign's posts reviewed one at a time or as a list.
 // Post statuses use four words only: Draft, Needs you, Approved, Posted by you.
@@ -357,6 +358,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
                   ? `${blocked.length} ${blocked.length === 1 ? 'post needs' : 'posts need'} a detail before they can be written. Give it under All posts.`
                   : 'Every post has a decision. Copy the approved ones when it is time to post.'}
             </span>
+            {working && <Banter moment="bil" className="center" after={400} />}
           </div>
         ))}
 

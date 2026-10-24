@@ -2,12 +2,17 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { ThemeProvider } from './shell/theme';
+import { Stagehand } from './shell/Stagehand';
+import { dressSplash } from './lib/splash';
 import './styles.css';
+
+dressSplash();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <ThemeProvider>
       <App />
+      <Stagehand />
     </ThemeProvider>
   </StrictMode>,
 );

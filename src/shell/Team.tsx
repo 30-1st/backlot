@@ -3,6 +3,7 @@ import { team, type People, type Person } from '../lib/team';
 import { ChangePassword } from './ChangePassword';
 import { Rings } from './icons';
 import type { ThemeChoice } from './theme';
+import { useBanterOn } from '../lib/banter';
 import type { ScreenProps } from './Shell';
 
 // Team and account: invites and password resets (team only), then the person's own
@@ -17,6 +18,7 @@ export function TeamScreen({
   onChanged,
 }: ScreenProps & { theme: { choice: ThemeChoice; setChoice: (c: ThemeChoice) => void }; onSignOut: () => void; onChanged: () => void }) {
   const [changing, setChanging] = useState(false);
+  const [banter, setBanter] = useBanterOn();
   if (changing) return <ChangePassword onBack={() => setChanging(false)} onDone={() => { setChanging(false); onChanged(); }} />;
 
   return (
@@ -46,6 +48,22 @@ export function TeamScreen({
             </button>
           ))}
         </div>
+        <span className="bl-label" style={{ marginTop: 6 }}>
+          Agent banter
+        </span>
+        <div className="bl-seg" role="group" aria-label="Agent banter">
+          {(
+            [
+              [true, 'On'],
+              [false, 'Off'],
+            ] as const
+          ).map(([v, l]) => (
+            <button key={l} type="button" aria-pressed={banter === v} onClick={() => setBanter(v)}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <span className="bl-small">Short lines from Bil, Rein and Kris while things load. This device only.</span>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
           <button type="button" className="bl-ghost" onClick={() => setChanging(true)}>
             Change password

@@ -16,8 +16,39 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;1,6..96,400;1,6..96,500;1,6..96,600&family=Hanken+Grotesk:wght@400;500;600&display=swap" />
+    <style>
+      /* The opening screen. Plain HTML, so it shows before any script arrives; the app
+         lifts it the moment the first screen is ready. It never adds waiting time. */
+      #bl-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #f3f2ee; color: #111716; transition: opacity .32s ease, visibility .32s; font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif; }
+      #bl-splash[data-theme='night'] { background: #0e1412; color: #ece7db; }
+      #bl-splash.gone { opacity: 0; visibility: hidden; }
+      #bl-splash .bl-s-in { display: grid; justify-items: center; gap: 14px; padding: 0 24px; text-align: center; }
+      #bl-splash svg { width: 72px; height: 72px; overflow: visible; }
+      #bl-splash .door { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-dasharray: 70; stroke-dashoffset: 70; animation: bl-s-draw .7s cubic-bezier(.2,.7,.2,1) forwards; }
+      #bl-splash .beam { fill: #3fd0c1; opacity: 0; transform-origin: 17px 14px; transform: scaleX(.2); animation: bl-s-beam .9s .45s cubic-bezier(.2,.7,.2,1) forwards; }
+      #bl-splash .pane { fill: #3fd0c1; opacity: 0; animation: bl-s-fade .4s .55s ease forwards; }
+      #bl-splash[data-theme='night'] .beam, #bl-splash[data-theme='night'] .pane { fill: #c9a45a; }
+      #bl-splash .word { font-family: 'Bodoni Moda', Didot, 'Times New Roman', serif; font-size: 30px; letter-spacing: .01em; opacity: 0; animation: bl-s-fade .5s .35s ease forwards; }
+      #bl-splash .line { min-height: 2.6em; max-width: 320px; font-size: 13px; line-height: 1.4; color: #4f5755; opacity: 0; animation: bl-s-fade .5s .8s ease forwards; }
+      #bl-splash[data-theme='night'] .line { color: #aab2a9; }
+      #bl-splash .line b { font-weight: 600; color: inherit; }
+      @keyframes bl-s-draw { to { stroke-dashoffset: 0; } }
+      @keyframes bl-s-beam { to { opacity: .35; transform: none; } }
+      @keyframes bl-s-fade { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        #bl-splash .door, #bl-splash .beam, #bl-splash .pane, #bl-splash .word, #bl-splash .line { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
+        #bl-splash .beam { opacity: .35; }
+      }
+    </style>
   </head>
   <body>
+    <div id="bl-splash" aria-hidden="true">
+      <div class="bl-s-in">
+        <svg viewBox="0 0 28 28"><path class="beam" d="M17 8.5 25 23.5H17Z" /><rect class="door" x="3.5" y="4.5" width="13.5" height="19" /><rect class="pane" x="7.6" y="9" width="5.3" height="6.2" /></svg>
+        <div class="word">Backlot</div>
+        <p class="line" id="bl-splash-line"></p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

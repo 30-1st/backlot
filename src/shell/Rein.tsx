@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { DoorError, team, type ClientBrief, type ReinBrief, type ReinRegion } from '../lib/team';
 import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
+import { Banter } from './Banter';
 
 // Rein: search what is rising in any niche. Topics only, never people. A search that
 // reuses a check from the last 6 hours is free. Clients get 3 free searches; after that it
@@ -325,6 +326,7 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
                   {busy ? 'Rein is checking' : preview.free ? 'Update, free' : 'Update'}
                 </button>
               </div>
+              {busy && !error && <Banter moment="rein" after={500} />}
             </div>
           ) : (
             <button type="button" className="bl-ghost bl-start" disabled={!preview} onClick={() => setConfirming(true)}>
