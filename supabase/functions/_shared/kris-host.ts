@@ -25,7 +25,10 @@ import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
 
 const MODEL = AGENT_MODELS.kris;
 const MAX_OUTPUT = 300;
-const REASONING_ALLOWANCE = 800;
+const REASONING_ALLOWANCE = 200;
+// Host replies run without reasoning: they are short and rule-bound, and code does the
+// safety checks first. With reasoning on, replies took 8 to 16 seconds, which held the
+// function busy long enough that new visitors got "failed to start" errors.
 const PER_REPLY_CAP = 0.02;
 const HISTORY = 8;
 
@@ -317,7 +320,7 @@ export async function aiReply(opts: {
         prompt,
         maxOutputTokens: MAX_OUTPUT,
         output: Output.object({ schema: HostReply }),
-        providerOptions: grokOptions('kris', 'low'),
+        providerOptions: grokOptions('kris', 'none'),
         abortSignal: AbortSignal.timeout(30_000),
         telemetry: privateTelemetry(opts.mode === 'test' ? 'kris-room-test' : 'kris-room'),
       }),
