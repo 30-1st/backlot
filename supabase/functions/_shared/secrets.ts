@@ -9,6 +9,7 @@ const NAMES = {
   xBearerToken: ['bearer token', 'X_BEARER_TOKEN'],
   langfusePublicKey: ['langfuse public key', 'LANGFUSE_PUBLIC_KEY'],
   langfuseSecretKey: ['langfuse secret key', 'LANGFUSE_SECRET_KEY'],
+  turnstileSecretKey: ['turnstile secret key', 'TURNSTILE_SECRET_KEY'],
 } as const;
 
 export type SecretId = keyof typeof NAMES;

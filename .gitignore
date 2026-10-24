@@ -6,3 +6,4 @@ dist-single
 __pycache__/
 *.pyc
 *.tsbuildinfo
+dist-rooms

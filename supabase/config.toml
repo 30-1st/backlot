@@ -33,3 +33,9 @@ verify_jwt = false
 # The team's door (who you are, people, invites, passwords). Off so the browser's CORS
 # preflight can be answered; the function verifies the login itself on every POST.
 verify_jwt = false
+
+[functions.room]
+# The public door for client rooms (K1). Visitors have no Backlot login, so the function
+# checks everything itself: the rooms site's address, preview tickets, the bot check and
+# limits. It returns only what a room shows.
+verify_jwt = false

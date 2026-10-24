@@ -67,6 +67,9 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
               <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'kris')}>
                 Kris
               </button>
+              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'room')}>
+                Room
+              </button>
               <button type="button" className="bl-ghost" aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>
                 {left ? `Setup ${total - left} of ${total}` : 'Set up'}
               </button>

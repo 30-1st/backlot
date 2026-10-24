@@ -14,6 +14,7 @@
 //   rein_history     {}                              your last searches and free left    everyone
 //   rein_client      { clientId, region? }           a client's latest trends (+ update cost)  team, that client
 //   rein_client_update { clientId, region? }         Rein checks the client's niche now  team
+//   room_preview     { clientId }                    a signed preview link to their room, 24 hours  team, that client
 //
 // Rein: a search that reuses a brief from the last 6 hours is free and never counts.
 // Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
@@ -33,6 +34,7 @@ import { reusableBrief } from '../_shared/toolbox.ts';
 import { callRein, REIN_ESTIMATE_USD } from '../_shared/rein-client.ts';
 import { Region } from '../_shared/schemas/rein.ts';
 import { krisNote } from '../_shared/kris-notes.ts';
+import { previewUrl } from '../_shared/rooms.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -64,6 +66,7 @@ const ReinSearch = z.object({ niche: z.string().trim().min(2, 'Type a niche or t
 const FREE_SEARCHES = 3;
 const ReinClientGet = z.object({ clientId: id, region: Region.default('worldwide') });
 const ReinClientUpdate = z.object({ clientId: id, region: Region.default('worldwide') });
+const RoomPreview = z.object({ clientId: id });
 
 /** A client's niche from their brand kit, or an error that says how to fix it. */
 async function clientNiche(db: ReturnType<typeof serviceClient>, clientId: string, workspaceId: string): Promise<string> {
@@ -279,6 +282,16 @@ async function handle(req: Request): Promise<Response> {
       }
 
       // A client's trends: their latest saved brief, and for the team, what an update costs.
+      // A signed link to a client's private room preview. Nothing is stored; it ends in 24 hours.
+      case 'room_preview': {
+        const r = parse(RoomPreview, input);
+        requireClientAccess(member, r.clientId);
+        const { data: room, error } = await db.from('rooms').select('slug').eq('client_id', r.clientId).eq('workspace_id', member.workspaceId).maybeSingle();
+        if (error) throw new Error(`Could not read the room: ${error.message}`);
+        if (!room) throw new InputError('Set up the room first.', 404);
+        return reply(200, await previewUrl(room.slug));
+      }
+
       case 'rein_client': {
         const r = parse(ReinClientGet, input);
         requireClientAccess(member, r.clientId);
@@ -364,7 +377,7 @@ async function handle(req: Request): Promise<Response> {
       }
 
       default:
-        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search, rein_history, rein_client or rein_client_update.' });
+        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search, rein_history, rein_client, rein_client_update or room_preview.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });

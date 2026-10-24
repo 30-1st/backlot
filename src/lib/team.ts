@@ -97,6 +97,8 @@ export const team = {
     call<{ code: string; expiresAt: string }>('team', 'invite_create', { role, clientId }),
   resetPassword: (userId: string) => call<{ temporaryPassword: string }>('team', 'password_reset', { userId }),
   reinSearch: (niche: string, region: ReinRegion) => call<{ brief: ReinBrief; reused: boolean }>('team', 'rein_search', { niche, region }),
+  /** A signed link to a client's room preview, good for 24 hours. */
+  roomPreview: (clientId: string) => call<{ url: string; expiresAt: string }>('team', 'room_preview', { clientId }),
   reinClient: (clientId: string, region: ReinRegion) =>
     call<{ latest: ClientBrief | null; niche?: string | null; preview?: { free: boolean; costUsd: number; checkedAt: string | null } | null }>('team', 'rein_client', { clientId, region }),
   reinClientUpdate: (clientId: string, region: ReinRegion) => call<{ latest: ClientBrief; reused: boolean }>('team', 'rein_client_update', { clientId, region }),

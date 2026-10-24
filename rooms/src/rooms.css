@@ -1,0 +1,383 @@
+/* Rooms (K1). Two looks for now:
+ *   creator        cool paper, heavy grotesk, the name set in the client's accent like a marker.
+ *   creator_adult  oxblood dark, high-contrast Bodoni, hairline rules in the accent.
+ * The client's accent arrives as --accent (and --on-accent for text on it). */
+
+:root {
+  --sans: 'Hanken Grotesk Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --serif: 'Bodoni Moda Variable', 'Didot', 'Bodoni 72', Georgia, serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--sans);
+}
+
+.r-shell {
+  --accent: #3048e8;
+  --on-accent: #ffffff;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 max(20px, env(safe-area-inset-left)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-right));
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* ---------- the two looks ---------- */
+
+.r-creator {
+  --bg: #f4f6fb;
+  --ink: #14151b;
+  --muted: #565a69;
+  --line: #d6dae6;
+  --raise: #ffffff;
+}
+
+.r-creator_adult {
+  --accent: #d8b98a;
+  --on-accent: #1a0c12;
+  --bg: #1a0c12;
+  --ink: #f2e8de;
+  --muted: #bba99d;
+  --line: rgba(242, 232, 222, 0.18);
+  --raise: #24121a;
+  color-scheme: dark;
+}
+
+/* ---------- shared pieces ---------- */
+
+.r-main,
+.r-top,
+.r-foot,
+.r-preview {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.r-preview {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.r-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 0 8px;
+  font-size: 14px;
+}
+
+.r-ai {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.r-who {
+  color: var(--muted);
+}
+
+.r-handle {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.r-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 28px;
+}
+
+.r-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.r-greeting {
+  margin: 0;
+  max-width: 34ch;
+}
+
+.r-hero {
+  margin: 0;
+}
+
+.r-hero img,
+.r-hero video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: cover;
+}
+
+.r-links {
+  display: flex;
+  flex-direction: column;
+}
+
+.r-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 60px;
+  padding: 16px 2px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.r-link:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.r-link-host {
+  flex-shrink: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 450;
+  color: var(--muted);
+}
+
+.r-kris {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+}
+
+.r-kris-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.r-kris-copy,
+.r-small {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.r-small p {
+  margin: 0 0 10px;
+}
+
+.r-check:empty {
+  display: none;
+}
+
+.r-btn {
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: 650 15px/1 var(--sans);
+  cursor: pointer;
+}
+
+.r-btn-solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.r-foot {
+  padding-top: 40px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.r-foot p {
+  margin: 0 0 6px;
+  max-width: 52ch;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ---------- creator ---------- */
+
+.r-creator .r-name {
+  font-size: clamp(52px, 16vw, 108px);
+  font-weight: 820;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+}
+
+.r-creator .r-name span {
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: 0.02em 0.14em 0.06em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  border-radius: 0.08em;
+}
+
+.r-creator .r-greeting {
+  font-size: 19px;
+  line-height: 1.45;
+  font-weight: 450;
+}
+
+.r-creator .r-hero img,
+.r-creator .r-hero video {
+  border-radius: 20px;
+}
+
+.r-creator .r-link {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.r-creator .r-link:active {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+/* ---------- creator, 18+ ---------- */
+
+.r-creator_adult .r-name {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-size: clamp(56px, 18vw, 124px);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--accent);
+}
+
+.r-creator_adult .r-greeting {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+.r-creator_adult .r-link {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 23px;
+  font-weight: 500;
+  border-color: var(--line);
+}
+
+.r-creator_adult .r-link:active {
+  color: var(--accent);
+}
+
+.r-creator_adult .r-kris {
+  border-radius: 2px;
+  border-color: var(--line);
+}
+
+.r-creator_adult .r-btn {
+  border-radius: 2px;
+}
+
+/* ---------- the 18+ step and notes ---------- */
+
+.r-gate,
+.r-note {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  padding: 40px 0;
+}
+
+.r-gate-handle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.r-gate-title,
+.r-note-title {
+  margin: 0;
+  font-size: clamp(40px, 12vw, 72px);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.r-creator_adult .r-gate-title,
+.r-creator_adult .r-note-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.r-gate-copy,
+.r-note p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  max-width: 36ch;
+}
+
+.r-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* One moment of motion: the name settles in on arrival. */
+@media (prefers-reduced-motion: no-preference) {
+  .r-name {
+    animation: r-settle 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes r-settle {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+}

@@ -94,6 +94,9 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
           <p className="bl-small" style={{ margin: '6px 0 0' }}>
             <span className="bl-chip">AI</span> {isTeam ? `@${client.handle}'s publicist. The client sees this chat too.` : 'Your publicist. Your team sees this chat too.'}
           </p>
+          <button type="button" className="bl-linkish" style={{ marginTop: 6 }} onClick={() => go('room')}>
+            {isTeam ? 'Their room' : 'Your room'}
+          </button>
         </div>
         <button type="button" className="bl-ghost" aria-expanded={showPrefs} onClick={() => setShowPrefs((s) => !s)}>
           Settings
