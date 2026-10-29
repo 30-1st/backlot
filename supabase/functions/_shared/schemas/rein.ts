@@ -195,6 +195,11 @@ export type NicheRead = z.infer<typeof NicheRead>;
 
 /** Grok, step 3: what the top posts have in common, and ideas built on it. */
 export const NicheFormats = z.object({
+  drop: z
+    .array(z.string())
+    .max(40)
+    .default([])
+    .describe('Numbers (the n in p<n>) of posts that are not this niche\'s kind of content: news, politics, errands, unrelated topics.'),
   patterns: z
     .array(z.object({ pattern: z.string(), why: z.string(), posts: z.array(z.string()).max(5).describe('Numbers (the n in [n]) of posts that show it.') }))
     .max(5),
