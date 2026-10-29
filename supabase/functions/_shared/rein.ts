@@ -458,19 +458,23 @@ async function makeBrief(request: ReinRequest, budget: Budget, d: ReinDiagnostic
   };
   const usual = new Map([...byAuthor].map(([id, xs]) => [id, xs.length >= 3 ? medianOf(xs) : null]));
   const worth = scored.filter((s) => s.score > 0);
-  const rising = worth.filter((s) => s.ageHours < 24).sort((a, b) => b.perHour - a.perHour).slice(0, MAX_RISING);
-  const risingIds = new Set(rising.map((s) => s.p.id));
-  // At most 3 posts per account among the proven, so one big account cannot fill the list.
+  // One busy account must not fill the brief: at most 2 posts each among the rising, 3 in all.
   const perAccount = new Map<string, number>();
+  const take = (limit: number) => (s: (typeof scored)[number]) => {
+    const n = perAccount.get(s.p.authorId) ?? 0;
+    if (n >= limit) return false;
+    perAccount.set(s.p.authorId, n + 1);
+    return true;
+  };
+  const rising = worth.filter((s) => s.ageHours < 24).sort((a, b) => b.perHour - a.perHour).filter(take(2)).slice(0, MAX_RISING);
+  const risingIds = new Set(rising.map((s) => s.p.id));
+  // perAccount can count a rising post that slice() later cut; recount from what was kept.
+  perAccount.clear();
+  for (const s of rising) perAccount.set(s.p.authorId, (perAccount.get(s.p.authorId) ?? 0) + 1);
   const proven = worth
     .filter((s) => !risingIds.has(s.p.id))
     .sort((a, b) => b.score - a.score)
-    .filter((s) => {
-      const n = perAccount.get(s.p.authorId) ?? 0;
-      if (n >= 3) return false;
-      perAccount.set(s.p.authorId, n + 1);
-      return true;
-    })
+    .filter(take(3))
     .slice(0, MAX_POSTS - rising.length);
   const round = (x: number) => Math.round(x * 10) / 10;
   const toViral = (s: (typeof scored)[number], bucket: 'rising' | 'proven'): ViralPost => {

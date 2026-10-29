@@ -45,12 +45,20 @@ Never write Grok code from memory. In order of preference:
 - X's API rejects search-box operators that Grok's X search accepts (`since:`, `until:`, `min_faves:`, `filter:`). Strip them from any query Grok writes for the X API.
 - Put X's `errors[0].message` in error text; the title alone ("Invalid Request") hides the cause.
 
+## 4b. Searching a niche (Rein, tested live 2026-10-29)
+
+- Grok's `x_search` hides adult content: with a like filter it returned 0 sensitive posts of 20, mostly off-niche. Never use it to find posts in adult niches. Rein uses X's own recent search instead.
+- X's own search, plain, returns mostly tiny posts (median 1 like). `has:media is:verified -is:retweet -is:reply` with `sort_order=relevancy` brings back real creators (median 47 likes, 17 of 49 sensitive in "girl next door").
+- In adult niches the viral post often has no niche words. Find the creators first, then read their recent posts with one `(from:a OR from:b ...)` search. That is what surfaces the best posts.
+- `GET /2/users/search` (name, username, bio) refuses app-only keys: it needs a signed-in account (OAuth 2.0 user context).
+- `user.fields=parody` came back empty in testing; also drop names that start with Parody, Fan or Commentary.
+
 ## 3. Backlot's rules for anything Grok writes or reads
 
 These come from xAI's Acceptable Use Policy, xAI's Enterprise Terms, and X's developer terms. Details and sources are in the Backlot Roadmap doc, "Platform terms we build to" and "Our own terms and legal setup".
 
 - Backlot never posts, replies, likes, follows or sends messages. Agents draft; people publish.
-- Trend work is about topics, never about individual people. No user lists, audience profiles, or inferred sensitive traits (sex life, health, politics, religion). No tracking named accounts.
+- Trend work shows topics, and the public posts and accounts driving them. Accounts appear only because their public posts matched the niche search, and only the posters, never likers, repliers or fans. Never infer or store anything about a person (sex life, health, politics, religion, age, body). No watchlists, alerts or history for named accounts: each brief reads them once, and their details (handle, name, followers, excerpt) are cleared from brief_posts after 24 hours.
 - No financial advice: an agent may say an asset is trending and why, never buy, sell, price predictions or ratings.
 - Adult niches: adults only. Never sexualize minors, never depict real people pornographically, never generate or edit images of real people.
 - Paid promotion gets an #ad reminder. Refuse drafts that promise returns, coordinate a pump, or hide that a post is paid.
