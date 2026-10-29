@@ -163,14 +163,14 @@ export function Viral({ viral, followers }: { viral: ViralView; followers: numbe
 
       <div className="bl-seg" role="tablist" aria-label="Which posts">
         <button type="button" role="tab" aria-selected={view === 'rising'} aria-pressed={view === 'rising'} disabled={!rising.length} onClick={() => setView('rising')}>
-          Rising now <span className="num">{rising.length}</span>
+          Rising <span className="num">{rising.length}</span>
         </button>
         <button type="button" role="tab" aria-selected={view === 'proven'} aria-pressed={view === 'proven'} onClick={() => setView('proven')}>
-          Best this week <span className="num">{proven.length}</span>
+          This week <span className="num">{proven.length}</span>
         </button>
         {followers !== null && (
           <button type="button" role="tab" aria-selected={view === 'like'} aria-pressed={view === 'like'} onClick={() => setView('like')}>
-            Accounts like yours <span className="num">{like.length}</span>
+            Your size <span className="num">{like.length}</span>
           </button>
         )}
       </div>
