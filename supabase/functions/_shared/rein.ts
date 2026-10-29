@@ -377,8 +377,11 @@ async function makeBrief(request: ReinRequest, budget: Budget, d: ReinDiagnostic
   d.queries = phrases;
   const core = `(${phrases.map((p) => `(${p})`).join(' OR ')})`;
 
-  // Step 5: find the creators.
-  let found = await xSearch(budget, 'x_niche_search', `${core} has:media is:verified -is:retweet -is:reply`, FIND_POSTS);
+  // Step 5: find the creators. Each phrase is its own search, so a spammy hashtag cannot
+  // crowd out the plain words bigger creators use (same 100 posts in all).
+  const each = Math.max(10, Math.floor(FIND_POSTS / phrases.length));
+  const parts = await Promise.all(phrases.map((ph) => xSearch(budget, 'x_niche_search', `(${ph}) has:media is:verified -is:retweet -is:reply`, each)));
+  let found = parts.reduce((a, b) => merge(a, b), { posts: [], accounts: new Map() } as Found);
   let verifiedOnly = true;
   if (found.posts.length < THIN_SEARCH) {
     // Thin niche (common outside adult content): widen to any account, media or not.
