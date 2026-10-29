@@ -41,7 +41,30 @@ export type ReinTrend = {
   touchesFinance: boolean;
   sources: { url: string; title: string | null }[];
 };
-export type ReinBrief = { briefId: string; niche: string; createdAt: string; notFound: string | null; trends: ReinTrend[] };
+/** One post doing well in the niche. account is gone 24 hours after the brief was made; the embed still shows it. */
+export type ViralPostView = {
+  postId: string;
+  createdAt: string;
+  ageHours: number;
+  numbers: { likes: number; reposts: number; replies: number; quotes: number; bookmarks: number; views: number | null };
+  media: string[];
+  sensitive: boolean;
+  perHour: number;
+  vsUsual: number | null;
+  bucket: 'rising' | 'proven';
+  account: { handle: string; name: string; followers: number; excerpt: string | null } | null;
+};
+export type ViralCreatorView = { handle: string; name: string; followers: number; bestPostId: string; postsSeen: number; medianScore: number; bestScore: number };
+export type ViralView = {
+  posts: ViralPostView[];
+  creators: ViralCreatorView[];
+  detailsExpired: boolean;
+  patterns: { pattern: string; why: string; postIds: string[] }[];
+  ideas: { idea: string; pattern: string }[];
+  queries: string[];
+  stats: { postsRead: number; offNicheDropped: number; sensitive: number; verifiedOnly: boolean } | null;
+};
+export type ReinBrief = { briefId: string; niche: string; createdAt: string; notFound: string | null; trends: ReinTrend[]; viral?: ViralView | null };
 /** A brief saved as one client's trends: when, for which region, and whether a campaign or an update made it. */
 export type ClientBrief = ReinBrief & { savedAt: string; region: ReinRegion; source: 'update' | 'campaign' };
 
@@ -100,8 +123,8 @@ export const team = {
   /** A signed link to a client's room preview, good for 24 hours. */
   roomPreview: (clientId: string) => call<{ url: string; expiresAt: string }>('team', 'room_preview', { clientId }),
   reinClient: (clientId: string, region: ReinRegion) =>
-    call<{ latest: ClientBrief | null; niche?: string | null; preview?: { free: boolean; costUsd: number; checkedAt: string | null } | null }>('team', 'rein_client', { clientId, region }),
-  reinClientUpdate: (clientId: string, region: ReinRegion) => call<{ latest: ClientBrief; reused: boolean }>('team', 'rein_client_update', { clientId, region }),
+    call<{ latest: ClientBrief | null; clientFollowers?: number | null; niche?: string | null; preview?: { free: boolean; costUsd: number; checkedAt: string | null } | null }>('team', 'rein_client', { clientId, region }),
+  reinClientUpdate: (clientId: string, region: ReinRegion) => call<{ latest: ClientBrief; clientFollowers?: number | null; reused: boolean }>('team', 'rein_client_update', { clientId, region }),
   reinHistory: () => call<{ freeLeft: number | null; searches: { niche: string; region: string; at: string }[]; last: ReinBrief | null }>('team', 'rein_history'),
   setPassword: (password: string, currentPassword?: string) =>
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),

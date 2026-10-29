@@ -1,10 +1,16 @@
 // What Rein hands back from one trend fetch.
 //
-// Trends are about topics, never people: no user lists, audience profiles or traits
-// inferred about individuals. Evidence is kept as post IDs (shown with X's official
-// embed) plus a short excerpt only when one came from X's own API. Rein says what is
-// trending and why; she never says buy or sell, predicts prices or rates an asset.
-// Bil reviews every brief before a client sees it.
+// A brief has two parts:
+//   * viral: the posts and creators actually blowing up in the niche this week, found in
+//     two steps (search the niche, then read the best recent posts of the creators that
+//     search turned up), ranked in code by X's own published ranking weights.
+//   * trends: topics with momentum measured from X's own post counts.
+// Accounts appear only because their public posts matched the niche search. Nothing about
+// a person is inferred or labeled (X's developer rules), no account is watched over time,
+// and only the posters are shown, never likers, repliers or fans. The brief keeps post and
+// account IDs; handles, names, follower counts and excerpts live in brief_posts, where they
+// are cleared 24 hours after saving. Rein never says buy or sell, predicts prices or rates
+// an asset. Bil reviews every brief before a client sees it.
 
 import { z, id, isoDateTime, shortText, text, Citation, MAX_EXCERPT, xPostId } from './common.ts';
 
@@ -59,6 +65,69 @@ export const Trend = z.object({
 });
 export type Trend = z.infer<typeof Trend>;
 
+/** X's public numbers for a post, read when the brief was made. */
+export const PostNumbers = z.object({
+  likes: z.number().int().min(0),
+  reposts: z.number().int().min(0),
+  replies: z.number().int().min(0),
+  quotes: z.number().int().min(0),
+  bookmarks: z.number().int().min(0),
+  views: z.number().int().min(0).nullable(),
+});
+
+export const MediaKind = z.enum(['photo', 'video', 'gif']);
+
+/** One post that is doing well in the niche. Shown with X's official embed. */
+export const ViralPost = z.object({
+  postId: xPostId,
+  authorId: xPostId,
+  createdAt: isoDateTime,
+  ageHours: z.number().min(0),
+  numbers: PostNumbers,
+  media: z.array(MediaKind).max(4),
+  sensitive: z.boolean().describe('X marked it possibly sensitive. The app covers it until tapped.'),
+  score: z.number().min(0).describe('Likes, reposts, replies and quotes, each times X\'s published ranking weight.'),
+  perHour: z.number().min(0).describe('Score per hour since it was posted.'),
+  vsUsual: z.number().min(0).nullable().describe('Score against the median of the same account\'s other posts this week. 3 means three times their usual.'),
+  bucket: z.enum(['rising', 'proven']).describe('rising: under 24 hours old and moving fast. proven: the week\'s biggest.'),
+});
+export type ViralPost = z.infer<typeof ViralPost>;
+
+/** An account behind the niche's top posts. Details (handle, followers) live in brief_posts for 24 hours. */
+export const ViralCreator = z.object({
+  authorId: xPostId,
+  bestPostId: xPostId,
+  postsSeen: z.number().int().min(1),
+  medianScore: z.number().min(0),
+  bestScore: z.number().min(0),
+});
+
+export const ViralPattern = z.object({
+  pattern: shortText(120).describe('What the top posts share, e.g. "outfit photo with a this-or-that question".'),
+  why: text(300),
+  postIds: z.array(xPostId).max(5),
+});
+
+export const PostIdea = z.object({
+  idea: text(300),
+  pattern: shortText(120),
+});
+
+export const ViralSection = z.object({
+  queries: z.array(shortText(300)).max(4).describe('The niche searches Rein ran.'),
+  posts: z.array(ViralPost).max(20),
+  creators: z.array(ViralCreator).max(15),
+  patterns: z.array(ViralPattern).max(5),
+  ideas: z.array(PostIdea).max(6).describe('Niche-level ideas. Bil writes them in each client\'s own voice.'),
+  stats: z.object({
+    postsRead: z.number().int().min(0),
+    offNicheDropped: z.number().int().min(0),
+    sensitive: z.number().int().min(0),
+    verifiedOnly: z.boolean(),
+  }),
+});
+export type ViralSection = z.infer<typeof ViralSection>;
+
 export const ReinBrief = z
   .object({
     briefId: id,
@@ -69,10 +138,11 @@ export const ReinBrief = z
     searchedWith: z.enum(['x_search', 'x_api']).describe('x_api means Grok\'s X search failed and X\'s own search was used.'),
     createdAt: isoDateTime,
     trends: z.array(Trend).max(10),
+    viral: ViralSection.optional().describe('Missing on briefs made before Oct 29, 2026.'),
     notFound: text(400).optional().describe('Said plainly when nothing real is trending, instead of padding the list.'),
   })
   .superRefine((b, ctx) => {
-    if (b.trends.length === 0 && !b.notFound) {
+    if (b.trends.length === 0 && !(b.viral?.posts.length) && !b.notFound) {
       ctx.addIssue({ code: 'custom', path: ['notFound'], message: 'An empty brief must say why nothing was found.' });
     }
   });
@@ -104,6 +174,33 @@ export const ReinCandidates = z.object({
   notFound: z.string().optional().describe('If nothing real is trending, say so plainly here and leave candidates empty.'),
 });
 export type ReinCandidates = z.infer<typeof ReinCandidates>;
+
+/** Grok, step 1: how the niche talks on X. Code adds the filters. */
+export const NicheQueries = z.object({
+  queries: z
+    .array(z.string())
+    .max(3)
+    .describe('Up to 3 search phrases in the niche\'s own words: keywords, "quoted phrases", #hashtags and OR only. No other operators.'),
+  offNiche: z.string().optional().describe('Things that share the niche\'s words but are not it (a song title, a TV show), so they can be dropped.'),
+});
+export type NicheQueries = z.infer<typeof NicheQueries>;
+
+/** Grok, step 2: which accounts in the first search are really in the niche, and the topics they are on. */
+export const NicheRead = z.object({
+  inNiche: z.array(z.string()).max(60).describe('Numbers (the n in [n]) of accounts whose posts and bio show they are in this niche.'),
+  candidates: ReinCandidates.shape.candidates,
+  notFound: z.string().optional(),
+});
+export type NicheRead = z.infer<typeof NicheRead>;
+
+/** Grok, step 3: what the top posts have in common, and ideas built on it. */
+export const NicheFormats = z.object({
+  patterns: z
+    .array(z.object({ pattern: z.string(), why: z.string(), posts: z.array(z.string()).max(5).describe('Numbers (the n in [n]) of posts that show it.') }))
+    .max(5),
+  ideas: z.array(z.object({ idea: z.string(), pattern: z.string() })).max(6),
+});
+export type NicheFormats = z.infer<typeof NicheFormats>;
 
 /**
  * Evidence as stored. Excerpts are cleared 24 hours after saving (hourly database job),

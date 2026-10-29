@@ -25,12 +25,12 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
-import { serviceClient } from '../_shared/spend.ts';
+import { Budget, serviceClient } from '../_shared/spend.ts';
 import { AccessError, isTeam, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
-import { reusableBrief } from '../_shared/toolbox.ts';
+import { impl, reusableBrief } from '../_shared/toolbox.ts';
 import { callRein, REIN_ESTIMATE_USD } from '../_shared/rein-client.ts';
 import { Region } from '../_shared/schemas/rein.ts';
 import { krisNote } from '../_shared/kris-notes.ts';
@@ -78,7 +78,75 @@ async function clientNiche(db: ReturnType<typeof serviceClient>, clientId: strin
   return niche.slice(0, 200);
 }
 
-/** What the app shows of a brief: topics, why they move, and links. Never people. */
+/**
+ * What the app shows of a brief's viral part: the posts with their numbers, the creators
+ * behind them, what the top posts share, and post ideas. Handles, names and follower counts
+ * come from brief_posts and are gone 24 hours after the brief was made; after that the posts
+ * still show through X's own embed, and the creators list is left empty.
+ */
+async function viralForApp(db: ReturnType<typeof serviceClient>, b: any) {
+  const v = b?.viral;
+  if (!v || !Array.isArray(v.posts)) return null;
+  const { data: rows } = await db.from('brief_posts').select('post_id, author_id, handle, name, followers, excerpt').eq('brief_id', String(b.briefId ?? ''));
+  const byPost = new Map((rows ?? []).map((r: any) => [String(r.post_id), r]));
+  const detail = (postId: string) => {
+    const r: any = byPost.get(postId);
+    return r?.handle ? { handle: String(r.handle), name: String(r.name ?? r.handle), followers: Number(r.followers ?? 0), excerpt: r.excerpt ? String(r.excerpt) : null } : null;
+  };
+  const posts = v.posts.slice(0, 20).map((p: any) => ({
+    postId: String(p.postId),
+    createdAt: String(p.createdAt),
+    ageHours: Number(p.ageHours ?? 0),
+    numbers: p.numbers,
+    media: Array.isArray(p.media) ? p.media.map(String) : [],
+    sensitive: Boolean(p.sensitive),
+    perHour: Number(p.perHour ?? 0),
+    vsUsual: p.vsUsual == null ? null : Number(p.vsUsual),
+    bucket: p.bucket === 'rising' ? 'rising' : 'proven',
+    account: detail(String(p.postId)),
+  }));
+  const creators = (Array.isArray(v.creators) ? v.creators : [])
+    .map((c: any) => {
+      const d = detail(String(c.bestPostId));
+      return d ? { handle: d.handle, name: d.name, followers: d.followers, bestPostId: String(c.bestPostId), postsSeen: Number(c.postsSeen ?? 0), medianScore: Number(c.medianScore ?? 0), bestScore: Number(c.bestScore ?? 0) } : null;
+    })
+    .filter(Boolean);
+  return {
+    posts,
+    creators,
+    detailsExpired: posts.length > 0 && posts.every((p: any) => !p.account),
+    patterns: (Array.isArray(v.patterns) ? v.patterns : []).slice(0, 5).map((p: any) => ({ pattern: String(p.pattern ?? ''), why: String(p.why ?? ''), postIds: (p.postIds ?? []).map(String) })),
+    ideas: (Array.isArray(v.ideas) ? v.ideas : []).slice(0, 6).map((i: any) => ({ idea: String(i.idea ?? ''), pattern: String(i.pattern ?? '') })),
+    queries: (v.queries ?? []).map(String),
+    stats: v.stats ?? null,
+  };
+}
+
+/** A brief as the app shows it: viral posts and creators, then topics. */
+async function forApp(db: ReturnType<typeof serviceClient>, b: any) {
+  return { ...briefForApp(b), viral: await viralForApp(db, b) };
+}
+
+/**
+ * The client's own follower count, for "accounts like yours". Read from their public X
+ * profile at most once a day ($0.01), and only when the team asks Rein for an update.
+ */
+async function clientFollowers(db: ReturnType<typeof serviceClient>, clientId: string, workspaceId: string, refresh: boolean): Promise<number | null> {
+  const { data } = await db.from('clients').select('x_handle, x_followers, x_followers_at').eq('id', clientId).eq('owner_id', workspaceId).maybeSingle();
+  if (!data) return null;
+  const fresh = data.x_followers_at && Date.now() - Date.parse(data.x_followers_at) < 864e5;
+  if (!refresh || fresh || !data.x_handle) return data.x_followers ?? null;
+  try {
+    const profile = await impl.x_profile_lookup({ budget: new Budget('rein', { perCallCap: 0.02 }) }, { handle: data.x_handle });
+    await db.from('clients').update({ x_followers: profile.followers, x_followers_at: new Date().toISOString() }).eq('id', clientId);
+    return profile.followers;
+  } catch (err) {
+    console.error('could not read the client follower count', err instanceof Error ? err.message : err);
+    return data.x_followers ?? null;
+  }
+}
+
+/** What the app shows of a brief's topics: why they move, and links. */
 function briefForApp(b: any) {
   return {
     briefId: String(b?.briefId ?? ''),
@@ -254,7 +322,7 @@ async function handle(req: Request): Promise<Response> {
         const reused = await reusableBrief(r.niche, r.region);
         if (reused) {
           await db.from('rein_searches').insert({ user_id: userId, workspace_id: member.workspaceId, niche: r.niche, region: r.region, brief_id: reused.brief.briefId, reused: true });
-          return reply(200, { brief: briefForApp(reused.brief), reused: true });
+          return reply(200, { brief: await forApp(db, reused.brief), reused: true });
         }
         let rowId: string | null = null;
         // Everyone outside the team (clients and visitors) gets the 3 free searches.
@@ -278,7 +346,7 @@ async function handle(req: Request): Promise<Response> {
         }
         const brief = res.body.brief;
         await db.from('rein_searches').update({ brief_id: brief.briefId, reused: Boolean(res.body?.diagnostics?.reused) }).eq('id', rowId);
-        return reply(200, { brief: briefForApp(brief), reused: Boolean(res.body?.diagnostics?.reused) });
+        return reply(200, { brief: await forApp(db, brief), reused: Boolean(res.body?.diagnostics?.reused) });
       }
 
       // A client's trends: their latest saved brief, and for the team, what an update costs.
@@ -307,13 +375,15 @@ async function handle(req: Request): Promise<Response> {
         let latest = null;
         if (line) {
           const { data: nb } = await db.from('niche_briefs').select('brief').eq('id', line.brief_id).maybeSingle();
-          if (nb) latest = { ...briefForApp(nb.brief), savedAt: line.created_at, region: line.region, source: line.source };
+          if (nb) latest = { ...(await forApp(db, nb.brief)), savedAt: line.created_at, region: line.region, source: line.source };
         }
-        if (!isTeam(member)) return reply(200, { latest });
+        const followers = await clientFollowers(db, r.clientId, member.workspaceId, false);
+        if (!isTeam(member)) return reply(200, { latest, clientFollowers: followers });
         const niche = await clientNiche(db, r.clientId, member.workspaceId).catch(() => null);
         const reusable = niche ? await reusableBrief(niche, r.region) : null;
         return reply(200, {
           latest,
+          clientFollowers: followers,
           niche,
           preview: niche ? { free: Boolean(reusable), costUsd: reusable ? 0 : REIN_ESTIMATE_USD, checkedAt: reusable?.brief.createdAt ?? null } : null,
         });
@@ -344,14 +414,21 @@ async function handle(req: Request): Promise<Response> {
           .single();
         if (error) throw new Error(`Could not save the client's trends: ${error.message}`);
         const top = Array.isArray(brief?.trends) ? brief.trends.slice(0, 2).map((t: any) => String(t?.topic ?? '').slice(0, 60)).filter(Boolean) : [];
+        const pattern = String(brief?.viral?.patterns?.[0]?.pattern ?? '').slice(0, 80);
+        const viralCount = Array.isArray(brief?.viral?.posts) ? brief.viral.posts.length : 0;
         await krisNote(db, {
           workspaceId: member.workspaceId,
           clientId: r.clientId,
           ref: `trends:${brief.briefId}`,
-          body: top.length ? `Rein found what is rising in your niche: ${top.join(' and ')}. Ask me how we could play it.` : 'Rein checked what is rising in your niche. The full list is on What works.',
+          body: viralCount
+            ? `Rein pulled the ${viralCount} posts doing best in your niche this week${pattern ? `. What keeps working: ${pattern.charAt(0).toLowerCase()}${pattern.slice(1)}` : ''}. Ask me how we could play it.`
+            : top.length
+            ? `Rein found what is rising in your niche: ${top.join(' and ')}. Ask me how we could play it.`
+            : 'Rein checked what is rising in your niche. The full list is on What works.',
           link: 'insights',
         });
-        return reply(200, { latest: { ...briefForApp(brief), savedAt: saved.created_at, region: r.region, source: 'update' }, reused: wasReused });
+        const followers = await clientFollowers(db, r.clientId, member.workspaceId, true);
+        return reply(200, { latest: { ...(await forApp(db, brief)), savedAt: saved.created_at, region: r.region, source: 'update' }, clientFollowers: followers, reused: wasReused });
       }
 
       case 'rein_history': {
@@ -367,7 +444,7 @@ async function handle(req: Request): Promise<Response> {
         let lastBrief = null;
         if (last) {
           const { data: nb } = await db.from('niche_briefs').select('brief').eq('id', last.brief_id).maybeSingle();
-          if (nb) lastBrief = briefForApp(nb.brief);
+          if (nb) lastBrief = await forApp(db, nb.brief);
         }
         return reply(200, {
           freeLeft: isTeam(member) ? null : Math.max(0, FREE_SEARCHES - usedFree),

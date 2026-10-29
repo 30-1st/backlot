@@ -5,9 +5,11 @@ import { DoorError, team, type ClientBrief, type ReinBrief, type ReinRegion } fr
 import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
+import { Viral } from './ReinViral';
 
-// Rein: search what is rising in any niche. Topics only, never people. A search that
-// reuses a check from the last 6 hours is free. Clients get 3 free searches; after that it
+// Rein: search what is working in any niche: the posts and accounts doing best this week,
+// what they share, and the topics with real momentum. A search that reuses a check from
+// the last 6 hours is free. Clients get 3 free searches; after that it
 // is $5 a search or $15 a month (payments open soon). The team searches inside the budget.
 
 const REGIONS: Array<[ReinRegion, string]> = [
@@ -22,7 +24,22 @@ function Momentum({ m }: { m: string }) {
   return <span className={`bl-chip-ink${m === 'rising' ? ' next' : ''}`}>{word}</span>;
 }
 
-function Results({ brief }: { brief: ReinBrief }) {
+function Results({ brief, followers = null }: { brief: ReinBrief; followers?: number | null }) {
+  const viral = brief.viral && brief.viral.posts.length > 0 ? brief.viral : null;
+  return (
+    <>
+      {viral && <Viral viral={viral} followers={followers} />}
+      {viral && brief.trends.length > 0 && (
+        <h3 className="bl-section-title" style={{ marginTop: 8 }}>
+          Topics with momentum
+        </h3>
+      )}
+      {(!viral || brief.trends.length > 0) && <Topics brief={brief} />}
+    </>
+  );
+}
+
+function Topics({ brief }: { brief: ReinBrief }) {
   if (brief.trends.length === 0) {
     return (
       <div className="bl-glass-card">
@@ -117,6 +134,23 @@ export function ReinScreen({ isTeam }: ScreenProps) {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const [paywall, setPaywall] = useState(false);
+  const [followers, setFollowers] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem('backlot.rein.followers') ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const followerCount = /^\d{1,9}$/.test(followers.trim()) && Number(followers) > 0 ? Number(followers) : null;
+  function keepFollowers(v: string) {
+    const clean = v.replace(/[^\d]/g, '').slice(0, 9);
+    setFollowers(clean);
+    try {
+      window.localStorage.setItem('backlot.rein.followers', clean);
+    } catch {
+      // Only a convenience.
+    }
+  }
 
   useEffect(() => {
     team.reinHistory().then(
@@ -176,6 +210,18 @@ export function ReinScreen({ isTeam }: ScreenProps) {
             {searching ? 'Looking' : 'Search'}
           </button>
         </div>
+        <label className="bl-small" htmlFor="rein-followers" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          Your followers (optional)
+          <input
+            id="rein-followers"
+            className="bl-input"
+            inputMode="numeric"
+            style={{ maxWidth: 140 }}
+            value={followers}
+            placeholder="e.g. 4200"
+            onChange={(e) => keepFollowers(e.target.value)}
+          />
+        </label>
         <div className="bl-filters" role="group" aria-label="Where">
           {REGIONS.map(([v, l]) => (
             <button key={v} type="button" className="bl-tagchip" aria-pressed={region === v} onClick={() => setRegion(v)}>
@@ -216,16 +262,16 @@ export function ReinScreen({ isTeam }: ScreenProps) {
             <b />
           </div>
           <b>Looking at {niche.trim()}</b>
-          <span className="bl-small">Usually under a minute.</span>
+          <span className="bl-small">Finding the accounts doing best, then reading their top posts. Usually about a minute.</span>
         </section>
       ) : (
         brief && (
           <section aria-labelledby="found">
             <h2 id="found" className="bl-section-title">
-              {brief.niche ? `Rising in ${brief.niche}` : 'Last search'}
+              {brief.niche ? `Working in ${brief.niche}` : 'Last search'}
               <span className="num">{brief.createdAt ? new Date(brief.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</span>
             </h2>
-            <Results brief={brief} />
+            <Results brief={brief} followers={followerCount} />
           </section>
         )
       )}
@@ -244,6 +290,7 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
   const [latest, setLatest] = useState<ClientBrief | null>(null);
   const [preview, setPreview] = useState<{ free: boolean; costUsd: number; checkedAt: string | null } | null>(null);
   const [niche, setNiche] = useState<string | null>(null);
+  const [followers, setFollowers] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -259,6 +306,7 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
         setLatest((cur) => cur ?? r.latest);
         setPreview(r.preview ?? null);
         setNiche(r.niche ?? null);
+        setFollowers(r.clientFollowers ?? null);
         setLoaded(true);
       },
       (e: Error) => live && (setError(e.message), setLoaded(true)),
@@ -275,6 +323,7 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
     try {
       const r = await team.reinClientUpdate(clientId, region);
       setLatest(r.latest);
+      if (r.clientFollowers != null) setFollowers(r.clientFollowers);
       setPreview({ free: true, costUsd: 0, checkedAt: r.latest.createdAt });
       setNote(r.reused ? 'Rein had checked this niche in the last 6 hours, so this cost nothing.' : 'Rein checked the niche just now.');
       setConfirming(false);
@@ -291,14 +340,14 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
     <section className="bl-card bl-trends-card" aria-labelledby="rising-t" style={{ marginTop: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h2 id="rising-t" className="bl-h2">
-          What&rsquo;s rising
+          What&rsquo;s working
         </h2>
         {latest && <span className="bl-small">Saved {when(latest.savedAt)}</span>}
       </div>
       <p className="bl-small" style={{ margin: 0 }}>
-        {niche ? `Rein's read on ${niche}. ` : ''}Topics only, never people. Bil asks Rein again when he plans a campaign, free if her last check is under 6 hours old.
+        {niche ? `Rein's read on ${niche}: the posts and accounts doing best this week, what they share, and topics with momentum. ` : ''}Bil asks Rein again when he plans a campaign, free if her last check is under 6 hours old.
       </p>
-      {latest ? <Results brief={latest} /> : loaded && <p className="bl-small">{isTeam ? 'No trends saved for this client yet.' : 'Your team has not checked your niche yet.'}</p>}
+      {latest ? <Results brief={latest} followers={followers} /> : loaded && <p className="bl-small">{isTeam ? 'No trends saved for this client yet.' : 'Your team has not checked your niche yet.'}</p>}
 
       {isTeam && (
         <div className="bl-trends-update">

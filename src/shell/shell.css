@@ -2407,3 +2407,24 @@ html[data-vt='back']::view-transition-new(root) {
 
 .bl-pm-wrap { display: flex; flex-direction: column; gap: 8px; }
 .bl-pm-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Rein's viral read: posts doing best in a niche, the accounts behind them, what works. */
+.bl-viral { display: flex; flex-direction: column; gap: 12px; }
+.bl-viral-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bl-viral-post { border: 1px solid var(--line); border-radius: 16px; background: var(--paper); padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bl-viral-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bl-viral-who { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.bl-viral-who b { overflow-wrap: anywhere; }
+.bl-viral-numbers { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); }
+.bl-viral-numbers b { color: var(--ink); font-weight: 700; }
+.bl-viral-excerpt { margin: 0; overflow-wrap: anywhere; }
+.bl-viral-cover { border: 1px dashed var(--line-2); background: var(--mist); color: var(--ink-2); border-radius: 12px; padding: 14px; font: inherit; font-weight: 600; cursor: pointer; text-align: center; }
+.bl-xembed { width: 100%; max-width: 550px; border: 0; border-radius: 12px; background: transparent; display: block; }
+.bl-viral-block { display: flex; flex-direction: column; gap: 8px; }
+.bl-viral-patterns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bl-viral-patterns li { display: flex; flex-direction: column; gap: 2px; }
+.bl-viral-creators { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-viral-creator { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.bl-viral-creator:last-child { border-bottom: 0; padding-bottom: 0; }
+.bl-viral-creator > .bl-small { grid-column: 1; }
+.bl-viral-creator > a { grid-column: 2; grid-row: 1 / span 2; align-self: center; }

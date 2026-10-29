@@ -22,7 +22,7 @@ function offerText(a: AskAction, reinFree: boolean | null, postsPerWeek: number)
   const who = `@${a.handle}`;
   switch (a.type) {
     case 'trends':
-      return { title: `Check what is rising for ${who}`, price: reinFree === null ? 'Checking the price' : reinFree ? 'Free: Rein checked this niche in the last 6 hours.' : 'Up to $0.10 from this month’s AI budget.', button: 'Check now' };
+      return { title: `Check what is rising for ${who}`, price: reinFree === null ? 'Checking the price' : reinFree ? 'Free: Rein checked this niche in the last 6 hours.' : 'Up to $1.10 from this month’s AI budget.', button: 'Check now' };
     case 'report': {
       const est = Math.round((Math.min(100, Math.round(postsPerWeek * 4.3)) * 0.005 + 0.03) * 100) / 100;
       return { title: `Make ${monthName(a.month)}’s report for ${who}`, price: `About $${est.toFixed(2)}: $0.005 for each post X returns, plus one Bil call.`, button: 'Make it' };
