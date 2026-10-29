@@ -353,6 +353,8 @@ export async function reusableBrief(
     byTrend.set(e.trend_index, list);
   }
   const stored = data.brief as any;
+  // Briefs from before the two-step search (Oct 29, 2026) have no viral part: make a new one.
+  if (!stored?.viral) return null;
   const brief = ReinBrief.safeParse({
     ...stored,
     trends: (stored.trends ?? []).map((t: any, i: number) => ({ ...t, evidence: byTrend.get(i) ?? [] })),
