@@ -29,6 +29,10 @@
 //   desk           { requestId, clientId, replies? }  engagement desk: trend posts (free), replies to the client (about $0.005 a post)  team
 //   kris           { requestId, clientId, text }  Kris, the client's publicist, answers in her chat (about half a cent)  team, client
 //   report         { requestId, clientId, month }  monthly report from X numbers (about $0.005 a post + one Bil call)  team
+//   game_plan_save / game_plan_meeting       the Game Plan inputs (free) and Bil's opportunity meeting    team, client
+//   network_set / quotes_find / quote_decide the Network list (free), Find quotes now (about $0.15), quote outcomes  team, client
+//   xev_status / xev_read / xev_feedback      Xev reads up to 3 screenshots (about 1 to 3 cents; 3 free)  team, client
+//   xev_grant      { clientId, extra }       extra Xev reads, until payments open                       owner
 
 import {
   askBil,
@@ -77,6 +81,7 @@ import {
   QuoteDecideRequest,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
+import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, XevReadRequest, xevStatus } from '../_shared/xev.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
@@ -138,6 +143,14 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await gamePlanSave(member, parse(GamePlanSaveRequest, input)));
       case 'game_plan_meeting':
         return reply(200, await gamePlanMeeting(member, parse(GamePlanMeetingRequest, input)));
+      case 'xev_status':
+        return reply(200, await xevStatus(member, parse(z.object({ clientId: id }), input).clientId));
+      case 'xev_read':
+        return reply(200, await xevRead(member, parse(XevReadRequest, input)));
+      case 'xev_feedback':
+        return reply(200, await xevFeedback(member, parse(XevFeedbackRequest, input)));
+      case 'xev_grant':
+        return reply(200, await xevGrant(member, parse(XevGrantRequest, input)));
       case 'network_set':
         return reply(200, await networkSet(member, parse(NetworkSetRequest, input)));
       case 'quotes_find':

@@ -17,6 +17,8 @@ export const AGENT_MODELS = {
   dials: MODELS.light,
   /** Kris chats on the cheaper model; hosting does not need Bil's. */
   kris: MODELS.light,
+  /** Xev reads screenshots; Grok 4.3 accepts images (xAI image understanding guide). */
+  xev: MODELS.light,
 } as const;
 
 /**

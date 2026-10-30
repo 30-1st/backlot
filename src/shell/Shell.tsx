@@ -8,7 +8,7 @@ import { ReportsScreen } from './Reports';
 import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
-import { Back, Bubble, Chevron, House, People, Rise, Sequence, Signal, Reel, Vault } from './icons';
+import { Back, Bubble, Chevron, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
 import { CreateScreen } from './Create';
@@ -26,6 +26,7 @@ import { ReinScreen } from './Rein';
 import { liftSplash } from '../lib/splash';
 import { AgentPill } from './AgentPill';
 import { StandingGate, standingOf } from './Standing';
+import { XevScreen } from './Xev';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -36,7 +37,7 @@ import { StandingGate, standingOf } from './Standing';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -179,6 +180,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'kris':
       screen = <KrisScreen {...props} />;
       break;
+    case 'xev':
+      screen = <XevScreen {...props} />;
+      break;
     case 'room':
       screen = <RoomScreen {...props} />;
       break;
@@ -260,7 +264,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       <nav aria-label="Team" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals')}
-        {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'room'].includes(head))}
+        {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'room', 'xev'].includes(head))}
         {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
       </nav>
     );
@@ -272,7 +276,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         {tab('insights', 'Game Plan', <Rise size={22} />, head === 'insights' || head === 'brand')}
         {tab('kris', 'Kris', <Bubble size={22} />, head === 'kris' || head === 'room')}
         {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board')}
-        {tab('playground', 'Playground', <Reel size={22} />, false)}
+        {tab('xev', 'Xev', <Page size={22} />, head === 'xev')}
       </nav>
     );
   } else if (room === 'preview') {
@@ -286,7 +290,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
+  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'xev'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>

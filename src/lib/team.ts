@@ -214,6 +214,11 @@ export const bil = {
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
   gamePlanSave: (clientId: string, plan: { sellsTo: string; appealsTo: string; products: { name: string; note: string }[]; goals: string }) =>
     call<{ saved: boolean }>('bil', 'game_plan_save', { clientId, ...plan }),
+  xevStatus: (clientId: string) => call<{ used: number; allowed: number; left: number; unlimited: boolean }>('bil', 'xev_status', { clientId }),
+  xevRead: (clientId: string, images: { data: string; mediaType: 'image/jpeg' }[], o: { threadId?: string; label?: string; note?: string }) =>
+    call<{ readId: string; threadId: string | null; answer: Record<string, unknown>; costUsd: number; left: number | null }>('bil', 'xev_read', { requestId: crypto.randomUUID(), clientId, images, ...o }),
+  xevFeedback: (clientId: string, f: { readId?: string; threadId?: string; used?: boolean; outcome?: 'closed' | 'not_closed' }) => call<{ ok: boolean }>('bil', 'xev_feedback', { clientId, ...f }),
+  xevGrant: (clientId: string, extra: number) => call<{ extra: number }>('bil', 'xev_grant', { clientId, extra }),
   networkSet: (clientId: string, change: { add?: { handle: string; kind: 'mutual' | 'viral' }; remove?: string }) => call<{ ok: boolean }>('bil', 'network_set', { clientId, ...change }),
   quotesFind: (clientId: string) => call<{ postsRead: number; drafts: number; costUsd: number; allowanceLeft: number }>('bil', 'quotes_find', { clientId, requestId: crypto.randomUUID() }),
   quoteDecide: (clientId: string, quoteId: string, decision: 'quoted' | 'skipped' | 'ready', postUrl?: string) =>

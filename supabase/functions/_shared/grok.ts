@@ -28,6 +28,7 @@ export const KNOWLEDGE_VERSION = {
   check: 'k1',
   kris: 'k5',
   dials: 'k1',
+  xev: 'k1',
 } as const;
 
 export function xaiClient() {
