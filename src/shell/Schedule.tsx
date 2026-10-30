@@ -182,7 +182,7 @@ export function DayView({ ws, go, focus, onAll, onMonth, startDay }: ScreenProps
                   </div>
                   <p className="bl-slot-text">{text}</p>
                   {t.post.status === 'ok' && Boolean((t.post.post.compliance as { adultContent?: unknown } | undefined)?.adultContent) && (
-                    <span className="bl-chip-ink bad">Adult: mark media sensitive on X</span>
+                    <p className="bl-adult-note">18+ · Mark the media sensitive when you post. Never use it as a profile photo or header.</p>
                   )}
                 </div>
               </div>

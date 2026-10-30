@@ -31,7 +31,7 @@ export function stepsFor(ws: Workspace, client: Client): Step[] {
   const media = ws.mediaCounts[client.id] ?? 0;
   return [
     { key: 'voice', title: 'Bil drafts the voice', body: 'Bil reads their posts and writes how they sound.', done: Boolean(voice), who: 'team', path: 'create.client' },
-    { key: 'delegate', title: 'Give the team access on X', body: 'Through Delegate, so the team can post by hand. No password changes hands.', done: ticked('delegate'), who: 'either', manual: 'delegate' },
+    { key: 'delegate', title: 'Delegate with the team!', body: 'Through Delegate, so the team can post by hand. No password changes hands.', done: ticked('delegate'), who: 'either', manual: 'delegate' },
     { key: 'approve', title: 'Approve the voice', body: 'Read what Bil wrote and say it sounds like you.', done: Boolean(voice?.approved), who: 'client', path: 'insights' },
     { key: 'media', title: 'First photos and videos', body: 'Bil plans posts around what is in Media.', done: media > 0, who: 'either', path: 'library' },
     { key: 'call', title: 'First call', body: 'Goals, offers and what is off limits, in person.', done: ticked('first_call'), who: 'team', manual: 'first_call' },
@@ -111,7 +111,7 @@ export function Checklist({
                 <span className="bl-row-actions">
                   {s.key === 'delegate' && (
                     <button type="button" className="bl-ghost" onClick={() => setGuide(true)}>
-                      Show me how
+                      See how
                     </button>
                   )}
                   {s.path && !s.manual && (s.key !== 'voice' || isTeam) && (
@@ -169,6 +169,7 @@ function DelegateGuide({ isTeam, onClose }: { isTeam: boolean; onClose: () => vo
             <li key={title}>
               <span className="bl-guide-n num">{i + 1}</span>
               <span className="bl-guide-txt">
+                <DelegatePic step={i} handle={handle} />
                 <b>{title}</b>
                 <small>{body}</small>
                 <span className="bl-guide-path" aria-label={path.join(', then ')}>
@@ -184,7 +185,7 @@ function DelegateGuide({ isTeam, onClose }: { isTeam: boolean; onClose: () => vo
           ))}
         </ol>
         <p className="bl-small" style={{ margin: 0 }}>
-          Steps from X&rsquo;s help page,{' '}
+          Our own drawings of X&rsquo;s screens, checked against X&rsquo;s help page on Oct 29, 2026,{' '}
           <a className="bl-linkish" href="https://help.x.com/en/managing-your-account/how-to-use-the-delegate-feature" target="_blank" rel="noopener noreferrer">
             How to use the Delegate feature
           </a>
@@ -196,5 +197,52 @@ function DelegateGuide({ isTeam, onClose }: { isTeam: boolean; onClose: () => vo
       </section>
     </div>,
     host,
+  );
+}
+
+/**
+ * A small drawing of the X screen for each Delegate step: grey shapes for the page, the one
+ * thing to tap picked out in the accent color. Our own drawings, not screenshots; no X logo.
+ */
+function DelegatePic({ step, handle }: { step: number; handle: string }) {
+  const lines = (x: number, y: number, n: number, w = 70) =>
+    Array.from({ length: n }, (_, k) => <rect key={k} x={x} y={y + k * 16} width={w - (k % 3) * 12} height="7" rx="3.5" className="dp-soft" />);
+  return (
+    <svg className="bl-delegate-pic" viewBox="0 0 280 150" role="img" aria-label={['A browser open at x.com', 'Settings: Your account, then Security and account access, then Delegate', `The Delegate page: Invite a member, with ${handle} typed in`, 'Contributor picked, then Send invite'][step]}>
+      <rect x="1" y="1" width="278" height="148" rx="12" className="dp-frame" />
+      <rect x="1" y="1" width="278" height="22" rx="12" className="dp-bar" />
+      <circle cx="14" cy="12" r="3" className="dp-soft" /><circle cx="24" cy="12" r="3" className="dp-soft" /><circle cx="34" cy="12" r="3" className="dp-soft" />
+      <rect x="48" y="6" width="150" height="12" rx="6" className={step === 0 ? 'dp-pick' : 'dp-soft'} />
+      <text x="58" y="15.5" className={step === 0 ? 'dp-pick-t' : 'dp-t'}>x.com</text>
+      {step === 0 && (
+        <g>{lines(18, 40, 6, 50)}<rect x="90" y="38" width="170" height="96" rx="8" className="dp-soft" /></g>
+      )}
+      {step === 1 && (
+        <g>
+          <text x="16" y="44" className="dp-t">Settings</text>
+          <rect x="12" y="54" width="112" height="16" rx="5" className="dp-pick" /><text x="18" y="65" className="dp-pick-t">Your account</text>
+          <rect x="12" y="74" width="112" height="16" rx="5" className="dp-pick" /><text x="18" y="85" className="dp-pick-t">Security and access</text>
+          {lines(14, 98, 3, 90)}
+          <rect x="138" y="54" width="128" height="16" rx="5" className="dp-pick" /><text x="144" y="65" className="dp-pick-t">Delegate</text>
+          {lines(140, 80, 4, 110)}
+        </g>
+      )}
+      {step === 2 && (
+        <g>
+          <text x="16" y="44" className="dp-t">Delegate</text>
+          {lines(16, 54, 2, 160)}
+          <rect x="16" y="88" width="104" height="22" rx="11" className="dp-pick" /><text x="28" y="102.5" className="dp-pick-t">Invite a member</text>
+          <rect x="132" y="88" width="132" height="22" rx="6" className="dp-field" /><text x="140" y="102.5" className="dp-t">{handle.length > 22 ? handle.slice(0, 21) + '…' : handle}</text>
+        </g>
+      )}
+      {step === 3 && (
+        <g>
+          <text x="16" y="44" className="dp-t">Choose a role</text>
+          <rect x="16" y="54" width="248" height="22" rx="6" className="dp-pick" /><circle cx="28" cy="65" r="5" className="dp-dot" /><text x="40" y="69" className="dp-pick-t">Contributor</text>
+          <rect x="16" y="82" width="248" height="22" rx="6" className="dp-soft" /><circle cx="28" cy="93" r="5" className="dp-field" /><text x="40" y="97" className="dp-t">Admin</text>
+          <rect x="176" y="114" width="88" height="24" rx="12" className="dp-pick" /><text x="190" y="130" className="dp-pick-t">Send invite</text>
+        </g>
+      )}
+    </svg>
   );
 }

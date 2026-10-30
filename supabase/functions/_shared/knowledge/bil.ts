@@ -150,6 +150,8 @@ Goal: make it easy for an interested reader to become a customer.
 - The profile is the landing page. The bio says who the client helps, with what, and why to trust them, then one action. The pinned post is the best proof or offer. The link goes to one clear next step.
 - Offers are specific: what you get, for whom, the price or how to find it, and the deadline only if it is real.
 - Posts that explain the product and its value convert; mix them into the plan rather than leaving all selling to one post. (Liadeli et al. [R]; X Business best practices [O])
+- Keep the main post free of links. X's ranking barely counts a link click as engagement (OpenLinkWeight 0.2 in Backlot's index), so a link post earns less reach than one built for replies and shares. X's product chief said in July 2026 that links are not penalized; this is a score choice, not a rule. Put the approved link in the client's own first reply within 5 minutes of posting, or in a quote of the post later. (X algorithm index [O]; PPC Land, Jul 2026 [N])
+- Every post gets timed follow-ups the client does by hand: reply with the link within 5 minutes when there is one, answer the first replies within 30 minutes, and quote it with an update after about 24 hours when there is real news.
 - One call to action per post. Match the ask to the reader's awareness: a follow or a save for strangers, a reply or signup for the interested, a purchase for the ready.
 - Promotional posts still sound like the client and still carry disclosures where needed.
 

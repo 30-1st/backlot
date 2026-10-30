@@ -739,6 +739,27 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
     const pool = new Map<string, (typeof dialResults)[number]>();
     for (const r of older ?? []) for (const x of ((r.numbers as any)?.dialResults ?? []) as typeof dialResults) pool.set(x.postId, x);
     for (const x of dialResults) pool.set(x.postId, x);
+    // Media tab: which shot types (tags on the Library file a posted draft used) score best.
+    // Same pool as the dials: this month plus the two before, from posts with a posting link.
+    const mediaIds = [...new Set(linked.map((r: any) => (typeof r.post?.mediaId === 'string' ? r.post.mediaId : null)).filter(Boolean) as string[])];
+    const fileTags = new Map((await loadLibraryFiles(db, req.clientId, m.workspaceId, mediaIds)).map((f) => [f.id, f.tags]));
+    const mediaResults = linked
+      .map((r: any) => {
+        const tags = typeof r.post?.mediaId === 'string' ? fileTags.get(r.post.mediaId) : undefined;
+        return tags?.length && scored.has(r.x_post_id) ? { postId: String(r.x_post_id), score: scored.get(r.x_post_id)!, tags: tags.slice(0, 20) } : null;
+      })
+      .filter(Boolean) as Array<{ postId: string; score: number; tags: string[] }>;
+    const mediaPool = new Map<string, (typeof mediaResults)[number]>();
+    for (const r of older ?? []) for (const x of ((r.numbers as any)?.mediaResults ?? []) as typeof mediaResults) mediaPool.set(x.postId, x);
+    for (const x of mediaResults) mediaPool.set(x.postId, x);
+    const byTag = new Map<string, number[]>();
+    for (const x of mediaPool.values()) for (const tag of x.tags) byTag.set(tag, [...(byTag.get(tag) ?? []), x.score]);
+    const mediaTags = [...byTag.entries()]
+      .filter(([, v]) => v.length >= 2)
+      .map(([tag, v]) => ({ tag, posts: v.length, score: Math.round((sum(v) / v.length) * 10) / 10 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+
     const setting = { ...DEFAULT_DIALS, ...(kit.profile.dials ?? {}) };
     const dialSuggestions = dialLifts(
       [...pool.values()].map((x) => ({ test: x.dial && x.delta ? { dial: x.dial, delta: x.delta } : null, target: null, score: x.score })),
@@ -772,12 +793,15 @@ export async function makeReport(userDb: SupabaseClient, m: Member, req: z.infer
       weights: perf.weights,
       dialResults,
       dialSuggestions,
+      mediaResults,
+      mediaPostsMeasured: mediaPool.size,
+      mediaTags,
     };
 
     let summary: z.infer<typeof ReportDraft> | null = null;
     if (perf.stats.postsMeasured > 0) {
       const lines = linesWithin(perf);
-      const { previous, weights: _w, dialResults: _r, ...shown } = numbers;
+      const { previous, weights: _w, dialResults: _r, mediaResults: _mr, ...shown } = numbers;
       const prompt = [
         snapshotText(kit),
         `# ${req.month} in numbers (worked out in code from X's public numbers${numbers.complete ? '' : '; the month is not over yet'})`,
@@ -2113,7 +2137,8 @@ ${list.join('\n')}
 - Write in their voice card's voice and their language (${kit.profile.language}). ${limit}
 - What performs on their page (whatWorks) is the floor, not the ceiling. Keep their voice and brand, and make each post the strongest version for X's ranking: a first line that stops the scroll, a real reason to reply or quote, value worth sharing.
 - Hashtags: at most 2, only from: ${tags.length ? tags.map((t) => '#' + t).join(' ') : '(none, so use no hashtags)'}. Required tags (#ad, contest tags) do not count.
-- Links: only their approved links${kit.profile.links?.length ? ` (${kit.profile.links.map((l) => l.url).join(', ')})` : ' (none set, so no links)'}.
+- Links: never in the post itself. When the post leads somewhere, use one of their approved links${kit.profile.links?.length ? ` (${kit.profile.links.map((l) => l.url).join(', ')})` : ' (none set, so no links at all)'} in engagementPlan as the first reply the client posts within 5 minutes.
+- engagementPlan: timed steps the client does by hand, for example "Reply with the link within 5 minutes", "Answer the first replies within 30 minutes", "Quote it with an update after 24 hours" (only when there will be real news).
 - Offers: when a post names an offer, use their offers list exactly (name, price, deal). A deal or code may appear only if its end date is today or later (today is ${new Date().toISOString().slice(0, 10)} UTC; no end date means it runs). Never invent a price, a discount, a code or a deadline.
 - Never ask people to like, repost, follow or save. Make the post worth replying to, saving or sharing on its own.
 - Paid, gifted or rewarded posts start with #ad. Giveaway posts carry the reward's tag${plan.reward?.disclosureTag ? ` (${plan.reward.disclosureTag})` : ''}. Anything that could read as financial advice ends with "Education only, not financial advice."

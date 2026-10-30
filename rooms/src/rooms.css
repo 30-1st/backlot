@@ -309,10 +309,17 @@ body {
 .r-chat {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 56px 2px 4px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* A fixed box: older messages scroll up and fade out completely under the top edge. */
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 64px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 64px);
 }
 
 .r-msg {

@@ -87,6 +87,10 @@ export function checkDraft(draft: string, flags: DraftFlags, ctx: CheckContext):
     redo.push('Could read as financial advice: add "Education only, not financial advice."');
   }
 
+  // Links stay out of the main post (they earn little reach on X); the link goes in the client's first reply.
+  if ((twitter.extractUrls(draft) as string[]).length) {
+    redo.push('Keep the link out of the post. Put it in engagementPlan as the first reply, posted within 5 minutes.');
+  }
   // Links: only the client's approved ones, when they have set any.
   if (ctx.allowedLinks?.length) {
     const okPrefixes = ctx.allowedLinks.map((u) => u.replace(/\/+$/, '').toLowerCase());

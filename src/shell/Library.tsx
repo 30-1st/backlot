@@ -18,6 +18,8 @@ import {
 import { plural } from '../lib/format';
 import { daysSince, shotsWanted, usage } from './gaps';
 import type { ScreenProps } from './Shell';
+import { supabase } from '../lib/supabase';
+import { team } from '../lib/team';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
 // campaign around what is really here. Bil reads the tags, never the images.
@@ -64,7 +66,40 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [typeTags, setTypeTags] = useState<string[]>([]);
   const [showRemoved, setShowRemoved] = useState(false);
+  const [order, setOrder] = useState<'high' | 'low'>('high');
+  const [ranked, setRanked] = useState<{ tags: Array<{ tag: string; posts: number; score: number }>; measured: number } | null>(null);
+  const [niche, setNiche] = useState<Array<{ pattern: string; why: string }> | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+
+  // Bil's "make next": the shot types that score best on this client's posted posts (from the
+  // latest monthly report). Under 10 posted posts with media, the niche's patterns from Rein.
+  useEffect(() => {
+    setRanked(null);
+    setNiche(null);
+    if (!clientId || !supabase) return;
+    let live = true;
+    void supabase
+      .from('client_reports')
+      .select('numbers')
+      .eq('client_id', clientId)
+      .order('month', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (!live) return;
+        const n = (data?.[0]?.numbers ?? {}) as { mediaTags?: Array<{ tag: string; posts: number; score: number }>; mediaPostsMeasured?: number };
+        const r = { tags: n.mediaTags ?? [], measured: n.mediaPostsMeasured ?? 0 };
+        setRanked(r);
+        if (r.measured < 10) {
+          team.reinClient(clientId, 'worldwide').then(
+            (b) => live && setNiche((b.latest?.viral?.patterns ?? []).slice(0, 5).map((p) => ({ pattern: p.pattern, why: p.why }))),
+            () => live && setNiche([]),
+          );
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [clientId]);
 
   const load = useCallback(async () => {
     if (!clientId) return;
@@ -104,11 +139,16 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
     ...(items !== null && kept.length > 0 && (videoDays === null || videoDays >= STALE_DAYS) ? [videoDays === null ? 'No videos yet.' : `No new video in ${videoDays} days.`] : []),
     ...(items !== null && kept.length > 0 && photoDays !== null && photoDays >= STALE_DAYS ? [`No new photos in ${photoDays} days.`] : []),
   ];
-  const topTags = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const i of live) for (const t of i.tags) n.set(t, (n.get(t) ?? 0) + 1);
-    return [...n.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
-  }, [live]);
+  // Every tag, ordered by how often it appears in the best posts (from the monthly report),
+  // then by how many files carry it.
+  const tagOrder = useMemo(() => {
+    const files = new Map<string, number>();
+    for (const i of live) for (const t of i.tags) files.set(t, (files.get(t) ?? 0) + 1);
+    const best = new Map((ranked?.tags ?? []).map((t, k) => [t.tag, { posts: t.posts, rank: k }]));
+    const list = [...files.entries()].map(([tag, n]) => ({ tag, files: n, inBest: best.get(tag)?.posts ?? 0, rank: best.get(tag)?.rank ?? 999 }));
+    list.sort((a, b) => a.rank - b.rank || b.files - a.files || a.tag.localeCompare(b.tag));
+    return order === 'high' ? list : list.reverse();
+  }, [live, ranked, order]);
   const shown =
     filter === 'all'
       ? live
@@ -233,7 +273,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
         </div>
       )}
 
-      {(untagged.length > 0 || shots.length > 0 || gaps.length > 0) && (
+      {(untagged.length > 0 || gaps.length > 0) && (
         <section className="bl-glass-card bl-gaps" aria-labelledby="gaps-title">
           <b id="gaps-title">What Media needs</b>
           <ul>
@@ -245,50 +285,91 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
             {gaps.map((g) => (
               <li key={g}>{g} Fresh media keeps posts from repeating.</li>
             ))}
-            {shots.length > 0 && (
-              <li>
-                Bil asked for {shots.length} {plural(shots.length, 'shot')} in planned posts:
-                <ol className="bl-shots">
-                  {shots.slice(0, 4).map((s) => (
-                    <li key={`${s.campaignId}:${s.slot}`}>{s.idea}</li>
-                  ))}
-                </ol>
-                <button type="button" className="bl-linkish" onClick={() => go(`campaigns.${shots[0].campaignId}`)}>
-                  {shots.length > 4 ? `See all ${shots.length} in the campaign` : 'See the posts'}
-                </button>
-              </li>
-            )}
           </ul>
         </section>
       )}
 
+      <section className="bl-glass-card bl-make-next" aria-labelledby="next-title">
+        <b id="next-title">Make next</b>
+        {ranked === null ? (
+          <span className="bl-small" aria-busy="true">Loading Bil&rsquo;s picks.</span>
+        ) : ranked.measured >= 10 && ranked.tags.length > 0 ? (
+          <>
+            <span className="bl-small">The 5 shot types that score best on your posted posts, by X&rsquo;s own ranking weights.</span>
+            <ol className="bl-next-list">
+              {ranked.tags.slice(0, 5).map((t, i) => (
+                <li key={t.tag}>
+                  <span className="bl-next-rank num">{i + 1}</span>
+                  <span className="bl-next-main">
+                    <b>{t.tag}</b>
+                    <span className="bl-next-bar" aria-hidden="true">
+                      <span style={{ width: `${Math.max(8, Math.round((t.score / ranked.tags[0].score) * 100))}%` }} />
+                    </span>
+                  </span>
+                  <span className="bl-small num">{t.posts} posts</span>
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : (
+          <>
+            <span className="bl-small">
+              Fewer than 10 posted posts with media so far ({ranked.measured}), so Bil leans on what is working in your niche. Add the posting link when you mark a post posted, and this list turns into your own.
+            </span>
+            {niche === null ? (
+              <span className="bl-small" aria-busy="true">Loading your niche.</span>
+            ) : niche.length ? (
+              <ol className="bl-next-list">
+                {niche.map((p, i) => (
+                  <li key={i}>
+                    <span className="bl-next-rank num">{i + 1}</span>
+                    <span className="bl-next-main">
+                      <b>{p.pattern}</b>
+                      <span className="bl-small">{p.why}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <span className="bl-small">No niche search yet. Run one on Rein&rsquo;s tab and Bil uses it here.</span>
+            )}
+          </>
+        )}
+        {shots.length > 0 && (
+          <button type="button" className="bl-linkish bl-start" onClick={() => go(`campaigns.${shots[0].campaignId}`)}>
+            See the shots planned posts are waiting on
+          </button>
+        )}
+      </section>
+
       {kept.length > 0 && (
-        <div className="bl-filters" role="group" aria-label="Show">
-          {[
-            'all',
-            ...(untagged.length ? ['untagged'] : []),
-            ...(fresh.length && fresh.length < live.length ? [':new'] : []),
-            ...(approved.length ? [':approved'] : []),
-            ...(usedFiles.length ? [':used'] : []),
-            ...(retired.length ? [':retired'] : []),
-            ...topTags,
-          ].map((f) => (
-            <button key={f} type="button" className="bl-tagchip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {f === 'all'
-                ? `All ${live.length}`
-                : f === 'untagged'
-                  ? `Untagged ${untagged.length}`
-                  : f === ':new'
-                    ? `New ${fresh.length}`
-                    : f === ':approved'
-                      ? `Approved ${approved.length}`
-                      : f === ':used'
-                        ? `Used ${usedFiles.length}`
-                        : f === ':retired'
-                          ? `Retired ${retired.length}`
-                          : f}
+        <div className="bl-filter-row">
+          <label className="bl-field" style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <span className="bl-label">Show</span>
+            <select className="bl-input" value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <option value="all">All files ({live.length})</option>
+              {untagged.length > 0 && <option value="untagged">Untagged ({untagged.length})</option>}
+              {fresh.length > 0 && fresh.length < live.length && <option value=":new">New ({fresh.length})</option>}
+              {approved.length > 0 && <option value=":approved">Approved ({approved.length})</option>}
+              {usedFiles.length > 0 && <option value=":used">Used ({usedFiles.length})</option>}
+              {retired.length > 0 && <option value=":retired">Retired ({retired.length})</option>}
+              <optgroup label={order === 'high' ? 'Tags, most used in best posts first' : 'Tags, least used in best posts first'}>
+                {tagOrder.map((t) => (
+                  <option key={t.tag} value={t.tag}>
+                    {t.tag} ({t.files} {t.files === 1 ? 'file' : 'files'}{t.inBest ? `, in ${t.inBest} best posts` : ''})
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
+          <div className="bl-seg" role="group" aria-label="Tag order">
+            <button type="button" aria-pressed={order === 'high'} onClick={() => setOrder('high')}>
+              High to low
             </button>
-          ))}
+            <button type="button" aria-pressed={order === 'low'} onClick={() => setOrder('low')}>
+              Low to high
+            </button>
+          </div>
         </div>
       )}
 
@@ -352,7 +433,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           key={open.id}
           item={open}
           url={urls[open.path]}
-          suggestions={[...new Set([...typeTags, ...topTags, ...BASE_TAGS])]}
+          suggestions={[...new Set([...typeTags, ...[...tagOrder].sort((a, b) => b.files - a.files).slice(0, 8).map((t) => t.tag), ...BASE_TAGS])]}
           onClose={() => setOpenId(null)}
           onSaved={() => {
             setOpenId(null);

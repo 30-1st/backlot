@@ -219,6 +219,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
   const [closed, setClosed] = useState(false);
   const checkBox = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
+  const log = useRef<HTMLOListElement>(null);
   const live = room.chat !== 'off';
   const started = lines.length > 0;
 
@@ -247,6 +248,9 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
   }, []);
 
   useEffect(() => {
+    // Newest at the bottom of the chat box; older lines scroll up and fade out under its top edge.
+    const b = log.current;
+    if (b) b.scrollTo({ top: b.scrollHeight, behavior: 'smooth' });
     end.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [lines.length, busy]);
 
@@ -401,7 +405,7 @@ function Room({ room, look, preview }: { room: RoomView; look: Look; preview?: s
         )}
 
         {started && (
-          <ol className="r-chat" aria-label="Chat" aria-live="polite">
+          <ol className="r-chat" ref={log} aria-label="Chat" aria-live="polite">
             {lines.map((l) => (
               <li key={l.key} className={`r-msg r-${l.role}${l.source === 'pending' ? ' r-pending' : ''}`}>
                 {l.role === 'kris' && (

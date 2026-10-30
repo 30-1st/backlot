@@ -266,6 +266,15 @@ function ReportView({ r, isTeam, clientId, dials, refresh }: { r: Report; isTeam
     ['Likes', fmt(n.likes), null],
     ['Bookmarks', fmt(n.bookmarks), null],
   ];
+  const [full, setFull] = useState(false);
+  const best = n.top[0];
+  const viewsChange = n.previous && n.previous.impressions > 0 ? Math.round(((n.impressions - n.previous.impressions) / n.previous.impressions) * 100) : null;
+  const short: Array<[string, string]> = [];
+  if (r.summary?.headline) short.push(['Top win', r.summary.headline]);
+  if (best) short.push(['Best post', `${fmt(best.impressions)} views, ${fmt(best.replies)} replies, ${fmt(best.quotes)} quotes`]);
+  if (r.summary?.worked[0]) short.push(['Do more of', r.summary.worked[0]]);
+  if (viewsChange !== null) short.push(['Against last month', `Views ${viewsChange >= 0 ? 'up' : 'down'} ${Math.abs(viewsChange)}%`]);
+  if (r.summary?.tryNext[0]) short.push(['Next step', r.summary.tryNext[0]]);
   return (
     <article className="bl-report">
       <div>
@@ -273,8 +282,23 @@ function ReportView({ r, isTeam, clientId, dials, refresh }: { r: Report; isTeam
           {monthName(n.month)}
           {!n.complete && ' so far'}
         </h2>
-        {r.summary?.headline && <p className="bl-p" style={{ margin: '6px 0 0' }}>{r.summary.headline}</p>}
       </div>
+
+      {short.length > 0 && (
+        <dl className="bl-report-short">
+          {short.slice(0, 5).map(([k, v]) => (
+            <div key={k}>
+              <dt className="bl-label">{k}</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <button type="button" className="bl-ghost bl-start" aria-expanded={full} onClick={() => setFull((f) => !f)}>
+        {full ? 'Show the short version' : 'See the full report'}
+      </button>
+      {full && (
+      <>
 
       <dl className="bl-report-tiles">
         {tiles.map(([label, value, change]) => (
@@ -330,6 +354,8 @@ function ReportView({ r, isTeam, clientId, dials, refresh }: { r: Report; isTeam
         </section>
       )}
       <DialTests r={r} isTeam={isTeam} clientId={clientId} dials={dials} refresh={refresh} />
+      </>
+      )}
       {n.posts === 0 && <p className="bl-small">No original posts that month, so there is nothing to report.</p>}
       <p className="bl-small" style={{ margin: 0 }}>
         Made {new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}

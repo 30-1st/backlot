@@ -24,7 +24,7 @@ export type Reasoning = 'none' | 'low' | 'medium' | 'high';
 /** Knowledge pack versions. Bump one when that agent's instructions or knowledge change. */
 export const KNOWLEDGE_VERSION = {
   rein: 'k2',
-  bil: 'k2',
+  bil: 'k3',
   check: 'k1',
   kris: 'k5',
   dials: 'k1',

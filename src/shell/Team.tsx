@@ -25,7 +25,7 @@ export function TeamScreen({
     <main style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <h1 className="bl-sr">Account</h1>
 
-      {isTeam && <TeamPanel />}
+      {isTeam && <TeamPanel isOwner={me.role === 'owner'} />}
 
       <section className="bl-card">
         <h2 className="bl-h2">You</h2>
@@ -82,7 +82,7 @@ export function TeamScreen({
   );
 }
 
-function TeamPanel() {
+function TeamPanel({ isOwner }: { isOwner: boolean }) {
   const [data, setData] = useState<People | null>(null);
   const [error, setError] = useState('');
   const [kind, setKind] = useState<'team' | 'client'>('team');
@@ -236,7 +236,7 @@ function TeamPanel() {
                   <span style={{ fontWeight: 500 }}>{p.isYou ? 'You' : `@${p.username}`}</span>
                   <span className="bl-label">{p.role === 'client' ? `Client, @${p.clientHandle}` : p.role}</span>
                 </div>
-                {!p.isYou && p.role !== 'owner' && (
+                {isOwner && !p.isYou && p.role !== 'owner' && (
                   <button type="button" className="bl-ghost" disabled={busy} onClick={() => void reset(p)}>
                     Reset password
                   </button>

@@ -2428,3 +2428,53 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-viral-creator:last-child { border-bottom: 0; padding-bottom: 0; }
 .bl-viral-creator > .bl-small { grid-column: 1; }
 .bl-viral-creator > a { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+
+/* Adult note on a post: small, ash glossy liquid red, a soft drop shadow for depth, no box. */
+.bl-adult-note {
+  margin: 4px 0 0; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #b04437 0%, #962b20 46%, #6f1c14 54%, #8f2a1f 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(111, 28, 20, 0.28));
+}
+.bl-root[data-theme='night'] .bl-adult-note {
+  background-image: linear-gradient(180deg, #ffc2b7 0%, #f59484 46%, #e46a57 54%, #f28a78 100%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+@media (forced-colors: active) { .bl-adult-note { color: CanvasText; background: none; } }
+
+/* Kris chat: a fixed box. Older messages scroll up and fade out completely under its top edge. */
+.bl-kris-box {
+  max-height: min(60vh, 560px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  padding: 56px 2px 4px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 64px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 64px);
+}
+
+/* Report, short version: five lines first, the full report one tap away. */
+.bl-report-short { margin: 0; display: grid; gap: 10px; }
+.bl-report-short > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.bl-report-short dd { margin: 0; font-size: 15px; line-height: 1.45; }
+@media (max-width: 420px) { .bl-report-short > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* Media: Bil's make-next list and the tag dropdown. */
+.bl-make-next { display: flex; flex-direction: column; gap: 10px; }
+.bl-next-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bl-next-list li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.bl-next-rank { font-family: var(--display); font-size: 20px; color: var(--muted, var(--ink)); opacity: 0.7; }
+.bl-next-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.bl-next-bar { display: block; height: 6px; border-radius: 3px; background: var(--mist); overflow: hidden; }
+.bl-next-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.bl-filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+
+/* Delegate guide drawings */
+.bl-delegate-pic { display: block; width: 100%; max-width: 320px; height: auto; margin: 2px 0 6px; }
+.bl-delegate-pic .dp-frame { fill: var(--paper); stroke: var(--line); }
+.bl-delegate-pic .dp-bar { fill: var(--mist); }
+.bl-delegate-pic .dp-soft { fill: var(--mist); }
+.bl-delegate-pic .dp-field { fill: var(--paper); stroke: var(--line); }
+.bl-delegate-pic .dp-pick { fill: var(--accent-wash); stroke: var(--accent-text); stroke-width: 1.2; }
+.bl-delegate-pic .dp-dot { fill: var(--accent-text); }
+.bl-delegate-pic text { font: 600 10px var(--ui); }
+.bl-delegate-pic .dp-t { fill: var(--ink); opacity: 0.75; }
+.bl-delegate-pic .dp-pick-t { fill: var(--accent-ink); }
+.bl-root[data-theme='night'] .bl-delegate-pic .dp-pick-t { fill: var(--accent-text); }

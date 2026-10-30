@@ -8,7 +8,7 @@
 //   me               {}                              your role, client, and (team) budget everyone
 //   people           {}                              everyone in the workspace + clients team
 //   invite_create    { role, clientId? }             a one-time code, shown once         team
-//   password_reset   { userId }                      a temporary password, shown once    team
+//   password_reset   { userId }                      a temporary password, shown once    owner
 //   password_set     { password, currentPassword? }  change your own password            everyone
 //   rein_search      { niche, region? }              what is rising in a niche           everyone
 //   rein_history     {}                              your last searches and free left    everyone
@@ -274,7 +274,8 @@ async function handle(req: Request): Promise<Response> {
       }
 
       case 'password_reset': {
-        requireTeam(member);
+        // Only the executive (the workspace owner) resets other people's passwords.
+        if (member.role !== 'owner') throw new AccessError('Only the executive can reset passwords.');
         const r = parse(ResetRequest, input);
         if (r.userId === userId) throw new InputError('To change your own password, use Change password.');
         const target = await memberOf(r.userId);

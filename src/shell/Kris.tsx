@@ -24,7 +24,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
   const [error, setError] = useState('');
   const [prefs, setPrefs] = useState<Prefs>({ plain: false, quietFrom: 21, quietTo: 9 });
   const [showPrefs, setShowPrefs] = useState(false);
-  const end = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   async function load() {
     if (!supabase || !client) return;
@@ -48,9 +48,11 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.id]);
 
+  // Newest at the bottom of the box; older messages scroll up and fade out under its top edge.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' });
-  }, [msgs?.length]);
+    const b = box.current;
+    if (b) b.scrollTop = b.scrollHeight;
+  }, [msgs?.length, sending]);
 
   if (!client) {
     return (
@@ -142,6 +144,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
         </p>
       )}
 
+      <div className="bl-kris-box" ref={box}>
       <ol className="bl-kris-log" aria-label="Chat with Kris" aria-live="polite">
         {msgs?.length === 0 && (
           <li className="bl-kris-msg kris">
@@ -177,7 +180,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
           </li>
         )}
       </ol>
-      <div ref={end} />
+      </div>
 
       {error && (
         <p className="bl-error" role="alert">
