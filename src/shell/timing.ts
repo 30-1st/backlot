@@ -90,10 +90,16 @@ export function nextPost(ws: Workspace, focus: string | null, now = Date.now()):
 }
 
 const DAY = 86_400_000;
+/** The posting-link rule covers posts scheduled from this day on, never older ones. */
+export const LINK_RULE_FROM = Date.parse('2026-10-30T00:00:00Z');
 /** Past posts the client approved that still need the X link (or a "Not posted"). */
 export function missingLinks(ws: Workspace, clientId: string, now = Date.now()): Timed[] {
   return timedPosts(ws, clientId).filter(
-    (t) => !t.campaign.discardedAt && t.end.getTime() <= now && (t.post.review === 'approved' || (t.post.review === 'posted' && !t.post.xPostId)),
+    (t) =>
+      !t.campaign.discardedAt &&
+      t.start.getTime() >= LINK_RULE_FROM &&
+      t.end.getTime() <= now &&
+      (t.post.review === 'approved' || (t.post.review === 'posted' && !t.post.xPostId)),
   );
 }
 /** Those more than 3 days past their time: campaigns hide until they are settled (Backlot's terms). */

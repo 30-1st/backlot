@@ -1636,11 +1636,13 @@ export async function overdueLinks(db: SupabaseClient, clientId: string, ownerId
     .from('campaign_posts').select('campaign_id, slot, review, x_post_id, post').in('campaign_id', [...starts.keys()]).in('review', ['approved', 'posted']);
   if (pError) throw new Error(`Could not read posts: ${pError.message}`);
   const cutoff = Date.now() - 4 * 86_400_000;
+  // The rule covers posts scheduled from Oct 30, 2026 on, never older ones.
+  const ruleFrom = Date.parse('2026-10-30T00:00:00Z');
   return (posts ?? [])
     .filter((p: any) => p.review === 'approved' || !p.x_post_id)
     .filter((p: any) => {
       const day = Date.parse(`${starts.get(p.campaign_id)}T00:00:00Z`) + Number(p.post?.dayOffset ?? 0) * 86_400_000;
-      return Number.isFinite(day) && day < cutoff;
+      return Number.isFinite(day) && day >= ruleFrom && day < cutoff;
     })
     .map((p: any) => ({ campaignId: p.campaign_id as string, slot: p.slot as number }));
 }
