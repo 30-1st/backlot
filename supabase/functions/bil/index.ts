@@ -69,6 +69,12 @@ import {
   GamePlanSaveRequest,
   gamePlanMeeting,
   GamePlanMeetingRequest,
+  networkSet,
+  NetworkSetRequest,
+  quotesFind,
+  QuotesFindRequest,
+  quoteDecide,
+  QuoteDecideRequest,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
@@ -132,6 +138,12 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await gamePlanSave(member, parse(GamePlanSaveRequest, input)));
       case 'game_plan_meeting':
         return reply(200, await gamePlanMeeting(member, parse(GamePlanMeetingRequest, input)));
+      case 'network_set':
+        return reply(200, await networkSet(member, parse(NetworkSetRequest, input)));
+      case 'quotes_find':
+        return reply(200, await quotesFind(member, parse(QuotesFindRequest, input)));
+      case 'quote_decide':
+        return reply(200, await quoteDecide(member, parse(QuoteDecideRequest, input)));
       case 'learn':
         requireTeam(member);
         return reply(200, await learnWhatWorks(user.userDb, workspaceId, parse(LearnRequest, input)));

@@ -3,6 +3,7 @@ import { bil } from '../lib/team';
 import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, dayParts, missingLinks, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
+import { NetworkLane } from './Network';
 
 // Schedule: one post at a time, the next post due first. Swipe for the next in line. A post
 // past its time turns grey with its follow-ups and the posting link. Approving is one tap.
@@ -258,6 +259,7 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [all.length, startDay]);
   const [index, setIndex] = useState(startAt);
+  const [lane, setLane] = useState<'posts' | 'network'>('posts');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const track = useRef<HTMLOListElement>(null);
@@ -299,9 +301,24 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
   }
 
   const cur = all[index];
+  const laneClient = single ?? focus ?? null;
   return (
     <main className="bl-sched">
       <h1 className="bl-sr">Schedule</h1>
+      {laneClient && (
+        <div className="bl-seg" role="tablist" aria-label="Schedule lane">
+          <button type="button" role="tab" aria-selected={lane === 'posts'} aria-pressed={lane === 'posts'} onClick={() => setLane('posts')}>
+            Our posts
+          </button>
+          <button type="button" role="tab" aria-selected={lane === 'network'} aria-pressed={lane === 'network'} onClick={() => setLane('network')}>
+            Networking
+          </button>
+        </div>
+      )}
+      {lane === 'network' && laneClient && ws.data ? (
+        <NetworkLane ws={ws.data} clientId={laneClient} go={go} />
+      ) : (
+      <>
       <div className="bl-sched-head">
         <span className="bl-small num">
           {all.length ? `${index + 1} of ${all.length}` : 'Nothing planned yet'}
@@ -403,6 +420,8 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
       <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={onAll}>
         All campaigns
       </button>
+      </>
+      )}
     </main>
   );
 }

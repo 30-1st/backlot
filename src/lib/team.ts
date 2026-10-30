@@ -214,6 +214,10 @@ export const bil = {
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
   gamePlanSave: (clientId: string, plan: { sellsTo: string; appealsTo: string; products: { name: string; note: string }[]; goals: string }) =>
     call<{ saved: boolean }>('bil', 'game_plan_save', { clientId, ...plan }),
+  networkSet: (clientId: string, change: { add?: { handle: string; kind: 'mutual' | 'viral' }; remove?: string }) => call<{ ok: boolean }>('bil', 'network_set', { clientId, ...change }),
+  quotesFind: (clientId: string) => call<{ postsRead: number; drafts: number; costUsd: number; allowanceLeft: number }>('bil', 'quotes_find', { clientId, requestId: crypto.randomUUID() }),
+  quoteDecide: (clientId: string, quoteId: string, decision: 'quoted' | 'skipped' | 'ready', postUrl?: string) =>
+    call<{ ok: boolean }>('bil', 'quote_decide', { clientId, quoteId, decision, ...(postUrl ? { postUrl } : {}) }),
   gamePlanMeeting: (clientId: string, runRequest?: string) =>
     call<{ requested: true; already: boolean } | { id: string; kind: 'free' | 'extra'; costUsd: number }>('bil', 'game_plan_meeting', { clientId, requestId: crypto.randomUUID(), ...(runRequest ? { runRequest } : {}) }),
   resume: (campaignId: string) => call<{ resumed: boolean }>('bil', 'resume', { campaignId }),

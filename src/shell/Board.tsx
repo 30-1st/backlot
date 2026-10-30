@@ -18,6 +18,7 @@ import {
 import { plural } from '../lib/format';
 import { campaignTitle } from './Notifications';
 import type { ScreenProps } from './Shell';
+import { NetworkList } from './Network';
 
 // The inspiration board: X posts and screenshots the client or team want more of, or less
 // of. A short note says what about it. Bil reads the verdict and the note before he plans,
@@ -107,6 +108,8 @@ export function BoardScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           {isTeam ? `@${client.handle}. ` : ''}Posts and looks you want more of, or less of. Bil reads your notes before he plans, never the pictures. Items fade after {FADE_DAYS} days unless pinned.
         </p>
       </div>
+
+      <NetworkList clientId={clientId} />
 
       <AddItem
         full={kept.length >= MAX_ITEMS}
