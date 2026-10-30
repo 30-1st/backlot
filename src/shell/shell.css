@@ -2478,3 +2478,24 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-delegate-pic .dp-t { fill: var(--ink); opacity: 0.75; }
 .bl-delegate-pic .dp-pick-t { fill: var(--accent-ink); }
 .bl-root[data-theme='night'] .bl-delegate-pic .dp-pick-t { fill: var(--accent-text); }
+
+/* Schedule: one post per card, swiped sideways. Past posts go grey with their follow-ups. */
+.bl-deck-track {
+  list-style: none; margin: 0; padding: 4px 2px 12px; display: grid; grid-auto-flow: column;
+  grid-auto-columns: min(88%, 460px); gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.bl-deck-track::-webkit-scrollbar { display: none; }
+.bl-postcard { scroll-snap-align: start; display: flex; flex-direction: column; gap: 10px; padding: 14px; min-width: 0; }
+.bl-postcard-media:empty { display: none; }
+.bl-postcard-media > * { width: 100%; }
+.bl-postcard-text { margin: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bl-postcard-after { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; }
+.bl-postcard.is-past { filter: grayscale(1); opacity: 0.86; }
+.bl-past { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.bl-past-steps { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bl-check-line { display: flex; gap: 10px; align-items: center; font-size: 14px; min-height: 32px; }
+.bl-check-line input { width: 18px; height: 18px; flex: none; }
+.bl-past-link { display: flex; flex-direction: column; gap: 6px; }
+.bl-deck-nav { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.bl-deck-nav .bl-round { font-size: 22px; line-height: 1; }

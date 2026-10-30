@@ -1042,7 +1042,7 @@ type LogLine = {
   workspaceId: string;
   clientId: string;
   kind: 'post' | 'voice' | 'brand' | 'campaign';
-  decision: 'approved' | 'changes' | 'posted' | 'undone' | 'saved' | 'suggested' | 'dropped' | 'discarded' | 'restored';
+  decision: 'approved' | 'changes' | 'posted' | 'not_posted' | 'undone' | 'saved' | 'suggested' | 'dropped' | 'discarded' | 'restored';
   campaignId?: string;
   slot?: number;
   subject?: string | null;
@@ -1219,8 +1219,11 @@ export async function approveVoice(ownerId: string, req: z.infer<typeof ApproveV
 export const ReviewPostRequest = z.object({
   campaignId: id,
   slot: z.number().int().min(1).max(60),
-  // pending undoes a decision; posted is the client saying they posted it themselves.
-  decision: z.enum(['approved', 'changes', 'posted', 'pending']),
+  // pending undoes a decision; posted is the client saying they posted it themselves;
+  // not_posted is the honest skip, which is never punished.
+  decision: z.enum(['approved', 'changes', 'posted', 'not_posted', 'pending']),
+  /** With "posted": true when they posted it with their own changes. */
+  changed: z.boolean().optional(),
   note: z.string().trim().max(500).optional(),
   /** With "posted": the link to the X post, so reports can tie the draft to it (dial upgrade 5). */
   postUrl: z.string().trim().max(300).optional(),
@@ -1252,6 +1255,9 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
   if (req.decision === 'posted' && post.review !== 'approved' && post.review !== 'posted') {
     throw new BilInputError('Approve this post before marking it as posted.', 409);
   }
+  if (req.decision === 'not_posted' && post.review === 'posted') {
+    throw new BilInputError('This post is marked posted. Undo that first.', 409);
+  }
   if (req.decision === 'approved' && isTeam(m)) {
     const { data: cl, error: clError } = await db.from('clients').select('profile').eq('id', c.client_id).eq('owner_id', m.workspaceId).maybeSingle();
     if (clError) throw new Error(`Could not read the client: ${clError.message}`);
@@ -1277,7 +1283,8 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
       reviewed_by: req.decision === 'pending' ? null : m.userId,
       reviewed_at: req.decision === 'pending' ? null : reviewedAt,
       // Undo clears the link; marking posted again without one keeps the link already saved.
-      ...(req.decision === 'pending' ? { x_post_id: null } : xPostId ? { x_post_id: xPostId } : {}),
+      ...(req.decision === 'pending' || req.decision === 'not_posted' ? { x_post_id: null } : xPostId ? { x_post_id: xPostId } : {}),
+      posted_as: req.decision === 'posted' ? (req.changed ? 'changed' : 'as_drafted') : null,
     })
     .eq('campaign_id', req.campaignId)
     .eq('slot', req.slot);
@@ -1294,7 +1301,7 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
     campaignId: req.campaignId,
     slot: req.slot,
     subject: String(first.hook ?? first.idea ?? ''),
-    note: req.decision === 'changes' ? note : xPostId ? `Linked to x.com/i/status/${xPostId}` : null,
+    note: req.decision === 'changes' ? note : [req.decision === 'posted' && req.changed ? 'Posted with changes' : '', xPostId ? `Linked to x.com/i/status/${xPostId}` : ''].filter(Boolean).join('. ') || null,
     actor: m,
   });
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt, xPostId };

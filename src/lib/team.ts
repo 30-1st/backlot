@@ -174,11 +174,11 @@ export function useCanLookup(enabled = true): boolean {
   return ok && enabled;
 }
 
-export type Decision = 'approved' | 'changes' | 'posted' | 'pending';
+export type Decision = 'approved' | 'changes' | 'posted' | 'not_posted' | 'pending';
 
 export const bil = {
-  review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string) =>
-    call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}) }),
+  review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string, changed?: boolean) =>
+    call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}), ...(changed ? { changed: true } : {}) }),
   /** One chat turn with Kris: returns what was saved (the person's message and hers). */
   kris: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'kris', { requestId: crypto.randomUUID(), clientId, text }),

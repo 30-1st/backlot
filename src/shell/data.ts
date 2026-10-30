@@ -35,7 +35,9 @@ export type Post = {
   slot: number;
   status: 'ok' | 'blocked';
   post: Json;
-  review: 'pending' | 'approved' | 'changes' | 'posted';
+  review: 'pending' | 'approved' | 'changes' | 'posted' | 'not_posted';
+  /** With posted: whether they changed it before posting. */
+  postedAs?: 'as_drafted' | 'changed' | null;
   reviewNote: string | null;
   reviewedAt: string | null;
   /** The X post the client says this draft became (dial upgrade 5). */
@@ -81,7 +83,7 @@ async function load(): Promise<Workspace> {
       .select('id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at, discarded_at')
       .order('created_at', { ascending: false })
       .limit(50),
-    supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id').order('slot').limit(1000),
+    supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id, posted_as').order('slot').limit(1000),
     supabase.from('onboarding_steps').select('client_id, step, done_at'),
     supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
     supabase
@@ -147,6 +149,7 @@ async function load(): Promise<Workspace> {
       reviewNote: r.review_note,
       reviewedAt: r.reviewed_at,
       xPostId: r.x_post_id ?? null,
+      postedAs: r.posted_as ?? null,
     })),
   };
 }
