@@ -1,16 +1,11 @@
-import { Bubble, Page, Radar } from './icons';
-import { Deck, type Room } from './Rooms';
+import { PaperPlayground, PlaygroundHologram } from './PlaygroundHologram';
 import type { ScreenProps } from './Shell';
 
 // The Playground: narrate an Instagram or X profile post by post, or search what is rising
-// with Rein. Open to the team, clients and casual members alike.
+// with Rein. Open to the team, clients and casual members alike. The paper playground sets
+// the scene; the hologram is the way in.
 
 export function PlaygroundScreen({ go }: ScreenProps) {
-  const tools: Room[] = [
-    { key: 'ig', name: 'Instagram', path: 'instagram', icon: <Page /> },
-    { key: 'x', name: 'X', path: 'x', icon: <Bubble /> },
-    { key: 'rein', name: 'Rein', path: 'rein', icon: <Radar /> },
-  ];
   return (
     <main className="bl-play">
       <div className="bl-play-head">
@@ -21,7 +16,8 @@ export function PlaygroundScreen({ go }: ScreenProps) {
           Narrate a profile post by post, or find what is rising.
         </p>
       </div>
-      <Deck rooms={tools} go={go} label="Playground tools" />
+      <PaperPlayground />
+      <PlaygroundHologram go={go} />
     </main>
   );
 }

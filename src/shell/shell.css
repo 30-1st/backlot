@@ -2526,3 +2526,40 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-network-lane { display: flex; flex-direction: column; gap: 12px; }
 .bl-quote-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .bl-quote-orig { margin: 0; padding-left: 10px; border-left: 2px solid var(--line); }
+
+/* Playground: paper playground and the hologram way in */
+.bl-paper { width: 100%; max-width: 520px; margin: 0 auto; touch-action: pan-y; user-select: none; -webkit-user-select: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 18%, #000 80%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 0%, #000 14%, #000 86%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 18%, #000 80%, transparent 100%);
+  mask-composite: intersect; }
+.bl-paper svg { display: block; width: 100%; height: auto; overflow: visible; }
+.bl-paper .pp-layer { transition: transform 0.25s ease-out; }
+.bl-paper .pp-piece { cursor: pointer; filter: drop-shadow(0 3px 2px rgba(40, 34, 24, 0.22)); outline: none; }
+.bl-paper .pp-piece:focus-visible { filter: drop-shadow(0 0 3px var(--accent)); }
+.bl-paper .pp-paper { fill: var(--paper); } .bl-paper .pp-mist { fill: var(--mist); } .bl-paper .pp-line { fill: var(--line); }
+.bl-paper .pp-ink { fill: var(--ink); } .bl-paper .pp-accent { fill: var(--accent); } .bl-paper .pp-wash { fill: var(--accent-wash); } .bl-paper .pp-edge { fill: var(--accent-edge); }
+.bl-paper .pp-hi { fill: none; stroke: rgba(255, 255, 255, 0.95); stroke-width: 1.2; stroke-linecap: round; }
+.bl-root[data-theme='night'] .bl-paper .pp-hi { stroke: rgba(255, 236, 204, 0.18); }
+.bl-root[data-theme='night'] .bl-paper .pp-piece { filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.55)); }
+.bl-paper .pp-rope { stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; }
+.bl-paper .pp-ball { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; }
+.bl-paper .pp-spot-a { stop-color: var(--accent-wash); stop-opacity: 0.9; }
+.bl-paper .pp-spot-b { stop-color: var(--accent-wash); stop-opacity: 0; }
+.bl-holo { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+.bl-holo-stage { position: relative; width: 100%; max-width: 520px; height: 400px; margin-top: -18px; }
+.bl-holo-stage canvas { display: block; width: 100%; height: 100%; }
+.bl-holo-still { position: absolute; inset: 15% 20%; width: 60%; height: 70%; object-fit: contain; }
+.bl-root:not([data-theme='night']) .bl-holo-still { filter: invert(1); }
+.bl-holo-says { position: absolute; left: 50%; top: 8px; transform: translateX(-50%) translateY(4px); opacity: 0; font: 600 13px var(--ui); color: var(--accent-text);
+  background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; white-space: nowrap; transition: opacity 0.35s, transform 0.35s; pointer-events: none; }
+.bl-holo-says.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.bl-holo-pill { display: flex; gap: 2px; padding: 4px; border-radius: 999px; border: 1.5px solid var(--ink); box-shadow: 0 6px 14px -4px var(--shadow), 0 1px 0 rgba(255, 255, 255, 0.06) inset; }
+.bl-holo-pill button { font: 800 15px/1 var(--ui); letter-spacing: 0.16em; min-width: 84px; min-height: 44px; border-radius: 999px; border: 0; background: transparent; cursor: pointer;
+  color: transparent; -webkit-text-stroke: 1px var(--ink); filter: drop-shadow(0 2px 2px var(--shadow)); transition: color 0.35s, -webkit-text-stroke-color 0.35s, text-shadow 0.35s; }
+.bl-holo-pill button[aria-pressed='true'] { color: #0f9d90; -webkit-text-stroke-color: #0f9d90; text-shadow: 0 0 12px #0f9d90; }
+.bl-root[data-theme='night'] .bl-holo-pill button[aria-pressed='true'] { color: #e0bd74; -webkit-text-stroke-color: #e0bd74; text-shadow: 0 0 12px #e0bd74; }
+.bl-holo-pill button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.bl-holo-what { margin: 0; min-height: 22px; font-size: 16px; font-weight: 600; text-align: center; }
+.bl-holo-how { margin: -6px 0 0; font-size: 13px; color: var(--ink-3, var(--ink)); opacity: 0.75; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .bl-paper .pp-layer { transition: none; } }
