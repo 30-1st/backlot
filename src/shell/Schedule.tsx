@@ -243,7 +243,7 @@ function LinkNudge({ ws, clientId }: { ws: ScreenProps['ws']; clientId: string }
 }
 
 /** Schedule: one post per card, next post due first. Swipe for the next one; past posts go grey. */
-export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDay }: ScreenProps & { onAll: () => void; onMonth?: () => void; startDay?: string | null }) {
+export function DayView({ ws, go, focus, isTeam, single, onAll, bar, startDay }: ScreenProps & { onAll: () => void; bar?: React.ReactNode; startDay?: string | null }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
@@ -305,6 +305,7 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
   return (
     <main className="bl-sched">
       <h1 className="bl-sr">Schedule</h1>
+      {bar}
       {laneClient && (
         <div className="bl-seg" role="tablist" aria-label="Schedule lane">
           <button type="button" role="tab" aria-selected={lane === 'posts'} aria-pressed={lane === 'posts'} onClick={() => setLane('posts')}>
@@ -328,11 +329,6 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
           {waiting.length > 1 && (
             <button type="button" className="bl-ghost" disabled={busy !== null} onClick={() => void approve(waiting)}>
               Approve all {waiting.length} waiting
-            </button>
-          )}
-          {onMonth && (
-            <button type="button" className="bl-ghost" onClick={onMonth}>
-              Month
             </button>
           )}
         </span>
@@ -418,7 +414,7 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDa
       )}
 
       <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={onAll}>
-        All campaigns
+        See all campaigns
       </button>
       </>
       )}
@@ -438,7 +434,7 @@ function markOf(t: Timed): Mark {
 const MARK_WORDS: Record<Mark, string> = { needs: 'waiting for OK', approved: 'approved', posted: 'posted', held: 'needs a detail' };
 
 /** Month view: every day of one month, with a dot per post coloured by where it stands. */
-export function MonthView({ ws, focus, isTeam, go, onDay, onDayView }: ScreenProps & { onDay: (day: string) => void; onDayView: () => void }) {
+export function MonthView({ ws, focus, isTeam, go, onDay, bar }: ScreenProps & { onDay: (day: string) => void; onDayView: () => void; bar?: React.ReactNode }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
@@ -468,11 +464,7 @@ export function MonthView({ ws, focus, isTeam, go, onDay, onDayView }: ScreenPro
   return (
     <main className="bl-sched">
       <h1 className="bl-sr">Schedule, month</h1>
-      <div className="bl-sched-switch">
-        <button type="button" className="bl-ghost" onClick={onDayView}>
-          Day
-        </button>
-      </div>
+      {bar}
       <div className="bl-month-head">
         <button type="button" className="bl-ghost bl-round" aria-label="Previous month" onClick={() => shift(-1)}>
           &#8249;

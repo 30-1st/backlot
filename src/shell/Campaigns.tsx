@@ -43,10 +43,29 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
   const thrown = campaignId ? ws.data.discarded.find((c) => c.id === campaignId) : null;
   if (campaignId && thrown) return <DiscardedView {...props} campaign={thrown} />;
   const timed = timedPosts(ws.data, focus).length > 0;
+  // One bar on every view, so campaigns are always one tap from the schedule.
+  const bar = (
+    <div className="bl-seg bl-view-bar" role="group" aria-label="Schedule view">
+      {timed && (
+        <button type="button" aria-pressed={view === 'day'} onClick={() => setView('day')}>
+          Schedule
+        </button>
+      )}
+      <button type="button" aria-pressed={view === 'list' || !timed} onClick={() => setView('list')}>
+        Campaigns
+      </button>
+      {timed && (
+        <button type="button" aria-pressed={view === 'month'} onClick={() => setView('month')}>
+          Month
+        </button>
+      )}
+    </div>
+  );
   if (!campaignId && view === 'month' && timed) {
     return (
       <MonthView
         {...props}
+        bar={bar}
         onDayView={() => setView('day')}
         onDay={(d) => {
           setDay(d);
@@ -55,21 +74,15 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
       />
     );
   }
-  if (!campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} startDay={day} onAll={() => setView('list')} onMonth={() => setView('month')} />;
+  if (!campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} onAll={() => setView('list')} />;
 
   const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <h1 className="bl-h1 bl-rise">All campaigns</h1>
-        {view === 'list' && timedPosts(ws.data, focus).length > 0 && (
-          <button type="button" className="bl-ghost" onClick={() => setView('day')}>
-            By day
-          </button>
-        )}
-      </div>
+      {bar}
+      <h1 className="bl-h1 bl-rise">Campaigns</h1>
       {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
       {list.length === 0 ? (
         <div className="bl-empty bl-rise bl-d1">

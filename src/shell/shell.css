@@ -2577,3 +2577,4 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-xev-line li.is-now .bl-xev-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
 .bl-xev-moves { display: flex; flex-direction: column; gap: 10px; }
 .bl-xev-move { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.bl-view-bar { align-self: flex-start; }
