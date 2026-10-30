@@ -8,7 +8,7 @@ import { ReportsScreen } from './Reports';
 import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
-import { Back, Bubble, Chevron, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
+import { Back, Bubble, Chevron, Clapper, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
 import { CreateScreen } from './Create';
@@ -151,7 +151,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   let screen: ReactNode;
   switch (head) {
     case 'campaigns':
-      screen = <CampaignsScreen {...props} campaignId={sub || null} />;
+      screen = sub === 'all' ? <CampaignsScreen {...props} campaignId={null} listOnly /> : <CampaignsScreen {...props} campaignId={sub || null} />;
       break;
     case 'clients':
       screen = isTeam ? <ClientsScreen {...props} pick={setPicked} /> : <Notifications {...props} />;
@@ -263,7 +263,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     dock = (
       <nav aria-label="Team" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
-        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals')}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, (head === 'campaigns' && !sub) || head === 'approvals')}
+        {tab('campaigns.all', 'Campaigns', <Clapper size={22} />, head === 'campaigns' && Boolean(sub))}
         {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'room', 'xev'].includes(head))}
         {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
       </nav>

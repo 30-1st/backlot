@@ -1,5 +1,5 @@
 import { isTeamRole, type Me } from '../lib/team';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Activity, Workspace } from './data';
 import { Checklist, setupLeft } from './Checklist';
@@ -239,7 +239,109 @@ function buildNews(me: Me, ws: Workspace, focus: string | null, seenAt: string |
 }
 
 export function needsYouCount(me: Me, ws: Workspace, focus: string | null): number {
-  return build(me, ws, focus).filter((i) => i.needs).length + buildNews(me, ws, focus, ws.seenAt).filter((n) => n.fresh).length;
+  const done = new Set(ws.done);
+  return build(me, ws, focus).filter((i) => i.needs && !done.has(i.key)).length + buildNews(me, ws, focus, ws.seenAt).filter((n) => n.fresh && !done.has(n.key)).length;
+}
+
+type FeedItem = { key: string; tone: 'needs' | 'new' | 'seen'; title: string; sub: string; path: string | null; action: string };
+
+/**
+ * Today's feed: what needs you, what is new and what happened lately, as one line of cards,
+ * one at a time. Arrows (or a swipe) move through them; the check takes one off for good,
+ * the cross sets it aside to the end of the line for now.
+ */
+function TodayFeed({ items, onDone, onOpen }: { items: FeedItem[]; onDone: (key: string) => void; onOpen: (path: string) => void }) {
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [i, setI] = useState(0);
+  const [dir, setDir] = useState<'next' | 'prev'>('next');
+  const [goingOut, setGoingOut] = useState<'done' | 'skip' | null>(null);
+  const startX = useRef<number | null>(null);
+  const order = [...items.filter((x) => !skipped.includes(x.key)), ...skipped.map((k) => items.find((x) => x.key === k)).filter((x): x is FeedItem => Boolean(x))];
+  const n = order.length;
+  const at = n ? Math.min(i, n - 1) : 0;
+  const cur = order[at];
+  const move = (d: 1 | -1) => {
+    if (n < 2) return;
+    setDir(d === 1 ? 'next' : 'prev');
+    setI((x) => (Math.min(x, n - 1) + d + n) % n);
+  };
+  const leave = (how: 'done' | 'skip') => {
+    if (!cur || goingOut) return;
+    setGoingOut(how);
+    window.setTimeout(() => {
+      if (how === 'done') onDone(cur.key);
+      else setSkipped((s) => [...s.filter((k) => k !== cur.key), cur.key]);
+      setDir('next');
+      setGoingOut(null);
+    }, 220);
+  };
+  if (!cur) return null;
+  return (
+    <section className="bl-feed" aria-label="Today" aria-roledescription="carousel">
+      <div className="bl-feed-head">
+        <span className="bl-label">
+          {items.filter((x) => x.tone === 'needs').length ? `${items.filter((x) => x.tone === 'needs').length} need you` : 'Your updates'}
+        </span>
+        <span className="bl-small num" aria-live="polite">
+          {at + 1} of {n}
+        </span>
+      </div>
+      <div className="bl-feed-row">
+        <button type="button" className="bl-ghost bl-round bl-feed-arrow" aria-label="Previous" disabled={n < 2} onClick={() => move(-1)}>
+          <span className="bl-flip"><Go /></span>
+        </button>
+        <article
+          key={`${cur.key}-${at}`}
+          className={`bl-glass-card bl-feed-card tone-${cur.tone} in-${dir}${goingOut ? ` out-${goingOut}` : ''}`}
+          aria-label={`${at + 1} of ${n}`}
+          onPointerDown={(e) => (startX.current = e.clientX)}
+          onPointerUp={(e) => {
+            if (startX.current === null) return;
+            const dx = e.clientX - startX.current;
+            startX.current = null;
+            if (Math.abs(dx) > 50) move(dx < 0 ? 1 : -1);
+          }}
+        >
+          <span className={`bl-feed-tag tone-${cur.tone}`}>{cur.tone === 'needs' ? 'Needs you' : cur.tone === 'new' ? 'New' : 'Lately'}</span>
+          <b className="bl-feed-title">{cur.title}</b>
+          {cur.sub && <span className="bl-small">{cur.sub}</span>}
+          <div className="bl-feed-actions">
+            {cur.path && (
+              <a className="bl-btn" href={`#${cur.path}`} onClick={(e) => { e.preventDefault(); onOpen(cur.path!); }}>
+                {cur.action}
+              </a>
+            )}
+            <span className="bl-feed-marks">
+              <button type="button" className="bl-feed-mark done" aria-label="Done, take it off the list" onClick={() => leave('done')}>
+                <Tick />
+              </button>
+              <button type="button" className="bl-feed-mark skip" aria-label="Not now, show the next one" onClick={() => leave('skip')}>
+                <Cross />
+              </button>
+            </span>
+          </div>
+        </article>
+        <button type="button" className="bl-ghost bl-round bl-feed-arrow" aria-label="Next" disabled={n < 2} onClick={() => move(1)}>
+          <Go />
+        </button>
+      </div>
+      {n > 1 && (
+        <div className="bl-feed-dots" aria-hidden="true">
+          {order.slice(0, 12).map((x, k) => (
+            <i key={x.key} className={k === at ? 'on' : ''} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Cross() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
 }
 
 function ago(iso: string): string {
@@ -251,14 +353,6 @@ function ago(iso: string): string {
   return d === 1 ? 'yesterday' : `${d} days ago`;
 }
 
-function Alert() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 4l9 16H3z" />
-      <path d="M12 10v4M12 17.2v.1" />
-    </svg>
-  );
-}
 function Tick() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -333,32 +427,14 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   if (!ws.data) return <main aria-busy="true" />;
   const news = buildNews(me, ws.data, focus, firstSeen.current ?? null);
   const items = build(me, ws.data, focus);
-  const needs = items.filter((i) => i.needs);
-  const quiet = items.filter((i) => !i.needs).slice(0, 4);
+  const done = new Set(ws.data.done);
+  const feed: FeedItem[] = [
+    ...items.filter((i) => i.needs).map((it) => ({ key: it.key, tone: 'needs' as const, title: it.title, sub: [it.label.replace(' · ', ', '), it.body].filter(Boolean).join('. '), path: it.action?.path ?? null, action: it.action?.label ?? 'Open' })),
+    ...news.filter((x) => x.fresh).map((x) => ({ key: x.key, tone: 'new' as const, title: x.title, sub: ago(x.at), path: x.path, action: 'Open' })),
+    ...news.filter((x) => !x.fresh).map((x) => ({ key: x.key, tone: 'seen' as const, title: x.title, sub: ago(x.at), path: x.path, action: 'Open' })),
+    ...items.filter((i) => !i.needs).slice(0, 4).map((it) => ({ key: it.key, tone: 'seen' as const, title: it.title, sub: [it.label.replace(' · ', ', '), it.body].filter(Boolean).join('. '), path: it.action?.path ?? null, action: it.action?.label ?? 'Open' })),
+  ].filter((x) => !done.has(x.key));
   const next = nextPost(ws.data, isTeam ? focus : me.clientId ?? focus);
-
-  const row = (it: Item, i: number) => (
-    <li key={it.key}>
-      <a
-        className="bl-row bl-in"
-        style={{ animationDelay: `${120 + i * 50}ms` }}
-        href={`#${it.action?.path ?? 'today'}`}
-        onClick={(e) => {
-          e.preventDefault();
-          if (it.action) go(it.action.path);
-        }}
-      >
-        <span className={`bl-row-ic${it.needs ? ' alert' : ''}`}>{it.needs ? <Alert /> : <Tick />}</span>
-        <span className="bl-row-txt">
-          <b>{it.title}</b>
-          <small>{[it.label.replace(' · ', ', '), it.body].filter(Boolean).join('. ')}</small>
-        </span>
-        <span className="bl-row-go">
-          <Go />
-        </span>
-      </a>
-    </li>
-  );
 
   // A client still being set up sees their checklist first.
   const mine = !isTeam && me.clientId ? ws.data.clients.find((c) => c.id === me.clientId) : undefined;
@@ -377,55 +453,9 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
       )}
       {next && <NextUp t={next} isTeam={isTeam} go={go} />}
 
-      {needs.length > 0 && (
-        <section>
-          <h2 className="bl-section-title">
-            Needs you <span className="num">{needs.length}</span>
-          </h2>
-          <ul className="bl-rows">{needs.map(row)}</ul>
-        </section>
-      )}
+      {feed.length > 0 && <TodayFeed items={feed} onDone={ws.markDone} onOpen={go} />}
 
-      {news.length > 0 && (
-        <section aria-labelledby="new-title">
-          <h2 id="new-title" className="bl-section-title">
-            What&rsquo;s new {news.some((n) => n.fresh) && <span className="num">{news.filter((n) => n.fresh).length}</span>}
-          </h2>
-          <ul className="bl-rows">
-            {news.map((n, i) => (
-              <li key={n.key}>
-                <a
-                  className={`bl-row bl-in${n.fresh ? ' is-fresh' : ''}`}
-                  style={{ animationDelay: `${120 + i * 40}ms` }}
-                  href={`#${n.path}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    go(n.path);
-                  }}
-                >
-                  <span className="bl-row-ic">{n.fresh ? <span className="bl-new-dot" aria-label="New" /> : <Tick />}</span>
-                  <span className="bl-row-txt">
-                    <b>{n.title}</b>
-                    <small>{ago(n.at)}</small>
-                  </span>
-                  <span className="bl-row-go">
-                    <Go />
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {quiet.length > 0 && (
-        <section>
-          <h2 className="bl-section-title">Lately</h2>
-          <ul className="bl-rows">{quiet.map(row)}</ul>
-        </section>
-      )}
-
-      {items.length === 0 && news.length === 0 && !next && (
+      {feed.length === 0 && !next && (
         <div className="bl-glass-card bl-in" style={{ alignItems: 'center', textAlign: 'center', padding: '28px 20px' }}>
           <b style={{ fontSize: 17 }}>You are all caught up</b>
           <span className="bl-small">

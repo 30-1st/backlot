@@ -33,8 +33,8 @@ function dayOf(c: Campaign, p: Post): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export function CampaignsScreen(props: ScreenProps & { campaignId: string | null }) {
-  const { ws, go, focus, campaignId } = props;
+export function CampaignsScreen(props: ScreenProps & { campaignId: string | null; listOnly?: boolean }) {
+  const { ws, go, focus, campaignId, listOnly } = props;
   const [view, setView] = useState<'day' | 'month' | 'list'>('day');
   const [day, setDay] = useState<string | null>(null);
   if (!ws.data) return <main aria-busy="true" />;
@@ -61,7 +61,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
       )}
     </div>
   );
-  if (!campaignId && view === 'month' && timed) {
+  if (!listOnly && !campaignId && view === 'month' && timed) {
     return (
       <MonthView
         {...props}
@@ -74,14 +74,14 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
       />
     );
   }
-  if (!campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} onAll={() => setView('list')} />;
+  if (!listOnly && !campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} onAll={() => setView('list')} />;
 
   const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {bar}
+      {!listOnly && bar}
       <h1 className="bl-h1 bl-rise">Campaigns</h1>
       {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
       {list.length === 0 ? (
@@ -163,7 +163,7 @@ function DiscardedList({ ws, go, focus }: ScreenProps) {
 }
 
 /** A discarded campaign: what that means, and the way back. */
-function DiscardedView({ ws, go, campaign }: ScreenProps & { campaign: Campaign }) {
+function DiscardedView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Campaign }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function restore() {
@@ -185,7 +185,7 @@ function DiscardedView({ ws, go, campaign }: ScreenProps & { campaign: Campaign 
         aria-label="All campaigns"
         onClick={(e) => {
           e.preventDefault();
-          go('campaigns');
+          go(isTeam ? 'campaigns.all' : 'campaigns');
         }}
       >
         <Back />
@@ -350,7 +350,7 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="bl-bar" style={{ justifyContent: 'flex-start', gap: 12 }}>
-        <button type="button" className="bl-ghost bl-round" aria-label="All campaigns" onClick={() => go('campaigns')}>
+        <button type="button" className="bl-ghost bl-round" aria-label="All campaigns" onClick={() => go(isTeam ? 'campaigns.all' : 'campaigns')}>
           <Back />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>

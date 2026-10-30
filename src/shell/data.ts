@@ -70,15 +70,17 @@ export type Workspace = {
   activity: Activity[];
   /** When this person last looked at what is new, or null if never. */
   seenAt: string | null;
+  /** Today's feed items this person checked off (keys). */
+  done: string[];
 };
 
-const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], discarded: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null };
+const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], discarded: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null, done: [] };
 const ACTIVITY_DAYS = 14;
 
 async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
   const since = new Date(Date.now() - ACTIVITY_DAYS * 86_400_000).toISOString();
-  const [c, v, k, p, s, m, lg, md, bd, sn] = await Promise.all([
+  const [c, v, k, p, s, m, lg, md, bd, sn, dn] = await Promise.all([
     supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at, stage, stage_note').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
@@ -98,6 +100,7 @@ async function load(): Promise<Workspace> {
     supabase.from('library_items').select('client_id, added_by, created_at').gt('created_at', since).is('removed_at', null).order('created_at', { ascending: false }).limit(300),
     supabase.from('inspiration_items').select('client_id, added_by, created_at').gt('created_at', since).is('removed_at', null).order('created_at', { ascending: false }).limit(200),
     supabase.from('notice_seen').select('seen_at').maybeSingle(),
+    supabase.from('inbox_done').select('item_key').limit(1000),
   ]);
   const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error ?? lg.error ?? md.error ?? bd.error ?? sn.error;
   if (error) throw new Error(error.message);
@@ -139,6 +142,7 @@ async function load(): Promise<Workspace> {
       ...(bd.data ?? []).map((r: Json): Activity => ({ kind: 'board', clientId: r.client_id, at: r.created_at, actorId: r.added_by ?? null })),
     ].sort((a, b) => b.at.localeCompare(a.at)),
     seenAt: (sn.data as Json | null)?.seen_at ?? null,
+    done: (dn.data ?? []).map((r: Json) => String(r.item_key)),
     mediaCounts: (m.data ?? []).reduce((acc: Record<string, number>, r: Json) => {
       acc[r.client_id] = (acc[r.client_id] ?? 0) + 1;
       return acc;
@@ -204,7 +208,18 @@ export function useWorkspace(enabled = true) {
     setData((d) => (d ? { ...d, seenAt: at } : d));
   }, []);
 
-  return { data, error, refresh, patchPost, markSeen };
+  /** Checks an item off Today's feed: gone from the feed and the badge, on every device. */
+  const markDone = useCallback((key: string) => {
+    setData((d) => (d ? { ...d, done: [...d.done, key] } : d));
+    const db = supabase;
+    if (!db) return;
+    void db.auth.getSession().then(({ data: s }) => {
+      const uid = s.session?.user.id;
+      if (uid) void db.from('inbox_done').upsert({ user_id: uid, item_key: key.slice(0, 200) }, { onConflict: 'user_id,item_key', ignoreDuplicates: true }).then(() => undefined);
+    });
+  }, []);
+
+  return { data, error, refresh, patchPost, markSeen, markDone };
 }
 
 /** "12M", "3H", "OCT 22": short rail times. */
