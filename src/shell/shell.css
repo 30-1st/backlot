@@ -1682,6 +1682,7 @@ body[data-bl='light'] .home-logo {
 }
 .bl-next-half { font-size: 17px; font-weight: 600; padding-bottom: 6px; }
 .bl-next-card { gap: 14px; }
+.bl-next-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .bl-next-text { margin: 0; font-size: 16px; line-height: 1.45; }
 .bl-wide { width: 100%; justify-content: center; }
 .bl-section-title { margin: 8px 0 4px; font-size: 17px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
@@ -2616,4 +2617,115 @@ html[data-vt='back']::view-transition-new(root) {
 }
 @media (prefers-reduced-motion: reduce) {
   .bl-feed-card.in-next, .bl-feed-card.in-prev, .bl-feed-card.out-done, .bl-feed-card.out-skip { animation-duration: 0.01s; }
+}
+
+/* =====================================================================
+ * Fit on every screen.
+ *  1. The dock's height is one number (--dock-room). Every screen ends above it.
+ *  2. Safe areas (notches, home bars) are padded on all four sides.
+ *  3. Nothing is ever wider than the screen: flex and grid children may shrink.
+ *  4. Single-view screens (Today, Schedule, Kris, Playground) are sized to the screen:
+ *     the frame is exactly one screen tall and the screen fills what is left under the
+ *     header. If a very small screen still cannot hold everything, that screen scrolls
+ *     inside itself, above the dock, so nothing ever hides behind it.
+ * ===================================================================== */
+.bl-root { --dock-room: calc(60px + max(18px, env(safe-area-inset-bottom))); overflow-x: clip; }
+.bl-app {
+  min-width: 0;
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: calc(var(--dock-room) + 24px);
+}
+.bl-app.no-dock { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.bl-app > *, .bl-app main, .bl-app main > * { min-width: 0; }
+.bl-app img, .bl-app video, .bl-app canvas, .bl-app svg, .bl-app iframe { max-width: 100%; }
+.bl-app :where(h1, h2, h3, p, b, li, dd, td, label, .bl-card-title) { overflow-wrap: anywhere; }
+
+.bl-app:has(> main.bl-fit) { height: 100vh; height: 100dvh; min-height: 0; }
+.bl-app > main.bl-fit {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  /* room so focus rings and card shadows are not clipped by the scroller */
+  margin: -6px; padding: 6px;
+}
+.bl-app > main.bl-fit::-webkit-scrollbar { display: none; }
+
+@media (max-width: 380px) {
+  .bl-app { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); gap: 16px; }
+}
+@media (min-width: 900px) {
+  .bl-root { --dock-room: 0px; }
+  .bl-app { padding: max(24px, env(safe-area-inset-top)) 40px 32px 140px; }
+}
+
+/* Today sized to the screen: the hour, the card and the feed scale with its height. */
+.bl-today.bl-fit { gap: clamp(8px, 1.6dvh, 20px); }
+.bl-today .bl-next { margin-top: 0; gap: 4px; }
+.bl-today .bl-hero-time { font-size: clamp(42px, 8.5dvh, 72px); }
+.bl-today .bl-next-card { gap: clamp(8px, 1.6dvh, 14px); }
+.bl-today .bl-next-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.bl-today .bl-pm.hero { max-height: clamp(110px, 26dvh, 340px); }
+.bl-feed-card { justify-self: stretch; width: 100%; min-height: 0; }
+@media (max-height: 760px) {
+  .bl-today .bl-next-text { -webkit-line-clamp: 2; font-size: 15px; }
+  .bl-today .bl-next-card .bl-btn { min-height: 40px; }
+  .bl-today .bl-next-card { padding: 14px 16px; }
+  .bl-feed-card { padding: 14px 16px; gap: 6px; }
+  .bl-feed-title { -webkit-line-clamp: 2; font-size: 16px; }
+  .bl-feed-dots { display: none; }
+}
+
+/* Schedule sized to the screen: the two switches get slimmer on short screens. */
+.bl-sched.bl-fit { gap: clamp(8px, 1.6dvh, 14px); }
+@media (max-height: 760px) {
+  .bl-sched .bl-seg button { min-height: 36px; font-size: 14px; }
+  .bl-sched .bl-seg { border-radius: 22px; padding: 3px; }
+  .bl-sched .bl-sched-head { min-height: 36px; }
+}
+
+/* Kris: the chat fills the screen, the box takes whatever height is left and scrolls. */
+.bl-kris.bl-fit { overflow: hidden; gap: 12px; }
+.bl-kris.bl-fit .bl-kris-box { flex: 1 1 auto; min-height: 120px; max-height: none; }
+.bl-kris.bl-fit .bl-kris-compose { padding: 0; }
+@media (max-height: 700px) {
+  .bl-kris .bl-h1 { font-size: 34px; }
+}
+
+/* Playground: the stage shrinks with the screen so the three ways in always show. */
+.bl-play.bl-fit { min-height: 0; justify-content: flex-start; gap: clamp(8px, 2dvh, 28px); }
+.bl-play .bl-paper { max-height: 22dvh; display: flex; justify-content: center; }
+.bl-play .bl-paper svg { width: auto; max-width: 100%; height: 100%; max-height: 22dvh; }
+.bl-play .bl-holo-stage { height: clamp(200px, calc(78dvh - 360px), 400px); margin-top: 0; flex-shrink: 0; }
+@media (max-height: 700px) {
+  .bl-play .bl-greet { font-size: 26px !important; }
+  .bl-play .bl-paper { display: none; }
+  .bl-play .bl-holo-stage { height: clamp(190px, calc(100dvh - 320px), 400px); }
+}
+
+/* Wide or sideways screens: the next post on the left, your updates on the right. */
+@media (min-width: 1180px), (orientation: landscape) and (max-height: 560px) and (min-width: 600px) {
+  .bl-today.bl-fit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: start; column-gap: 24px; max-width: 1000px; }
+  .bl-today.bl-fit > .bl-next, .bl-today.bl-fit > .bl-next-card { grid-column: 1; }
+  .bl-today.bl-fit > .bl-feed { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+  .bl-today.bl-fit > .bl-feed:only-of-type { margin-top: 0; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .bl-today .bl-hero-time { font-size: 40px; }
+  .bl-today .bl-next-text { -webkit-line-clamp: 2; }
+}
+/* The smallest phones: drop the extras, keep the hour, the post, the button and the feed. */
+@media (max-height: 620px) {
+  .bl-today .bl-next-chips { display: none; }
+  .bl-today .bl-next > .bl-small:last-child { display: none; }
+  .bl-feed-card .bl-small { -webkit-line-clamp: 1; }
+}
+@media (max-width: 380px) {
+  .bl-feed-actions { flex-wrap: nowrap; gap: 6px; }
+  .bl-feed-actions .bl-btn { padding: 0 16px; min-height: 40px; }
+  .bl-feed-marks { gap: 6px; }
+  .bl-feed-mark { width: 40px; height: 40px; }
 }

@@ -90,7 +90,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
   const label = (m: KrisMessage) => (m.role === 'kris' ? 'Kris' : m.role === you ? 'You' : m.role === 'client' ? `@${client.handle}` : 'Your team');
 
   return (
-    <main className="bl-flow bl-kris">
+    <main className="bl-flow bl-kris bl-fit">
       <div className="bl-kris-head">
         <div>
           <h1 className="bl-h1 bl-rise">Kris</h1>

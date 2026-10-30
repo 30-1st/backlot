@@ -35,8 +35,8 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
         const total = ws.data ? stepsFor(ws.data, c).length : 0;
         return (
           <section key={c.id} className="bl-glass-card bl-rise" aria-label={`@${c.handle}`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <b style={{ fontSize: 17 }}>@{c.handle}</b>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '6px 12px' }}>
+              <b style={{ fontSize: 17, minWidth: 0, overflowWrap: 'anywhere' }}>@{c.handle}</b>
               <span className="bl-chip-ink">{v ? (v.approved ? 'Voice approved' : 'Voice waiting') : 'No voice yet'}</span>
             </div>
             <div className="bl-row-actions">

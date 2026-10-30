@@ -243,7 +243,7 @@ function LinkNudge({ ws, clientId }: { ws: ScreenProps['ws']; clientId: string }
 }
 
 /** Schedule: one post per card, next post due first. Swipe for the next one; past posts go grey. */
-export function DayView({ ws, go, focus, isTeam, single, onAll, bar, startDay }: ScreenProps & { onAll: () => void; bar?: React.ReactNode; startDay?: string | null }) {
+export function DayView({ ws, go, focus, isTeam, single, bar, startDay }: ScreenProps & { bar?: React.ReactNode; startDay?: string | null }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
@@ -303,7 +303,7 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, bar, startDay }:
   const cur = all[index];
   const laneClient = single ?? focus ?? null;
   return (
-    <main className="bl-sched">
+    <main className="bl-sched bl-fit">
       <h1 className="bl-sr">Schedule</h1>
       {bar}
       {laneClient && (
@@ -413,9 +413,6 @@ export function DayView({ ws, go, focus, isTeam, single, onAll, bar, startDay }:
         </div>
       )}
 
-      <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={onAll}>
-        See all campaigns
-      </button>
       </>
       )}
     </main>
@@ -462,7 +459,7 @@ export function MonthView({ ws, focus, isTeam, go, onDay, bar }: ScreenProps & {
   const weekdays = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2026, 1, 1 + i)).toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' }));
 
   return (
-    <main className="bl-sched">
+    <main className="bl-sched bl-fit">
       <h1 className="bl-sr">Schedule, month</h1>
       {bar}
       <div className="bl-month-head">

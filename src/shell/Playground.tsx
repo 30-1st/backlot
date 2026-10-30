@@ -7,7 +7,7 @@ import type { ScreenProps } from './Shell';
 
 export function PlaygroundScreen({ go }: ScreenProps) {
   return (
-    <main className="bl-play">
+    <main className="bl-play bl-fit">
       <div className="bl-play-head">
         <h2 className="bl-greet" style={{ fontSize: 32 }}>
           What are we making?

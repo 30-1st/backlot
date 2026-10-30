@@ -271,6 +271,8 @@ function TodayFeed({ items, onDone, onOpen }: { items: FeedItem[]; onDone: (key:
     window.setTimeout(() => {
       if (how === 'done') onDone(cur.key);
       else setSkipped((s) => [...s.filter((k) => k !== cur.key), cur.key]);
+      // The card after this one slides into the same place; from the last card, back to the first.
+      setI(at >= n - 1 ? 0 : at);
       setDir('next');
       setGoingOut(null);
     }, 220);
@@ -395,7 +397,7 @@ function NextUp({ t, isTeam, go }: { t: Timed; isTeam: boolean; go: (p: string) 
       <article className="bl-glass-card bl-next-card bl-in" style={{ animationDelay: '80ms' }}>
         {mediaId ? <PostMedia id={mediaId} size="hero" saveAs={`${campaignTitle(t.campaign)}-post-${t.post.slot}`} /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} /> : null}
         <p className="bl-next-text">{text}</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="bl-next-chips">
           <span className={`bl-chip-ink${blocked ? ' bad' : ''}`}>{blocked ? 'Needs a detail' : approved ? 'Approved' : 'Waiting for OK'}</span>
           {!isTeam && !blocked && <span className="bl-chip-ink">You post it yourself</span>}
         </div>
@@ -441,7 +443,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   const setup = mine && setupLeft(ws.data, mine) > 0 ? mine : undefined;
 
   return (
-    <main className="bl-today">
+    <main className={`bl-today${setup ? "" : " bl-fit"}`}>
       <h1 className="bl-sr">Today</h1>
       {setup && (
         <section className="bl-glass-card bl-in" aria-labelledby="setup-title">

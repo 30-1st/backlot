@@ -74,7 +74,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
       />
     );
   }
-  if (!listOnly && !campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} onAll={() => setView('list')} />;
+  if (!listOnly && !campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} />;
 
   const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
