@@ -86,7 +86,19 @@ export function timedPosts(ws: Workspace, focus: string | null): Timed[] {
 
 /** The next post still to go out: its window has not closed and nobody has marked it posted. */
 export function nextPost(ws: Workspace, focus: string | null, now = Date.now()): Timed | null {
-  return timedPosts(ws, focus).find((t) => t.end.getTime() > now && t.post.review !== 'posted') ?? null;
+  return timedPosts(ws, focus).find((t) => t.end.getTime() > now && t.post.review !== 'posted' && t.post.review !== 'not_posted') ?? null;
+}
+
+const DAY = 86_400_000;
+/** Past posts the client approved that still need the X link (or a "Not posted"). */
+export function missingLinks(ws: Workspace, clientId: string, now = Date.now()): Timed[] {
+  return timedPosts(ws, clientId).filter(
+    (t) => !t.campaign.discardedAt && t.end.getTime() <= now && (t.post.review === 'approved' || (t.post.review === 'posted' && !t.post.xPostId)),
+  );
+}
+/** Those more than 3 days past their time: campaigns hide until they are settled (Backlot's terms). */
+export function overdueLinks(ws: Workspace, clientId: string, now = Date.now()): Timed[] {
+  return missingLinks(ws, clientId, now).filter((t) => now - t.end.getTime() > 3 * DAY);
 }
 
 /** "4:00 PM" in the client's time zone, split so the numbers can be set large. */

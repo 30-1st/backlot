@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { bil } from '../lib/team';
 import { PostMedia, ShotFrame } from './PostMedia';
-import { clock, dayParts, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
+import { clock, dayParts, missingLinks, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
 
 // Schedule: one post at a time, the next post due first. Swipe for the next in line. A post
@@ -113,7 +113,7 @@ function readDone(k: string): number[] {
 }
 
 /** A past post: where it ended up, the follow-ups to tick, and the posting link. */
-function PastPost({ t, ws }: { t: Timed; ws: ScreenProps['ws'] }) {
+export function PastPost({ t, ws }: { t: Timed; ws: ScreenProps['ws'] }) {
   const k = `${t.campaign.id}:${t.post.slot}`;
   const steps = followUps(t.post.post);
   const [done, setDone] = useState<number[]>(() => readDone(k));
@@ -201,8 +201,48 @@ function PastPost({ t, ws }: { t: Timed; ws: ScreenProps['ws'] }) {
   );
 }
 
+/**
+ * Reminder for a missing posting link: at most once every 12 hours on this device, gone after
+ * 15 seconds or when they leave the Schedule. Once every link is in, it never shows.
+ */
+function LinkNudge({ ws, clientId }: { ws: ScreenProps['ws']; clientId: string }) {
+  const missing = ws.data ? missingLinks(ws.data, clientId) : [];
+  const first = missing[0];
+  const k = `backlot.linknudge.${clientId}`;
+  const [show, setShow] = useState(() => {
+    try {
+      return Date.now() - Number(localStorage.getItem(k) ?? 0) > 12 * 3_600_000;
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    if (!show || !first) return;
+    try {
+      localStorage.setItem(k, String(Date.now()));
+    } catch {
+      /* this device only */
+    }
+    const t = window.setTimeout(() => setShow(false), 15_000);
+    return () => window.clearTimeout(t);
+  }, [show, first, k]);
+  if (!show || !first) return null;
+  return (
+    <aside className="bl-glass-card bl-nudge" role="status">
+      <b>
+        {missing.length === 1 ? 'One posted post needs its link' : `${missing.length} posted posts need their links`}
+      </b>
+      <span className="bl-small">Add it below, or mark it Not posted. After 3 days without one, campaigns pause until it is in.</span>
+      <PastPost t={first} ws={ws} />
+      <button type="button" className="bl-linkish bl-start" onClick={() => setShow(false)}>
+        Later
+      </button>
+    </aside>
+  );
+}
+
 /** Schedule: one post per card, next post due first. Swipe for the next one; past posts go grey. */
-export function DayView({ ws, go, focus, onAll, onMonth, startDay }: ScreenProps & { onAll: () => void; onMonth?: () => void; startDay?: string | null }) {
+export function DayView({ ws, go, focus, isTeam, single, onAll, onMonth, startDay }: ScreenProps & { onAll: () => void; onMonth?: () => void; startDay?: string | null }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
@@ -280,6 +320,7 @@ export function DayView({ ws, go, focus, onAll, onMonth, startDay }: ScreenProps
           )}
         </span>
       </div>
+      {!isTeam && single && <LinkNudge ws={ws} clientId={single} />}
       {error && (
         <p className="bl-error" role="alert">
           {error}

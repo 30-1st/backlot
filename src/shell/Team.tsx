@@ -12,6 +12,7 @@ import type { ScreenProps } from './Shell';
 export function TeamScreen({
   me,
   go,
+  ws,
   isTeam,
   theme,
   onSignOut,
@@ -25,7 +26,7 @@ export function TeamScreen({
     <main style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <h1 className="bl-sr">Account</h1>
 
-      {isTeam && <TeamPanel isOwner={me.role === 'owner'} />}
+      {isTeam && <TeamPanel isOwner={me.role === 'owner'} clientStages={(ws.data?.clients ?? []).map((c) => ({ id: c.id, handle: c.handle, stage: c.stage }))} onStage={() => void ws.refresh()} />}
 
       <section className="bl-card">
         <h2 className="bl-h2">You</h2>
@@ -82,7 +83,7 @@ export function TeamScreen({
   );
 }
 
-function TeamPanel({ isOwner }: { isOwner: boolean }) {
+function TeamPanel({ isOwner, clientStages, onStage }: { isOwner: boolean; clientStages: Array<{ id: string; handle: string; stage: 'onboarding' | 'active' | 'paused' }>; onStage: () => void }) {
   const [data, setData] = useState<People | null>(null);
   const [error, setError] = useState('');
   const [kind, setKind] = useState<'team' | 'client'>('team');
@@ -147,12 +148,104 @@ function TeamPanel({ isOwner }: { isOwner: boolean }) {
     }
   }
 
+  const teamPeople = (data?.people ?? []).filter((p) => p.role === 'team');
+  const has = (m: string, c: string) => (data?.grants ?? []).some((g) => g.memberId === m && g.clientId === c);
+  async function grant(m: string, c: string, on: boolean) {
+    setBusy(true);
+    try {
+      await team.accessSet(m, c, on);
+      setData((d) => (d ? { ...d, grants: on ? [...(d.grants ?? []), { memberId: m, clientId: c }] : (d.grants ?? []).filter((g) => !(g.memberId === m && g.clientId === c)) } : d));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not change access.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function stage(c: string, st: 'onboarding' | 'active' | 'paused') {
+    setBusy(true);
+    try {
+      await team.clientStage(c, st);
+      onStage();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not change the stage.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       {error && (
         <p className="bl-error" role="alert">
           {error}
         </p>
+      )}
+
+      {isOwner && data && (
+        <section className="bl-card bl-rise">
+          <h2 className="bl-h2">Who sees which clients</h2>
+          <span className="bl-small">A team member sees a client&rsquo;s info and media only when you tick it here. You always see every client.</span>
+          {teamPeople.length === 0 || data.clients.length === 0 ? (
+            <span className="bl-small">{teamPeople.length === 0 ? 'No team members yet.' : 'No clients yet.'}</span>
+          ) : (
+            <div className="bl-access">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Team member</th>
+                    {data.clients.map((c) => (
+                      <th key={c.clientId} scope="col">
+                        @{c.handle}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamPeople.map((p) => (
+                    <tr key={p.userId}>
+                      <th scope="row">@{p.username}</th>
+                      {data.clients.map((c) => (
+                        <td key={c.clientId}>
+                          <input
+                            type="checkbox"
+                            aria-label={`@${p.username} sees @${c.handle}`}
+                            checked={has(p.userId, c.clientId)}
+                            disabled={busy}
+                            onChange={(e) => void grant(p.userId, c.clientId, e.target.checked)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isOwner && clientStages.length > 0 && (
+        <section className="bl-card bl-rise">
+          <h2 className="bl-h2">Client stages</h2>
+          <span className="bl-small">Onboarding keeps campaigns closed until the checklist is done, then moves to Active by itself. Paused locks the client&rsquo;s portal to Home.</span>
+          <ul className="bl-list">
+            {clientStages.map((c) => (
+              <li key={c.id}>
+                <div className="bl-list-main">
+                  <span style={{ fontWeight: 500 }}>@{c.handle}</span>
+                </div>
+                <label className="bl-sr" htmlFor={`stage-${c.id}`}>
+                  Stage for @{c.handle}
+                </label>
+                <select id={`stage-${c.id}`} className="bl-input" style={{ width: 'auto' }} value={c.stage} disabled={busy} onChange={(e) => void stage(c.id, e.target.value as 'onboarding' | 'active' | 'paused')}>
+                  <option value="onboarding">Onboarding</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="bl-card bl-rise">

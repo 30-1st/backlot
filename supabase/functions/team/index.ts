@@ -15,6 +15,8 @@
 //   rein_client      { clientId, region? }           a client's latest trends (+ update cost)  team, that client
 //   rein_client_update { clientId, region? }         Rein checks the client's niche now  team
 //   room_preview     { clientId }                    a signed preview link to their room, 24 hours  team, that client
+//   access_set       { memberId, clientId, on }      give or take a team member's access to a client  owner
+//   client_stage     { clientId, stage, note? }      onboarding, active or paused                 owner
 //
 // Rein: a search that reuses a brief from the last 6 hours is free and never counts.
 // Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
@@ -26,7 +28,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { Budget, serviceClient } from '../_shared/spend.ts';
-import { AccessError, isTeam, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
+import { AccessError, isTeam, memberOf, requireClientAccess, requireOwnPassword, requireTeam, seesClient } from '../_shared/workspace.ts';
 import { hashCode, newInviteCode, temporaryPassword } from '../_shared/invite-code.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
@@ -167,6 +169,8 @@ function briefForApp(b: any) {
 
 const InviteRequest = z.object({ role: z.enum(['team', 'client']), clientId: id.optional() });
 const ResetRequest = z.object({ userId: id });
+const AccessRequest = z.object({ memberId: id, clientId: id, on: z.boolean() });
+const StageRequest = z.object({ clientId: id, stage: z.enum(['onboarding', 'active', 'paused']), note: z.string().trim().max(300).optional() });
 const SetRequest = z.object({
   password: z.string().min(8, 'Use at least 8 characters').max(72),
   currentPassword: z.string().max(72).optional(),
@@ -245,10 +249,50 @@ async function handle(req: Request): Promise<Response> {
           }))
           .sort((a, b) => order[a.role] - order[b.role] || String(a.username).localeCompare(String(b.username)));
         const joined = new Set(people.filter((p) => p.clientId).map((p) => p.clientId));
+        // Team members see only the clients they were granted; the executive sees every grant.
+        const visible = (clients ?? []).filter((c) => seesClient(member, c.id));
+        let grants: Array<{ memberId: string; clientId: string }> = [];
+        if (member.role === 'owner') {
+          const { data: g, error: gError } = await db.from('client_access').select('member_id, client_id').eq('workspace_id', member.workspaceId);
+          if (gError) throw new Error(`Could not read access: ${gError.message}`);
+          grants = (g ?? []).map((x) => ({ memberId: x.member_id, clientId: x.client_id }));
+        }
         return reply(200, {
-          people,
-          clients: (clients ?? []).map((c) => ({ clientId: c.id, handle: c.x_handle, hasLogin: joined.has(c.id) })),
+          people: member.role === 'owner' ? people : people.filter((p) => !p.clientId || seesClient(member, p.clientId)),
+          clients: visible.map((c) => ({ clientId: c.id, handle: c.x_handle, hasLogin: joined.has(c.id) })),
+          grants,
         });
+      }
+
+      case 'access_set': {
+        if (member.role !== 'owner') throw new AccessError('Only the executive gives access to clients.');
+        const r = parse(AccessRequest, input);
+        const [{ data: who }, { data: c }] = await Promise.all([
+          db.from('workspace_members').select('role').eq('user_id', r.memberId).eq('workspace_id', member.workspaceId).maybeSingle(),
+          db.from('clients').select('id').eq('id', r.clientId).eq('owner_id', member.workspaceId).maybeSingle(),
+        ]);
+        if (!who || who.role !== 'team') throw new InputError('Access is given to team members only.', 404);
+        if (!c) throw new InputError('No such client in your workspace.', 404);
+        const { error } = r.on
+          ? await db.from('client_access').upsert({ member_id: r.memberId, client_id: r.clientId, workspace_id: member.workspaceId, granted_by: userId }, { onConflict: 'member_id,client_id' })
+          : await db.from('client_access').delete().eq('member_id', r.memberId).eq('client_id', r.clientId);
+        if (error) throw new Error(`Could not save access: ${error.message}`);
+        return reply(200, { memberId: r.memberId, clientId: r.clientId, on: r.on });
+      }
+
+      case 'client_stage': {
+        if (member.role !== 'owner') throw new AccessError('Only the executive changes a client\'s stage.');
+        const r = parse(StageRequest, input);
+        const { data, error } = await db
+          .from('clients')
+          .update({ stage: r.stage, stage_note: r.note || null, stage_at: new Date().toISOString() })
+          .eq('id', r.clientId)
+          .eq('owner_id', member.workspaceId)
+          .select('id')
+          .maybeSingle();
+        if (error) throw new Error(`Could not save the stage: ${error.message}`);
+        if (!data) throw new InputError('No such client in your workspace.', 404);
+        return reply(200, { clientId: r.clientId, stage: r.stage });
       }
 
       case 'invite_create': {

@@ -136,3 +136,12 @@ revoke all on function private.promote_trigger() from public, anon, authenticate
 create trigger promote_on_step after insert on public.onboarding_steps for each row execute function private.promote_trigger();
 create trigger promote_on_voice after insert or update of approved_by_client on public.voice_cards for each row execute function private.promote_trigger();
 create trigger promote_on_media after insert on public.library_items for each row execute function private.promote_trigger();
+
+-- Carry over today's access as the starting point (Khma, Oct 30): every current team member
+-- keeps the clients they could already see. The executive can remove any grant.
+insert into public.client_access (member_id, client_id, workspace_id, granted_by)
+select m.user_id, c.id, c.owner_id, (select o.user_id from public.workspace_members o where o.workspace_id = c.owner_id and o.role = 'owner' limit 1)
+  from public.workspace_members m
+  join public.clients c on c.owner_id = m.workspace_id
+ where m.role = 'team'
+on conflict do nothing;

@@ -15,6 +15,9 @@ export type Client = {
   /** Brand kit changes the client suggested, waiting for the team's OK. */
   pending: Json | null;
   pendingAt: string | null;
+  /** onboarding, active or paused (Big Patch Plan, Phase 3). */
+  stage: 'onboarding' | 'active' | 'paused';
+  stageNote: string | null;
 };
 export type Voice = { clientId: string; card: Json; approved: boolean; updatedAt: string };
 export type Campaign = {
@@ -76,7 +79,7 @@ async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
   const since = new Date(Date.now() - ACTIVITY_DAYS * 86_400_000).toISOString();
   const [c, v, k, p, s, m, lg, md, bd, sn] = await Promise.all([
-    supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at').order('created_at'),
+    supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at, stage, stage_note').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
     supabase
       .from('campaigns')
@@ -113,7 +116,7 @@ async function load(): Promise<Workspace> {
   }));
   const gone = new Set(campaigns.filter((x) => x.discardedAt).map((x) => x.id));
   return {
-    clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null })),
+    clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null, stage: r.stage ?? 'active', stageNote: r.stage_note ?? null })),
     voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at })),
     campaigns: campaigns.filter((x) => !x.discardedAt),
     discarded: campaigns.filter((x) => x.discardedAt),

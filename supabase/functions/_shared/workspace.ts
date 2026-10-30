@@ -1,8 +1,10 @@
 // Who the signed-in person is inside Backlot's private workspace, read by the server.
 //
 // Roles (public.workspace_members):
-//   owner   the founder; one per workspace
-//   team    sees every client, runs Bil and Rein, makes invites, resets passwords
+//   owner   the executive; one per workspace; sees every client, grants access, and is
+//           the only one who resets other people's passwords
+//   team    sees the clients the owner granted them (client_access), runs Bil and Rein
+//           for those clients, makes invites
 //   client  sees only their own client; approves posts and answers Bil
 //   visitor signed up without an invite to save narrations; the Playground only, no
 //           client data, no Bil, no chats or sharing
@@ -22,6 +24,8 @@ export type Member = {
   clientId: string | null;
   /** True right after a team password reset, until they choose their own. */
   mustChangePassword: boolean;
+  /** Team members only: the clients the executive granted. Null for the owner (all) and clients. */
+  granted: Set<string> | null;
 };
 
 /** Thrown when someone signed in tries something their role does not allow. */
@@ -41,13 +45,27 @@ export async function memberOf(userId: string): Promise<Member | null> {
   ]);
   if (error) throw new Error(`Could not read your membership: ${error.message}`);
   if (!data) return null;
+  let granted: Set<string> | null = null;
+  if (data.role === 'team') {
+    const { data: rows, error: gError } = await db.from('client_access').select('client_id').eq('member_id', userId);
+    if (gError) throw new Error(`Could not read your client access: ${gError.message}`);
+    granted = new Set((rows ?? []).map((r: { client_id: string }) => r.client_id));
+  }
   return {
     userId,
     workspaceId: data.workspace_id,
     role: data.role as Role,
     clientId: data.client_id,
     mustChangePassword: me?.must_change_password ?? false,
+    granted,
   };
+}
+
+/** True when this person may see this client: the owner always, team when granted, a client for themselves. */
+export function seesClient(m: Member, clientId: string): boolean {
+  if (m.role === 'owner') return true;
+  if (m.role === 'team') return m.granted?.has(clientId) ?? false;
+  return m.clientId === clientId;
 }
 
 export function isTeam(m: Member): boolean {
@@ -64,8 +82,8 @@ export function requireTeam(m: Member): void {
   if (!isTeam(m)) throw new AccessError('Only your Backlot team can do this.');
 }
 
-/** Team may act for any client in the workspace; a client only for themselves. */
+/** The owner may act for any client; team only for granted clients; a client only for themselves. */
 export function requireClientAccess(m: Member, clientId: string): void {
-  if (isTeam(m)) return;
-  if (m.clientId !== clientId) throw new AccessError('That is not your account.');
+  if (seesClient(m, clientId)) return;
+  throw new AccessError(isTeam(m) ? 'The executive has not given you access to this client.' : 'That is not your account.');
 }

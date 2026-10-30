@@ -20,7 +20,7 @@ import { generateText, Output } from 'npm:ai@7.0.142';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { id, isoDate, shortText, text, z } from './schemas/common.ts';
-import { isTeam, type Member, requireClientAccess, requireTeam } from './workspace.ts';
+import { isTeam, type Member, requireClientAccess, requireTeam, seesClient } from './workspace.ts';
 import {
   ClientProfile,
   ClientProfileBase,
@@ -979,7 +979,7 @@ export async function askBil(m: Member, req: z.infer<typeof AskRequest>) {
     const db = serviceClient();
     const { data: clients, error } = await db.from('clients').select('id, x_handle, profile').eq('owner_id', m.workspaceId).order('created_at').limit(50);
     if (error) throw new Error(`Could not read the clients: ${error.message}`);
-    const list = (clients ?? []).map((c: any) => ({ id: c.id as string, handle: String(c.x_handle), niche: String(c.profile?.niche ?? '').slice(0, 120) }));
+    const list = (clients ?? []).filter((c: any) => seesClient(m, c.id)).map((c: any) => ({ id: c.id as string, handle: String(c.x_handle), niche: String(c.profile?.niche ?? '').slice(0, 120) }));
     const focus = req.clientId ? list.find((c) => c.id === req.clientId) : undefined;
     const kit = focus ? await loadKit(db, focus.id, m.workspaceId).catch(() => null) : null;
 
@@ -1618,6 +1618,46 @@ export async function startCampaign(ownerId: string, req: CampaignRequest) {
 }
 
 /** Resumes a campaign paused at the month's budget. */
+/**
+ * Posts the client approved whose time passed more than 3 days ago with no posting link and
+ * no "Not posted". Day-level and generous (a day of slack for time zones). The app shows the
+ * same list on Home and the Schedule, with a box to add each link.
+ */
+export async function overdueLinks(db: SupabaseClient, clientId: string, ownerId: string): Promise<Array<{ campaignId: string; slot: number }>> {
+  const { data: camps, error } = await db.from('campaigns').select('id, request').eq('client_id', clientId).eq('owner_id', ownerId).is('discarded_at', null);
+  if (error) throw new Error(`Could not read campaigns: ${error.message}`);
+  const starts = new Map<string, string>();
+  for (const c of (camps ?? []) as Array<{ id: string; request: { startDate?: unknown } | null }>) {
+    const d = String(c.request?.startDate ?? '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) starts.set(c.id, d);
+  }
+  if (!starts.size) return [];
+  const { data: posts, error: pError } = await db
+    .from('campaign_posts').select('campaign_id, slot, review, x_post_id, post').in('campaign_id', [...starts.keys()]).in('review', ['approved', 'posted']);
+  if (pError) throw new Error(`Could not read posts: ${pError.message}`);
+  const cutoff = Date.now() - 4 * 86_400_000;
+  return (posts ?? [])
+    .filter((p: any) => p.review === 'approved' || !p.x_post_id)
+    .filter((p: any) => {
+      const day = Date.parse(`${starts.get(p.campaign_id)}T00:00:00Z`) + Number(p.post?.dayOffset ?? 0) * 86_400_000;
+      return Number.isFinite(day) && day < cutoff;
+    })
+    .map((p: any) => ({ campaignId: p.campaign_id as string, slot: p.slot as number }));
+}
+
+/** New campaigns wait while a client is paused or owes posting links (Backlot's terms). */
+export async function requireInGoodStanding(clientId: string, ownerId: string): Promise<void> {
+  const db = serviceClient();
+  const { data: c, error } = await db.from('clients').select('stage').eq('id', clientId).eq('owner_id', ownerId).maybeSingle();
+  if (error) throw new Error(`Could not read the client: ${error.message}`);
+  if (!c) throw new BilInputError('No such client.', 404);
+  if (c.stage === 'paused') throw new BilInputError('This client is paused. The executive can set them back to active.', 409);
+  const owed = await overdueLinks(db, clientId, ownerId);
+  if (owed.length) {
+    throw new BilInputError(`${owed.length} posted ${owed.length === 1 ? 'post is' : 'posts are'} missing the X link (or a "Not posted"). Campaigns wait until ${owed.length === 1 ? 'it is' : 'they are'} added on the Schedule.`, 409);
+  }
+}
+
 export async function resumeCampaign(ownerId: string, campaignId: string) {
   const db = serviceClient();
   const { data } = await db.from('campaigns').select('id, hold, discarded_at').eq('id', campaignId).eq('owner_id', ownerId).maybeSingle();

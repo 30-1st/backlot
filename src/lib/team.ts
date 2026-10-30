@@ -87,6 +87,8 @@ export type Person = {
 export type People = {
   people: Person[];
   clients: { clientId: string; handle: string; hasLogin: boolean }[];
+  /** The executive only: which team member sees which client. */
+  grants?: { memberId: string; clientId: string }[];
 };
 
 export type KrisMessage = {
@@ -119,6 +121,8 @@ export const team = {
   invite: (role: 'team' | 'client', clientId?: string) =>
     call<{ code: string; expiresAt: string }>('team', 'invite_create', { role, clientId }),
   resetPassword: (userId: string) => call<{ temporaryPassword: string }>('team', 'password_reset', { userId }),
+  accessSet: (memberId: string, clientId: string, on: boolean) => call<{ on: boolean }>('team', 'access_set', { memberId, clientId, on }),
+  clientStage: (clientId: string, stage: 'onboarding' | 'active' | 'paused', note?: string) => call<{ stage: string }>('team', 'client_stage', { clientId, stage, note }),
   reinSearch: (niche: string, region: ReinRegion) => call<{ brief: ReinBrief; reused: boolean }>('team', 'rein_search', { niche, region }),
   /** A signed link to a client's room preview, good for 24 hours. */
   roomPreview: (clientId: string) => call<{ url: string; expiresAt: string }>('team', 'room_preview', { clientId }),

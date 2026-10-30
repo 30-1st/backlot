@@ -25,6 +25,7 @@ import { AddClientFlow } from './AddClientFlow';
 import { ReinScreen } from './Rein';
 import { liftSplash } from '../lib/splash';
 import { AgentPill } from './AgentPill';
+import { StandingGate, standingOf } from './Standing';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
@@ -207,6 +208,24 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       break;
     default:
       screen = <Notifications {...props} />;
+  }
+
+  // A client's portal follows their stage: paused, or owing posting links over 3 days old,
+  // locks to Home and the fix; onboarding keeps campaigns closed until the checklist is done.
+  if (room === 'client' || room === 'preview') {
+    const st = standingOf(ws, props.single ?? asMe.clientId);
+    if (st.paused || st.owed.length) screen = <StandingGate {...props} single={st.client?.id ?? props.single} />;
+    else if (st.client?.stage === 'onboarding' && head === 'campaigns') {
+      screen = (
+        <main className="bl-flow">
+          <h1 className="bl-h1 bl-rise">Campaigns open after setup</h1>
+          <p className="bl-p">Finish the setup checklist (your voice, first media, Delegate, the first call and the agreement) and your campaigns open here.</p>
+          <button type="button" className="bl-ghost bl-start" onClick={() => goIn('today')}>
+            See the checklist
+          </button>
+        </main>
+      );
+    }
   }
 
   const title =

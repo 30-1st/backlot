@@ -64,6 +64,7 @@ import {
   approveAll,
   discardCampaign,
   restoreCampaign,
+  requireInGoodStanding,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
@@ -134,18 +135,25 @@ async function handle(req: Request): Promise<Response> {
       case 'estimate': {
         requireTeam(member);
         const r = parse(EstimateRequest, input);
+        requireClientAccess(member, r.clientId);
         const kit = await loadKit(serviceClient(), r.clientId, workspaceId);
         return reply(200, estimateCampaign(r.posts, r.useTrends, JSON.stringify([kit.profile, kit.card, kit.library]).length + 200));
       }
       case 'campaign': {
         requireTeam(member);
-        const started = await startCampaign(workspaceId, parse(CampaignRequest, input));
+        const req = parse(CampaignRequest, input);
+        requireClientAccess(member, req.clientId);
+        await requireInGoodStanding(req.clientId, workspaceId);
+        const started = await startCampaign(workspaceId, req);
         if (!started.repeated) EdgeRuntime.waitUntil(kickWorker());
         return reply(202, started);
       }
       case 'resume': {
         requireTeam(member);
-        const r = await resumeCampaign(workspaceId, parse(ResumeRequest, input).campaignId);
+        const rq = parse(ResumeRequest, input);
+        const { data: rc } = await serviceClient().from('campaigns').select('client_id').eq('id', rq.campaignId).eq('owner_id', workspaceId).maybeSingle();
+        if (rc) requireClientAccess(member, rc.client_id);
+        const r = await resumeCampaign(workspaceId, rq.campaignId);
         if (r.resumed) EdgeRuntime.waitUntil(kickWorker());
         return reply(200, r);
       }

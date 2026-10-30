@@ -301,6 +301,8 @@ export function Privacy({ onBack }: { onBack: () => void }) {
           <li>Drafts are written by AI (xAI's Grok) from your approved voice and your own results. A person on your team reviews them, and you approve every post before you post it yourself.</li>
           <li>Short quotes from other public posts used to spot trends are deleted after 24 hours.</li>
           <li>Backlot is for people 18 and older. Adult content is only for adults who agreed to it.</li>
+          <li>When you post one of Backlot&rsquo;s drafts, add the link to the post on X (or mark it Not posted) within 3 days. We keep and review these links to keep posts compliant and to measure how Bil&rsquo;s work performs for your brand. If a link is more than 3 days late, campaigns pause until it is added. Not posted is always fine.</li>
+          <li>Your team can pause an account (for example, for a missed payment). A paused account keeps everything and opens only Home until it is sorted out.</li>
           <li>To delete your login and everything in it, ask your team. It is removed for good.</li>
         </ul>
         <p className="bl-small">Backlot is a private tool in early use. This note will become a full privacy policy before it opens to the public.</p>

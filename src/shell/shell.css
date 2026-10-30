@@ -2499,3 +2499,13 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-past-link { display: flex; flex-direction: column; gap: 6px; }
 .bl-deck-nav { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .bl-deck-nav .bl-round { font-size: 22px; line-height: 1; }
+
+/* Posting-link reminder and the locked portal's list */
+.bl-nudge { display: flex; flex-direction: column; gap: 8px; animation: bl-nudge-out 15s linear forwards; }
+@keyframes bl-nudge-out { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bl-nudge { animation: none; } }
+.bl-standing-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.bl-access { overflow-x: auto; }
+.bl-access table { border-collapse: collapse; min-width: 100%; font-size: 14px; }
+.bl-access th, .bl-access td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.bl-access td input { width: 20px; height: 20px; }
