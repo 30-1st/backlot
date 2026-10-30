@@ -32,7 +32,7 @@ export function stepsFor(ws: Workspace, client: Client): Step[] {
   return [
     { key: 'voice', title: 'Bil drafts the voice', body: 'Bil reads their posts and writes how they sound.', done: Boolean(voice), who: 'team', path: 'create.client' },
     { key: 'delegate', title: 'Delegate with the team!', body: 'Through Delegate, so the team can post by hand. No password changes hands.', done: ticked('delegate'), who: 'either', manual: 'delegate' },
-    { key: 'approve', title: 'Approve the voice', body: 'Read what Bil wrote and say it sounds like you.', done: Boolean(voice?.approved), who: 'client', path: 'insights' },
+    { key: 'approve', title: 'Approve the voice', body: 'Read what Bil wrote and say it sounds like you.', done: Boolean(voice?.approved), who: 'client', path: 'brand' },
     { key: 'media', title: 'First photos and videos', body: 'Bil plans posts around what is in Media.', done: media > 0, who: 'either', path: 'library' },
     { key: 'call', title: 'First call', body: 'Goals, offers and what is off limits, in person.', done: ticked('first_call'), who: 'team', manual: 'first_call' },
     { key: 'contract', title: 'Agreement signed', body: 'What the team does, for how long, at what price.', done: ticked('contract'), who: 'team', manual: 'contract' },

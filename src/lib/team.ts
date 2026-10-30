@@ -212,6 +212,10 @@ export const bil = {
   learn: (clientId: string) =>
     call<Record<string, unknown>>('bil', 'learn', { requestId: crypto.randomUUID(), clientId }),
   approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
+  gamePlanSave: (clientId: string, plan: { sellsTo: string; appealsTo: string; products: { name: string; note: string }[]; goals: string }) =>
+    call<{ saved: boolean }>('bil', 'game_plan_save', { clientId, ...plan }),
+  gamePlanMeeting: (clientId: string, runRequest?: string) =>
+    call<{ requested: true; already: boolean } | { id: string; kind: 'free' | 'extra'; costUsd: number }>('bil', 'game_plan_meeting', { clientId, requestId: crypto.randomUUID(), ...(runRequest ? { runRequest } : {}) }),
   resume: (campaignId: string) => call<{ resumed: boolean }>('bil', 'resume', { campaignId }),
   lookup: (handle: string, images = false) =>
     call<XProfile>('bil', 'lookup', { handle, images }),

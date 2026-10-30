@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { ClientTrends } from './Rein';
+import { GamePlanPanel } from './GamePlan';
 
-// Insights: what performs on the client's own page (the 24 hour dial, media against text,
-// Bil's do and skip tips) and the voice Bil writes in. Measured by Bil from the client's
-// public X posts; nothing here is learned from drafts.
+// Game Plan: the client's plan (who they sell to, who their content appeals to, products,
+// goals) and Bil's opportunity meeting, then what performs on their own page (the 24 hour
+// dial, media against text, do and skip) and what is rising in their niche from Rein. The
+// voice card lives in Brand. Measured from public X posts; nothing is learned from drafts.
 
 type Group = { label: string; posts: number; medianScorePer1k: number | null };
 
@@ -20,7 +22,7 @@ const SHADES = ['var(--accent-text)', 'var(--accent)', 'rgba(var(--glow), 0.45)'
 const ARC = 107;
 const GAP = 452.4 - ARC;
 
-export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
+export function InsightsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (!ws.data) return <main aria-busy="true" />;
@@ -30,7 +32,8 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
   if (!client || !voice) {
     return (
       <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <h1 className="bl-h1">Insights</h1>
+        <h1 className="bl-h1">Game Plan</h1>
+        {client && <GamePlanPanel clientId={client.id} me={me} />}
         <div className="bl-empty">
           <b style={{ fontSize: 17 }}>Nothing measured yet.</b>
           <span className="bl-small">Insights appear once Bil has onboarded a client and read their page.</span>
@@ -77,24 +80,12 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
     }
   }
 
-  async function approve() {
-    setBusy(true);
-    setError('');
-    try {
-      await bil.approveVoice(client!.id);
-      await ws.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not approve.');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="bl-rise" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <h1 className="bl-h1">
-          What <i>works</i>
+          Game <i>Plan</i>
         </h1>
         <span className="bl-label">
           @{client.handle}
@@ -114,6 +105,11 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
         </p>
       )}
 
+      <GamePlanPanel clientId={client.id} me={me} />
+
+      <h2 className="bl-h2" style={{ marginTop: 8 }}>
+        What works on your page
+      </h2>
       {!ww ? (
         <div className="bl-empty">
           <b style={{ fontSize: 17 }}>Not measured yet.</b>
@@ -247,7 +243,31 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
 
       <ClientTrends key={client.id} clientId={client.id} isTeam={isTeam} />
 
-      <section className="bl-card" style={{ marginTop: 8 }}>
+    </main>
+  );
+}
+
+/** The voice Bil writes in, and the client's approval of it. Shown on Brand. */
+export function VoiceSection({ ws, clientId, isTeam }: { ws: ScreenProps['ws']; clientId: string; isTeam: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const voice = ws.data?.voices.find((v) => v.clientId === clientId);
+  if (!voice) return null;
+  const card = voice.card;
+  async function approve() {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.approveVoice(clientId);
+      await ws.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not approve.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="bl-card" style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h2 className="bl-h2">The voice Bil writes in</h2>
           <span className={`bl-chip ${voice.approved ? 'approved' : 'needs'}`}>{voice.approved ? 'Approved' : 'Needs you'}</span>
@@ -268,7 +288,11 @@ export function InsightsScreen({ ws, single, isTeam, go }: ScreenProps) {
             {isTeam ? 'Approve for the client' : 'This sounds like me'}
           </button>
         )}
+        {error && (
+          <p className="bl-error" role="alert">
+            {error}
+          </p>
+        )}
       </section>
-    </main>
   );
 }

@@ -123,7 +123,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
         label,
         title: isTeam ? `Waiting for @${handle(v.clientId)} to approve their voice` : 'Approve your voice',
         body: isTeam ? undefined : 'Bil writes every post in this voice. Check it sounds like you.',
-        action: { label: isTeam ? 'See the voice' : 'Check my voice', path: 'insights', primary: !isTeam },
+        action: { label: isTeam ? 'See the voice' : 'Check my voice', path: 'brand', primary: !isTeam },
       });
     }
     const measured = v.card?.whatWorks?.measuredAt as string | undefined;
@@ -137,7 +137,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
         label: `@${handle(v.clientId)} · Insights`,
         title: 'Bil measured what performs.',
         body: first || undefined,
-        action: { label: 'See insights', path: 'insights', primary: false },
+        action: { label: 'See the Game Plan', path: 'insights', primary: false },
       });
     }
   }
@@ -216,7 +216,7 @@ function buildNews(me: Me, ws: Workspace, focus: string | null, seenAt: string |
         path = a.campaignId && c ? `campaigns.${a.campaignId}` : 'approvals';
       } else {
         title = `${who} ${OTHER_WORDS[`${a.what}:${a.decision}`] ?? 'made a change'}`;
-        path = a.what === 'brand' ? 'brand' : a.what === 'campaign' ? 'campaigns' : 'insights';
+        path = a.what === 'brand' || a.what === 'voice' ? 'brand' : a.what === 'campaign' ? 'campaigns' : 'insights';
       }
     } else if (a.kind === 'media') {
       title = isTeam ? `${n} new ${n === 1 ? 'file' : 'files'} in @${h}'s Media` : `Your team added ${n} ${n === 1 ? 'file' : 'files'} to Media`;

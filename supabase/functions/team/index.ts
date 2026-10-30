@@ -438,6 +438,7 @@ async function handle(req: Request): Promise<Response> {
       case 'rein_client_update': {
         requireTeam(member);
         const r = parse(ReinClientUpdate, input);
+        requireClientAccess(member, r.clientId);
         const niche = await clientNiche(db, r.clientId, member.workspaceId);
         const reused = await reusableBrief(niche, r.region);
         let brief: any;
@@ -469,7 +470,7 @@ async function handle(req: Request): Promise<Response> {
             ? `Rein pulled the ${viralCount} posts doing best in your niche this week${pattern ? `. What keeps working: ${pattern.charAt(0).toLowerCase()}${pattern.slice(1)}` : ''}. Ask me how we could play it.`
             : top.length
             ? `Rein found what is rising in your niche: ${top.join(' and ')}. Ask me how we could play it.`
-            : 'Rein checked what is rising in your niche. The full list is on What works.',
+            : 'Rein checked what is rising in your niche. The full list is on your Game Plan.',
           link: 'insights',
         });
         const followers = await clientFollowers(db, r.clientId, member.workspaceId, true);

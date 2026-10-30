@@ -269,6 +269,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       <nav aria-label="Your posts" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals' || head === 'reports' || head === 'desk')}
+        {tab('insights', 'Game Plan', <Rise size={22} />, head === 'insights' || head === 'brand')}
         {tab('kris', 'Kris', <Bubble size={22} />, head === 'kris' || head === 'room')}
         {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board')}
         {tab('playground', 'Playground', <Reel size={22} />, false)}

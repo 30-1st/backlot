@@ -12,7 +12,7 @@ const SCREEN_WORDS: Record<string, string> = {
   approvals: 'the approvals log',
   reports: 'the reports',
   desk: 'the engagement desk',
-  insights: 'What works',
+  insights: 'Game Plan',
   campaigns: 'the schedule',
 };
 

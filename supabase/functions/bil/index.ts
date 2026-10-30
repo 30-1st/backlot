@@ -65,6 +65,10 @@ import {
   discardCampaign,
   restoreCampaign,
   requireInGoodStanding,
+  gamePlanSave,
+  GamePlanSaveRequest,
+  gamePlanMeeting,
+  GamePlanMeetingRequest,
 } from '../_shared/bil.ts';
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
@@ -124,6 +128,10 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await deskCheck(member, parse(DeskRequest, input)));
       case 'report':
         return reply(200, await makeReport(user.userDb, member, parse(ReportRequest, input)));
+      case 'game_plan_save':
+        return reply(200, await gamePlanSave(member, parse(GamePlanSaveRequest, input)));
+      case 'game_plan_meeting':
+        return reply(200, await gamePlanMeeting(member, parse(GamePlanMeetingRequest, input)));
       case 'learn':
         requireTeam(member);
         return reply(200, await learnWhatWorks(user.userDb, workspaceId, parse(LearnRequest, input)));

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { bil } from '../lib/team';
 import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, dialClashes, riskyDials, type Dials, type HumorStyle } from '../lib/dials';
 import type { ScreenProps } from './Shell';
+import { VoiceSection } from './Insights';
 
 // The brand kit: everything Bil reads about a client before he plans or writes, on one
 // page. The team's edits go straight in. A client's edits wait for the team's OK, so
@@ -131,7 +132,7 @@ const cleanWord = (w: string) => w.replace(/\s+/g, ' ').slice(0, 40);
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
+export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
   const client = ws.data?.clients.find((c) => c.id === single);
   const saved = useMemo(() => (client ? kitOf(client.profile) : null), [client]);
   const pending = client?.pending ?? null;
@@ -338,13 +339,11 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
           <span className="bl-small">For positioning only. Backlot never reads or engages with them on its own.</span>
         </label>
         <p className="bl-small" style={{ margin: 0 }}>
-          How they sound, and words they never use, live in their voice on{' '}
-          <button type="button" className="bl-linkish" onClick={() => go('insights')}>
-            What works
-          </button>
-          .
+          How they sound, and words they never use, live in their voice below.
         </p>
       </section>
+
+      {single && <VoiceSection ws={ws} clientId={single} isTeam={isTeam} />}
 
       <section className="bl-glass-card bl-brand-group" aria-labelledby="dials">
         <h2 id="dials" className="bl-section-title">Dials</h2>
