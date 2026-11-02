@@ -622,23 +622,37 @@ function checkNotes(n: z.infer<typeof NotesIn>, seen: Set<string>): Notes {
   let dropped = 0;
   const ok = (s: string) => isXId(s) || (normUrl(s) !== null && seen.has(normUrl(s)!));
   const keepRefs = (refs: string[]) => [...new Set(refs.filter(ok).map((s) => (isXId(s) ? s.trim() : normUrl(s)!)))];
+  // Each URL's rung as Rein graded it; a URL she did not describe counts as a lead (rung 4).
+  const rungOf = new Map<string, { rung: number; publisher: string }>();
+  for (const s of n.sources) {
+    const u = normUrl(s.url);
+    if (u && !rungOf.has(u)) rungOf.set(u, { rung: s.rung, publisher: clean(s.publisher, 100) });
+  }
+  const rung = (ref: string) => (isXId(ref) ? 1 : rungOf.get(ref)?.rung ?? 4);
   const findings: Finding[] = [];
   for (const f of n.findings) {
     const figures: Figure[] = [];
     for (const fig of f.figures) {
       const sources = keepRefs(fig.sources);
-      if (fig.basis !== 'unknown' && sources.length === 0) {
+      // The source ladder, enforced: a lead (rung 4) never backs a number on its own.
+      if (fig.basis !== 'unknown' && (sources.length === 0 || sources.every((r) => rung(r) >= 4))) {
         dropped++;
         continue;
       }
+      // "Measured" means counted or stated by a primary source (rung 1) or X's own count.
+      // A figure from research firms, press or surveys is someone else's estimate: say so.
+      const measuredOk = sources.some((r) => rung(r) === 1);
+      const basis = fig.basis === 'measured' && !measuredOk ? 'estimated' : fig.basis;
+      const firstPublisher = rungOf.get(sources.find((r) => !isXId(r)) ?? '')?.publisher;
+      const math = basis === 'estimated' ? (fig.math ? clean(fig.math, 300) : fig.basis === 'measured' ? `Published estimate${firstPublisher ? ` from ${firstPublisher}` : ''}` : '') : '';
       figures.push({
         label: clean(fig.label, 80),
-        value: fig.basis === 'unknown' ? 'Unknown' : clean(fig.value, 60),
+        value: basis === 'unknown' ? 'Unknown' : clean(fig.value, 60),
         ...(Number.isFinite(fig.low) ? { low: fig.low } : {}),
         ...(Number.isFinite(fig.high) ? { high: fig.high } : {}),
         ...(fig.unit ? { unit: clean(fig.unit, 20) } : {}),
-        basis: fig.basis,
-        ...(fig.math && fig.basis === 'estimated' ? { math: clean(fig.math, 300) } : {}),
+        basis,
+        ...(math ? { math } : {}),
         sources,
       });
     }
@@ -776,23 +790,26 @@ function finishMeeting(d: z.infer<typeof MeetingDraft>, m: Row, work: Work, byUr
     if (s.key !== 'custom' && seenKeys.has(s.key)) continue;
     const figures = s.figures.flatMap((f) => {
       const ids = real(f.sourceIds);
-      if (f.basis !== 'unknown' && ids.length === 0) return [];
+      if (f.basis !== 'unknown' && (ids.length === 0 || ids.every((i) => known.get(i)!.rung >= 4))) return [];
+      const basis = f.basis === 'measured' && !ids.some((i) => known.get(i)!.rung === 1) ? 'estimated' : f.basis;
+      const publisher = known.get(ids.find((i) => known.get(i)!.kind === 'web') ?? '')?.publisher;
+      const math = basis === 'estimated' ? (f.math ? clean(f.math, 300) : f.basis === 'measured' ? `Published estimate${publisher ? ` from ${publisher}` : ''}` : '') : '';
       ids.forEach((i) => used.add(i));
       return [{
         label: clean(f.label, 80),
-        value: f.basis === 'unknown' ? 'Unknown' : clean(f.value, 60),
+        value: basis === 'unknown' ? 'Unknown' : clean(f.value, 60),
         ...(Number.isFinite(f.low) ? { low: f.low } : {}),
         ...(Number.isFinite(f.high) ? { high: f.high } : {}),
         ...(f.unit ? { unit: clean(f.unit, 20) } : {}),
-        basis: f.basis,
-        ...(f.math && f.basis === 'estimated' ? { math: clean(f.math, 300) } : {}),
+        basis,
+        ...(math ? { math } : {}),
         sourceIds: ids,
       }];
     });
     const profiles = s.key === 'buyers'
       ? s.profiles.flatMap((p) => {
           const ids = real(p.sourceIds);
-          if (!ids.length) return [];
+          if (!ids.length || ids.every((i) => known.get(i)!.rung >= 4)) return [];
           ids.forEach((i) => used.add(i));
           return [{
             name: clean(p.name, 60), job: clean(p.job, 200),
