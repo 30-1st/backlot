@@ -29,6 +29,8 @@ export const KNOWLEDGE_VERSION = {
   kris: 'k5',
   dials: 'k1',
   xev: 'k1',
+  /** Rein's Opportunity Meeting knowledge pack (knowledge/rein.ts). */
+  opportunity: 'k1',
 } as const;
 
 export function xaiClient() {
