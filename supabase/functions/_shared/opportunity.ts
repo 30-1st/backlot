@@ -44,7 +44,11 @@ const WALL_MS = 145_000;
 const LEASE_SECONDS = 160;
 const MAX_ATTEMPTS = 3;
 /** How long each stage may take, in seconds. */
-const STAGE_SECONDS: Record<Stage, number> = { define: 45, trends: 135, research_market: 125, research_buyers: 125, research_paths: 125, fees: 100, write: 120 };
+const STAGE_SECONDS: Record<Stage, number> = { define: 45, trends: 135, research_market: 125, research_buyers: 125, research_field: 125, research_paths: 125, fees: 100, write: 120 };
+/** When xAI is at capacity: wait this long, without using up a try. */
+const BUSY_RETRY_MS = 90_000;
+/** A meeting still not done after this long fails cleanly (and a client's free meeting comes back). */
+const GIVE_UP_MS = 45 * 60_000;
 const RETRY_AFTER_MS = 30_000;
 const REUSE_BRIEF_DAYS = 14;
 /** Matches the 'opportunity' row in private.spend_limits. */
@@ -60,8 +64,9 @@ export const MEETING_REGIONS = ['us', 'uk', 'canada'] as const;
 export type MeetingRegion = (typeof MEETING_REGIONS)[number];
 const REGION_NAME: Record<MeetingRegion, string> = { us: 'the United States', uk: 'the United Kingdom', canada: 'Canada' };
 
-type Stage = 'define' | 'trends' | 'research_market' | 'research_buyers' | 'research_paths' | 'fees' | 'write';
-const FRESH_PATH: Stage[] = ['define', 'trends', 'research_market', 'research_buyers', 'research_paths', 'fees', 'write'];
+type Stage = 'define' | 'trends' | 'research_market' | 'research_buyers' | 'research_field' | 'research_paths' | 'fees' | 'write';
+type ResearchStage = 'research_market' | 'research_buyers' | 'research_field' | 'research_paths';
+const FRESH_PATH: Stage[] = ['define', 'trends', 'research_market', 'research_buyers', 'research_field', 'research_paths', 'fees', 'write'];
 const REUSED_PATH: Stage[] = ['define', 'trends', 'fees', 'write'];
 
 /** The sections a meeting tries to answer, in order (knowledge pack, "What a meeting answers"). */
@@ -72,14 +77,18 @@ export const SECTIONS = [
 const Section = z.enum(SECTIONS);
 type SectionKey = z.infer<typeof Section>;
 
-const GROUPS: Record<'research_market' | 'research_buyers' | 'research_paths', { sections: SectionKey[]; task: string }> = {
+const GROUPS: Record<ResearchStage, { sections: SectionKey[]; task: string }> = {
   research_market: {
     sections: ['opportunity', 'size', 'money', 'cost_to_100', 'platforms', 'startup_kit', 'first_dollar'],
     task: 'the opportunity and why now, the size of the audience (skill R2), where the money goes (R3), the cost to make $100 (R4), where the money lives with each platform\'s cut, payout rules and eligibility from the platform\'s own pages (R11), the startup kit and time to first dollar (R10)',
   },
   research_buyers: {
-    sections: ['buyers', 'prices', 'crowding', 'converts', 'timing'],
-    task: 'buyer profiles with what each pays for, the products each buys and what each ignores (R5), the price ladder from real prices (R6), unit economics (R7), how crowded it is and where the gap is (R8), and what converts and the timing, using the X numbers and trend brief given (R9, R12)',
+    sections: ['buyers', 'prices'],
+    task: 'buyer profiles with what each pays for, the products each buys and what each ignores (R5), the price ladder from real prices (R6), and unit economics (R7)',
+  },
+  research_field: {
+    sections: ['crowding', 'converts', 'timing'],
+    task: 'how crowded it is and where the gap is (R8), what converts and the timing, using the X numbers and trend brief given (R9, R12)',
   },
   research_paths: {
     sections: ['exit', 'launch_pads', 'risks'],
@@ -222,7 +231,7 @@ async function kickOpportunity(): Promise<void> {
 type Row = {
   id: string; workspace_id: string; requested_by: string | null; client_id: string | null; kind: string;
   market_input: string; region: MeetingRegion; market: string | null; market_name: string | null; market_id: string | null;
-  stage: Stage; steps: Array<{ label: string; done: boolean }>; cost_usd: number; attempts: number;
+  stage: Stage; steps: Array<{ label: string; done: boolean }>; cost_usd: number; attempts: number; created_at: string;
 };
 
 type Source = { url: string; title: string; publisher: string; published: string; rung: number };
@@ -238,7 +247,7 @@ type Work = {
   path?: Stage[];
   x?: XCount[];
   brief?: { briefId: string; createdAt: string; trends: Array<{ topic: string; summary: string; momentum: string | null; posts7d: number | null }>; patterns: string[]; ideas: string[]; notFound: string | null } | null;
-  notes?: Partial<Record<'research_market' | 'research_buyers' | 'research_paths' | 'fees', Notes>>;
+  notes?: Partial<Record<ResearchStage | 'fees', Notes>>;
 };
 
 /** Runs due meeting stages until this worker's time runs out. */
@@ -305,15 +314,22 @@ async function runStage(db: SupabaseClient, meetingId: string, claimId: string, 
     await db.from('opportunity_meetings').update(patch).eq('id', m.id).eq('claim_id', claimId);
   } catch (err) {
     const spent = round4(Number(m.cost_usd) + budget.spentUsd - before);
-    if (err instanceof RetryLater) {
+    const busy = providerBusy(err);
+    const tooOld = Date.now() - Date.parse(m.created_at) > GIVE_UP_MS;
+    if ((err instanceof RetryLater || busy) && !tooOld) {
       // Not a failure: the try is handed back. What the stage learned so far is kept.
       await db.from('opportunity_work').upsert({ meeting_id: m.id, data: work, updated_at: new Date().toISOString() });
-      await db.from('opportunity_meetings').update({ cost_usd: spent, claim_id: null, lease_until: null, attempts: Math.max(0, m.attempts - 1), next_at: new Date(Date.now() + RETRY_AFTER_MS).toISOString() }).eq('id', m.id).eq('claim_id', claimId);
+      await db.from('opportunity_meetings').update({
+        cost_usd: spent, claim_id: null, lease_until: null, attempts: Math.max(0, m.attempts - 1),
+        error: busy ? 'Rein\'s AI provider is busy; trying again shortly.' : null,
+        next_at: new Date(Date.now() + (busy ? BUSY_RETRY_MS : RETRY_AFTER_MS)).toISOString(),
+      }).eq('id', m.id).eq('claim_id', claimId);
       return;
     }
-    const final = err instanceof StopMeeting || err instanceof SpendLimitError;
+    const final = err instanceof StopMeeting || err instanceof SpendLimitError || tooOld;
     const message = err instanceof SpendLimitError
       ? 'Rein hit this meeting\'s spending limit. Nothing more was spent.'
+      : tooOld ? 'Rein could not finish in time: her AI provider was too busy. Try again later; nothing more will be spent on this one.'
       : err instanceof Error ? err.message : 'Rein could not finish this step.';
     console.error('opportunity: stage failed', m.stage, m.id, message);
     await db.from('opportunity_meetings').update({
@@ -326,6 +342,16 @@ async function runStage(db: SupabaseClient, meetingId: string, claimId: string, 
     }).eq('id', m.id).eq('claim_id', claimId);
     if (final) await db.from('opportunity_work').delete().eq('meeting_id', m.id);
   }
+}
+
+/** xAI at capacity or rate-limiting (429, 503, "resource-exhausted"): wait, it is not our fault. */
+function providerBusy(err: unknown, depth = 0): boolean {
+  if (!err || typeof err !== 'object' || depth > 5) return false;
+  const e = err as { statusCode?: unknown; message?: unknown; lastError?: unknown; cause?: unknown; errors?: unknown };
+  if (e.statusCode === 429 || e.statusCode === 503) return true;
+  if (typeof e.message === 'string' && /resource-exhausted|at capacity|rate limit/i.test(e.message)) return true;
+  if (Array.isArray(e.errors) && e.errors.some((x) => providerBusy(x, depth + 1))) return true;
+  return providerBusy(e.lastError, depth + 1) || providerBusy(e.cause, depth + 1);
 }
 
 /** Rein's own steps, checked off in proportion to the stages done. */
@@ -352,6 +378,7 @@ async function stageWork(db: SupabaseClient, m: Row, work: Work, budget: Budget,
       return after('trends');
     case 'research_market':
     case 'research_buyers':
+    case 'research_field':
     case 'research_paths': {
       work.notes = { ...(work.notes ?? {}), [m.stage]: await researchStage(m, work, budget, deadline, m.stage) };
       if (m.stage === 'research_paths') await saveMarket(db, m, work);
@@ -412,7 +439,7 @@ Apply skill R1. If the request is too broad, choose the most promising market in
   };
   if (reused) {
     const r = reused.research as { notes?: Work['notes']; platforms?: string[] };
-    work.notes = { research_market: r.notes?.research_market, research_buyers: r.notes?.research_buyers, research_paths: r.notes?.research_paths };
+    work.notes = { research_market: r.notes?.research_market, research_buyers: r.notes?.research_buyers, research_field: r.notes?.research_field, research_paths: r.notes?.research_paths };
     if (r.platforms?.length) work.define.platforms = r.platforms;
     work.path = REUSED_PATH;
     await db.from('opportunity_meetings').update({ market_id: reused.id }).eq('id', m.id);
@@ -523,16 +550,16 @@ const NotesIn = z.object({
   gaps: z.array(z.object({ section: Section, why: z.string() })).max(12),
 });
 
-async function researchStage(m: Row, work: Work, budget: Budget, deadline: number, stage: keyof typeof GROUPS): Promise<Notes> {
+async function researchStage(m: Row, work: Work, budget: Budget, deadline: number, stage: ResearchStage): Promise<Notes> {
   const g = GROUPS[stage];
   const prompt = [
     marketBlock(m, work),
     xBlock(work),
-    stage === 'research_buyers' ? briefBlock(work) : '',
+    stage === 'research_buyers' || stage === 'research_field' ? briefBlock(work) : '',
     `# Task: research ${g.task}
 Use web search. Read the primary sources the source ladder asks for; check every fee and rule on the platform's own page today. Every figure lists the URLs it came from (or an X number id like x1). Sections to cover: ${g.sections.join(', ')}. A section you cannot back goes in gaps with why. Write claims in plain words, no em dashes.`,
   ].filter(Boolean).join('\n\n');
-  return await webNotes(budget, stage, prompt, deadline, m.attempts > 1 ? 6 : 10);
+  return await webNotes(budget, stage, prompt, deadline, m.attempts > 1 ? 5 : 8);
 }
 
 /** Fresh platform fees and rules, every meeting. */
@@ -544,7 +571,7 @@ async function feesStage(m: Row, work: Work, budget: Budget, deadline: number): 
     `# Task: today's fees and rules
 For each platform (${platforms.join(', ')}): its cut of creator sales, payment processing it passes on, payout schedule and minimum, eligibility rules, and what content it allows, each from the platform's own help, fee or policy page. Section: platforms. A platform whose page you cannot read goes in gaps.`,
   ].join('\n\n');
-  return await webNotes(budget, 'fees', prompt, deadline, 8);
+  return await webNotes(budget, 'fees', prompt, deadline, m.attempts > 1 ? 4 : 6);
 }
 
 /** One web research call: Grok with xAI's web search, then every URL checked against what the search really returned. */
@@ -682,7 +709,7 @@ async function saveMarket(db: SupabaseClient, m: Row, work: Work) {
     market_key: nicheKey(d.marketName),
     region: m.region,
     market: d.market,
-    research: { notes: { research_market: work.notes?.research_market, research_buyers: work.notes?.research_buyers, research_paths: work.notes?.research_paths }, platforms: d.platforms },
+    research: { notes: { research_market: work.notes?.research_market, research_buyers: work.notes?.research_buyers, research_field: work.notes?.research_field, research_paths: work.notes?.research_paths }, platforms: d.platforms },
   }).select('id').single();
   if (error) {
     console.error('opportunity: could not save the market', error.message);
@@ -730,7 +757,7 @@ const MeetingDraft = z.object({
 
 async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget, deadline: number) {
   // Number every source once: web sources s1, s2...; X numbers keep x1 to x3.
-  const all = [work.notes?.research_market, work.notes?.research_buyers, work.notes?.research_paths, work.notes?.fees].filter(Boolean) as Notes[];
+  const all = [work.notes?.research_market, work.notes?.research_buyers, work.notes?.research_field, work.notes?.research_paths, work.notes?.fees].filter(Boolean) as Notes[];
   const byUrl = new Map<string, Source & { id: string }>();
   for (const n of all) for (const s of n.sources) if (!byUrl.has(s.url)) byUrl.set(s.url, { ...s, id: `s${byUrl.size + 1}` });
   const idOf = (ref: string) => (isXId(ref) ? ref : byUrl.get(ref)?.id);
