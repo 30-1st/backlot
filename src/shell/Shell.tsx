@@ -37,7 +37,7 @@ import { XevScreen } from './Xev';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -118,7 +118,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   }
 
   // A Playground login has one room: the Playground, plus their own account page.
-  if (me.role === 'visitor' && (preview || !['playground', 'narrate', 'rein', 'account'].includes(head))) {
+  if (me.role === 'visitor' && (preview || !['playground', 'narrate', 'rein', 'opportunities', 'account'].includes(head))) {
     queueMicrotask(() => go('playground'));
     return wrap(<div className="bl-app" aria-busy="true" />);
   }
@@ -135,7 +135,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   // Which room this screen belongs to.
   const room: RoomKey = preview
     ? 'preview'
-    : ['playground', 'narrate', 'rein'].includes(head)
+    : ['playground', 'narrate', 'rein', 'opportunities'].includes(head)
       ? 'play'
       : head === 'account' || head === 'team'
         ? 'account'
@@ -210,6 +210,10 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'rein':
       screen = <ReinScreen {...props} />;
       break;
+    // Rein's Opportunities, inside Rein in the Playground; #opportunities.<id> opens a meeting.
+    case 'opportunities':
+      screen = <ReinScreen {...props} view="opportunities" openId={sub || null} />;
+      break;
     default:
       screen = <Notifications {...props} />;
   }
@@ -234,7 +238,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const title =
     room === 'team' ? 'Team' : room === 'client' ? 'Your posts' : room === 'preview' ? 'Client' : room === 'play' ? 'Playground' : 'Account';
-  const nested = head === 'rein';
+  const nested = head === 'rein' || head === 'opportunities';
 
   const budget = me.budget;
   const used = budget && budget.cap > 0 ? Math.min(100, Math.round((budget.used / budget.cap) * 100)) : 0;
@@ -274,9 +278,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       <nav aria-label="Your posts" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals' || head === 'reports' || head === 'desk')}
-        {tab('insights', 'Game Plan', <Rise size={22} />, head === 'insights' || head === 'brand')}
         {tab('kris', 'Kris', <Bubble size={22} />, head === 'kris' || head === 'room')}
-        {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board')}
+        {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board' || head === 'brand' || head === 'insights')}
         {tab('xev', 'Xev', <Page size={22} />, head === 'xev')}
       </nav>
     );
@@ -325,7 +328,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
                   <House />
                 </a>
               )}
-              <span className="bl-room-title">{nested ? (head === 'rein' ? 'Rein' : 'X') : title}</span>
+              <span className="bl-room-title">{nested ? (head === 'rein' || head === 'opportunities' ? 'Rein' : 'X') : title}</span>
             </div>
             <div className="bl-bar-end">
               {showPicker && (

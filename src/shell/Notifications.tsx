@@ -137,7 +137,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
         label: `@${handle(v.clientId)} · Insights`,
         title: 'Bil measured what performs.',
         body: first || undefined,
-        action: { label: 'See the Game Plan', path: 'insights', primary: false },
+        action: { label: isTeam ? 'See the Game Plan' : 'See what performs', path: 'insights', primary: false },
       });
     }
   }

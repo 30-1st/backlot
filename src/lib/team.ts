@@ -22,6 +22,9 @@ export type Me = {
   budget: { used: number; cap: number } | null;
 };
 
+/** Regions Rein's Opportunity Meetings cover. */
+export type MeetingRegion = 'us' | 'uk' | 'canada';
+
 export type ReinRegion = 'worldwide' | 'us' | 'uk' | 'canada';
 /** The one next step Bil offers from the agent bar. Nothing runs until the person confirms. */
 export type AskAction = { clientId: string; handle: string } & (
@@ -129,6 +132,12 @@ export const team = {
   reinClient: (clientId: string, region: ReinRegion) =>
     call<{ latest: ClientBrief | null; clientFollowers?: number | null; niche?: string | null; preview?: { free: boolean; costUsd: number; checkedAt: string | null } | null }>('team', 'rein_client', { clientId, region }),
   reinClientUpdate: (clientId: string, region: ReinRegion) => call<{ latest: ClientBrief; clientFollowers?: number | null; reused: boolean }>('team', 'rein_client_update', { clientId, region }),
+  /** Rein's Opportunity Meeting: what this person may run now. */
+  opportunityAllowance: (clientId?: string) =>
+    call<{ role: Role; freeLeft: boolean | null; canRun: boolean; available: boolean; paymentsOpen: boolean; regions: MeetingRegion[] }>('team', 'opportunity_allowance', clientId ? { clientId } : {}),
+  /** Starts a meeting; it runs in the background and its row shows Rein's steps as she works. */
+  opportunityStart: (r: { market?: string; region: MeetingRegion; clientId?: string }) =>
+    call<{ meetingId: string; status: string; already: boolean }>('team', 'opportunity_start', { requestId: crypto.randomUUID(), ...r }),
   reinHistory: () => call<{ freeLeft: number | null; searches: { niche: string; region: string; at: string }[]; last: ReinBrief | null }>('team', 'rein_history'),
   setPassword: (password: string, currentPassword?: string) =>
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),

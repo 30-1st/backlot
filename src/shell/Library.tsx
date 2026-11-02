@@ -218,6 +218,14 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
             <button type="button" className="bl-linkish" onClick={() => go('board')}>
               Your board
             </button>
+            {!isTeam && (
+              <>
+                {' · '}
+                <button type="button" className="bl-linkish" onClick={() => go('brand')}>
+                  Brand kit
+                </button>
+              </>
+            )}
           </p>
         </div>
         <button type="button" className="bl-btn" onClick={() => picker.current?.click()} disabled={sending}>

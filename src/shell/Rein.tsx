@@ -6,6 +6,7 @@ import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
 import { Viral } from './ReinViral';
+import { OpportunitiesPanel } from './Opportunities';
 
 // Rein: search what is working in any niche: the posts and accounts doing best this week,
 // what they share, and the topics with real momentum. A search that reuses a check from
@@ -126,7 +127,34 @@ function Paywall({ niche, onClose }: { niche: string; onClose: () => void }) {
   );
 }
 
-export function ReinScreen({ isTeam }: ScreenProps) {
+/** Rein's two jobs, side by side: Trends (what is rising) and Opportunities (where the money is). */
+export function ReinScreen(props: ScreenProps & { view?: 'trends' | 'opportunities'; openId?: string | null }) {
+  const { me, ws, single, go } = props;
+  // The team has Trends only; Opportunities is for everyone else (decided Nov 2, 2026).
+  const withOpps = me.role !== 'team';
+  const view = withOpps && props.view === 'opportunities' ? 'opportunities' : 'trends';
+  const tabs = withOpps && (
+    <div className="bl-seg bl-rein-seg" role="group" aria-label="Rein">
+      <button type="button" aria-pressed={view === 'trends'} onClick={() => go('rein')}>
+        Trends
+      </button>
+      <button type="button" aria-pressed={view === 'opportunities'} onClick={() => go('opportunities')}>
+        Opportunities
+      </button>
+    </div>
+  );
+  if (view === 'opportunities') {
+    return (
+      <main className="bl-flow">
+        {tabs}
+        <OpportunitiesPanel me={me} ws={ws.data} single={single} openId={props.openId ?? null} go={go} />
+      </main>
+    );
+  }
+  return <TrendsView isTeam={props.isTeam} tabs={tabs} />;
+}
+
+function TrendsView({ isTeam, tabs }: { isTeam: boolean; tabs: React.ReactNode }) {
   const [niche, setNiche] = useState('');
   const [region, setRegion] = useState<ReinRegion>('worldwide');
   const [freeLeft, setFreeLeft] = useState<number | null>(null);
@@ -188,6 +216,7 @@ export function ReinScreen({ isTeam }: ScreenProps) {
 
   return (
     <main className="bl-flow">
+      {tabs}
       <div className="bl-rein-hero bl-in">
         <span className="bl-home-logo">
           <Radar size={52} />

@@ -135,7 +135,7 @@ async function monthSpend(db: SupabaseClient): Promise<{ used: number; cap: numb
 export async function opportunityAllowance(m: Member, clientId?: string) {
   requireOwnPassword(m);
   const db = serviceClient();
-  const target = m.role === 'client' ? m.clientId : clientId ?? null;
+  const target = m.role === 'client' ? m.clientId : m.role === 'owner' ? clientId ?? null : null;
   if (target) requireClientAccess(m, target);
   let freeLeft: boolean | null = null;
   if (m.role === 'client' && target) {
@@ -146,7 +146,9 @@ export async function opportunityAllowance(m: Member, clientId?: string) {
   return {
     role: m.role,
     freeLeft,
-    canRun: m.role === 'owner' || (m.role === 'team' && Boolean(target)) || (m.role === 'client' && freeLeft === true),
+    canRun: m.role === 'owner' || (m.role === 'client' && freeLeft === true),
+    /** The team has no Opportunities: the app hides it for them. */
+    available: m.role !== 'team',
     paymentsOpen: false,
     regions: MEETING_REGIONS,
   };
@@ -165,14 +167,15 @@ export async function opportunityStart(m: Member, req: z.infer<typeof Opportunit
 
   // Whose meeting, and which kind.
   const clientId = m.role === 'client' ? m.clientId : req.clientId ?? null;
-  let kind: 'free' | 'owner' | 'recommendation';
+  // Opportunities lives inside Rein in the Playground, for everyone except the team (decided
+  // Nov 2, 2026; the team gets its own tool later). The 'recommendation' kind stays in the
+  // database for that tool and is switched off here.
+  let kind: 'free' | 'owner';
+  if (m.role === 'team') throw new AccessError('Opportunities is not part of the team\'s tools.');
   if (m.role === 'visitor') throw new OpportunityInputError('Opportunity Meetings open with payments, very soon.', 402, true);
   if (m.role === 'client') {
     if (!clientId) throw new AccessError('Your account has no client attached.');
     kind = 'free';
-  } else if (m.role === 'team') {
-    if (!clientId) throw new OpportunityInputError('Pick the client this meeting is for. The team runs meetings as recommendations for a client.');
-    kind = 'recommendation';
   } else {
     kind = 'owner';
   }
@@ -202,7 +205,7 @@ export async function opportunityStart(m: Member, req: z.infer<typeof Opportunit
   if (error) {
     // 23505 on the one-free-a-month index: this month's free meeting is already used or running.
     if (error.code === '23505') {
-      if (kind === 'free') throw new OpportunityInputError('This month\'s free meeting is used. Your team can run one for you as a recommendation, or wait for the 1st.', 402, true);
+      if (kind === 'free') throw new OpportunityInputError('This month\'s free meeting is used. The next one opens on the 1st; more open with payments.', 402, true);
       throw new OpportunityInputError('That request id is taken.', 409);
     }
     throw new Error(`Could not start the meeting: ${error.message}`);

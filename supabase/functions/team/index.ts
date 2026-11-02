@@ -18,7 +18,7 @@
 //   access_set       { memberId, clientId, on }      give or take a team member's access to a client  owner
 //   client_stage     { clientId, stage, note? }      onboarding, active or paused                 owner
 //   opportunity_allowance { clientId? }              what you may run now (a client's free meeting)  everyone
-//   opportunity_start { requestId, market?, region?, clientId? }  start Rein's Opportunity Meeting  owner, team (for a client), client (1 free a month)
+//   opportunity_start { requestId, market?, region?, clientId? }  start Rein's Opportunity Meeting  owner, client (1 free a month); visitors once payments open; never the team
 //
 // Rein: a search that reuses a brief from the last 6 hours is free and never counts.
 // Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
