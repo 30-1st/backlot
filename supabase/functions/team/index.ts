@@ -17,6 +17,8 @@
 //   room_preview     { clientId }                    a signed preview link to their room, 24 hours  team, that client
 //   access_set       { memberId, clientId, on }      give or take a team member's access to a client  owner
 //   client_stage     { clientId, stage, note? }      onboarding, active or paused                 owner
+//   opportunity_allowance { clientId? }              what you may run now (a client's free meeting)  everyone
+//   opportunity_start { requestId, market?, region?, clientId? }  start Rein's Opportunity Meeting  owner, team (for a client), client (1 free a month)
 //
 // Rein: a search that reuses a brief from the last 6 hours is free and never counts.
 // Clients get 3 free searches; after that it is $5 a search or $15 a month, and until
@@ -37,6 +39,7 @@ import { callRein, REIN_ESTIMATE_USD } from '../_shared/rein-client.ts';
 import { Region } from '../_shared/schemas/rein.ts';
 import { krisNote } from '../_shared/kris-notes.ts';
 import { previewUrl } from '../_shared/rooms.ts';
+import { opportunityAllowance, OpportunityInputError, OpportunityStartRequest, opportunityStart } from '../_shared/opportunity.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -499,12 +502,24 @@ async function handle(req: Request): Promise<Response> {
         });
       }
 
+      // Rein's Opportunity Meeting. The meeting runs in the background; the app reads its
+      // row (status, Rein's steps, the finished meeting) directly, under its read rules.
+      case 'opportunity_allowance': {
+        const r = parse(z.object({ clientId: id.optional() }), input);
+        return reply(200, await opportunityAllowance(member, r.clientId));
+      }
+      case 'opportunity_start': {
+        const r = parse(OpportunityStartRequest, input);
+        return reply(200, await opportunityStart(member, r));
+      }
+
       default:
-        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search, rein_history, rein_client, rein_client_update or room_preview.' });
+        return reply(400, { error: 'Unknown action. Use me, people, invite_create, password_reset, password_set, rein_search, rein_history, rein_client, rein_client_update, room_preview, opportunity_allowance or opportunity_start.' });
     }
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });
     if (err instanceof InputError) return reply(err.status, { error: err.message });
+    if (err instanceof OpportunityInputError) return reply(err.status, { error: err.message, ...(err.pay ? { pay: true } : {}) });
     console.error(`team: ${action} failed`, err instanceof Error ? err.message : err);
     return reply(500, { error: 'Something went wrong. Try again.' });
   }

@@ -5,6 +5,9 @@
 // Every 15 minutes, while any stored file has not been checked, pg_cron calls it with
 // { "job": "scrub_media" } to clean leftover photo and video metadata (migration media_scrub).
 //
+// Every 10 seconds, while an Opportunity Meeting stage is waiting, pg_cron calls it with
+// { "job": "opportunity" } (see migration opportunity_meetings).
+//
 // Once an hour pg_cron also calls it with { "job": "kris_pitches" }, only when some client
 // has an opening, so Kris can bring a pitch on her own (see migration kris_pitches).
 //
@@ -17,6 +20,7 @@
 // in what this worker has left; otherwise a fresh worker picks it up on the next tick.
 
 import { drain } from '../_shared/bil.ts';
+import { drainOpportunities } from '../_shared/opportunity.ts';
 import { krisPitches } from '../_shared/kris.ts';
 import { scrubStoredMedia } from '../_shared/media-scrub.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
@@ -28,6 +32,9 @@ const BOOT_AT = Date.now();
 /** Steps one worker runs side by side, at most. */
 const MAX_DRAINS = 2;
 let draining = 0;
+/** Opportunity Meeting stages one worker runs side by side, at most. */
+const MAX_MEETINGS = 2;
+let meeting = 0;
 
 function reply(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -61,6 +68,19 @@ Deno.serve(async (req) => {
         .catch((err) => console.error('bil-worker: media scrub failed', err instanceof Error ? err.message : err)),
     );
     return reply(202, { accepted: true, job: 'scrub_media' });
+  }
+
+  // Rein's Opportunity Meetings, one stage at a time (pg_cron's opportunity-tick, or a start).
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'opportunity') {
+    if (meeting >= MAX_MEETINGS) return reply(202, { accepted: false, reason: 'busy', job: 'opportunity' });
+    meeting++;
+    EdgeRuntime.waitUntil(
+      drainOpportunities(BOOT_AT)
+        .then((n) => n && console.log(`bil-worker: ran ${n} meeting stage${n === 1 ? '' : 's'}`))
+        .catch((err) => console.error('bil-worker: meetings failed', err instanceof Error ? err.message : err))
+        .finally(() => meeting--),
+    );
+    return reply(202, { accepted: true, job: 'opportunity' });
   }
 
   if (draining >= MAX_DRAINS) return reply(202, { accepted: false, reason: 'busy', uptimeMs: Date.now() - BOOT_AT });
