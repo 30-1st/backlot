@@ -44,7 +44,7 @@ const WALL_MS = 145_000;
 const LEASE_SECONDS = 160;
 const MAX_ATTEMPTS = 3;
 /** How long each stage may take, in seconds. */
-const STAGE_SECONDS: Record<Stage, number> = { define: 45, trends: 135, research_market: 125, research_buyers: 125, research_field: 125, research_paths: 125, fees: 100, write: 120 };
+const STAGE_SECONDS: Record<Stage, number> = { define: 45, trends: 135, research_market: 125, research_buyers: 125, research_field: 125, research_paths: 125, fees: 100, write: 125, write_moves: 125 };
 /** When xAI is at capacity: wait this long, without using up a try. */
 const BUSY_RETRY_MS = 90_000;
 /** A meeting still not done after this long fails cleanly (and a client's free meeting comes back). */
@@ -64,10 +64,13 @@ export const MEETING_REGIONS = ['us', 'uk', 'canada'] as const;
 export type MeetingRegion = (typeof MEETING_REGIONS)[number];
 const REGION_NAME: Record<MeetingRegion, string> = { us: 'the United States', uk: 'the United Kingdom', canada: 'Canada' };
 
-type Stage = 'define' | 'trends' | 'research_market' | 'research_buyers' | 'research_field' | 'research_paths' | 'fees' | 'write';
+type Stage = 'define' | 'trends' | 'research_market' | 'research_buyers' | 'research_field' | 'research_paths' | 'fees' | 'write' | 'write_moves';
 type ResearchStage = 'research_market' | 'research_buyers' | 'research_field' | 'research_paths';
-const FRESH_PATH: Stage[] = ['define', 'trends', 'research_market', 'research_buyers', 'research_field', 'research_paths', 'fees', 'write'];
-const REUSED_PATH: Stage[] = ['define', 'trends', 'fees', 'write'];
+const FRESH_PATH: Stage[] = ['define', 'trends', 'research_market', 'research_buyers', 'research_field', 'research_paths', 'fees', 'write', 'write_moves'];
+const REUSED_PATH: Stage[] = ['define', 'trends', 'fees', 'write', 'write_moves'];
+/** The write-up comes in two parts, so each fits one worker: the numbers, then Rein's judgment. */
+const CORE_SECTIONS: SectionKey[] = ['opportunity', 'size', 'money', 'cost_to_100', 'buyers', 'prices', 'crowding', 'timing', 'first_dollar', 'startup_kit', 'platforms', 'converts', 'custom'];
+const MOVE_SECTIONS: SectionKey[] = ['way_in', 'exit', 'launch_pads', 'risks', 'fit'];
 
 /** The sections a meeting tries to answer, in order (knowledge pack, "What a meeting answers"). */
 export const SECTIONS = [
@@ -248,6 +251,7 @@ type Work = {
   x?: XCount[];
   brief?: { briefId: string; createdAt: string; trends: Array<{ topic: string; summary: string; momentum: string | null; posts7d: number | null }>; patterns: string[]; ideas: string[]; notFound: string | null } | null;
   notes?: Partial<Record<ResearchStage | 'fees', Notes>>;
+  draftCore?: z.infer<typeof MeetingDraft>;
 };
 
 /** Runs due meeting stages until this worker's time runs out. */
@@ -388,7 +392,10 @@ async function stageWork(db: SupabaseClient, m: Row, work: Work, budget: Budget,
       work.notes = { ...(work.notes ?? {}), fees: await feesStage(m, work, budget, deadline) };
       return after('fees');
     case 'write':
-      await writeStage(db, m, work, budget, deadline);
+      await writeStage(db, m, work, budget, deadline, 'core');
+      return after('write');
+    case 'write_moves':
+      await writeStage(db, m, work, budget, deadline, 'moves');
       return 'done';
   }
 }
@@ -755,7 +762,7 @@ const MeetingDraft = z.object({
   skipped: z.array(z.object({ section: Section, why: z.string() })).max(18),
 });
 
-async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget, deadline: number) {
+async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget, deadline: number, part: 'core' | 'moves') {
   // Number every source once: web sources s1, s2...; X numbers keep x1 to x3.
   const all = [work.notes?.research_market, work.notes?.research_buyers, work.notes?.research_field, work.notes?.research_paths, work.notes?.fees].filter(Boolean) as Notes[];
   const byUrl = new Map<string, Source & { id: string }>();
@@ -781,11 +788,33 @@ async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget
     `# Sources\n${[...byUrl.values()].map((s) => `${s.id}: ${s.title} (${s.publisher}, ${s.published}, rung ${s.rung}) ${s.url}`).join('\n') || '(none)'}\n${(work.x ?? []).map((x) => `${x.id}: X post count, last 7 days, worldwide: "${x.query}"`).join('\n')}`,
     gaps.length ? `# Gaps found in research\n${JSON.stringify(gaps)}` : '',
     work.notes?.fees ? '# Fees\nFindings marked checkedToday come from today\'s fee and rule check. Where they differ from older notes, today\'s win.' : '',
-    `# Task: write the meeting
-Decide the slides, in the order of "What a meeting answers". One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide; moves only on way_in (forBil only when this is a client's meeting and Bil could turn the move into a campaign). A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`,
+    part === 'core'
+      ? `# Task: write the first part of the meeting: the numbers
+Write only these slides, in this order, each one the notes can back: ${CORE_SECTIONS.join(', ')}. Also write the meeting's title and its one-sentence headline. One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide. Leave moves empty. A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`
+      : `# The first part, already written
+Title: ${work.draftCore?.title ?? ''}
+Headline: ${work.draftCore?.headline ?? ''}
+Slides: ${JSON.stringify((work.draftCore?.slides ?? []).map((x) => ({ key: x.key, headline: x.headline })))}
+
+# Task: write the second part of the meeting: your judgment
+Write only these slides, in this order: ${MOVE_SECTIONS.filter((k) => k !== 'fit' || fit).join(', ')}. way_in: three to five moves, cheapest test first (forBil only when this is a client's meeting and Bil could turn the move into a campaign). exit, launch_pads and risks: points, each grounded in the notes; risks rated low, medium or high with why. ${fit ? 'fit: from their brand kit and plan only.' : ''} Any figure cites ids from the source list; never add a number the notes do not hold. Repeat the title and headline above as they are. A section without backing goes in skipped with why. No em dashes.`,
   ].filter(Boolean).join('\n\n');
 
-  const draft = await grokObject(budget, 'write', MODEL_STRONG, 'medium', prompt, MeetingDraft, 9000, 6000, deadline, Boolean(fit));
+  if (part === 'core') {
+    // The faster model lays out the checked numbers; the strong model writes the judgment next.
+    work.draftCore = await grokObject(budget, 'write', MODEL_LIGHT, 'low', prompt, MeetingDraft, 7000, 3000, deadline, Boolean(fit));
+    return;
+  }
+  const moves = await grokObject(budget, 'write_moves', MODEL_STRONG, 'low', prompt, MeetingDraft, 3500, 3000, deadline, Boolean(fit));
+  const core = work.draftCore ?? { title: moves.title, headline: moves.headline, slides: [], skipped: [] };
+  const order = (k: string) => SECTIONS.indexOf(k as SectionKey);
+  const draft = {
+    title: core.title || moves.title,
+    headline: core.headline || moves.headline,
+    slides: [...core.slides.filter((x) => CORE_SECTIONS.includes(x.key)), ...moves.slides.filter((x) => MOVE_SECTIONS.includes(x.key))]
+      .sort((a, b) => order(a.key) - order(b.key)),
+    skipped: [...core.skipped, ...moves.skipped],
+  };
   const meeting = finishMeeting(draft, m, work, byUrl);
   const { error } = await db.from('opportunity_meetings').update({ meeting }).eq('id', m.id);
   if (error) throw new Error(`Could not save the meeting: ${error.message}`);
