@@ -746,7 +746,7 @@ const MeetingDraft = z.object({
     headline: z.string(),
     body: z.string().optional(),
     figures: z.array(FigureOut).max(4),
-    points: z.array(z.string()).max(6),
+    points: z.array(z.string()).max(6).describe('Each point one or two short sentences, under 240 characters.'),
     profiles: z.array(z.object({
       name: z.string(),
       job: z.string(),
@@ -875,7 +875,7 @@ function finishMeeting(d: z.infer<typeof MeetingDraft>, m: Row, work: Work, byUr
         })
       : [];
     const moves = s.key === 'way_in' ? s.moves.map((x) => ({ move: clean(x.move, 160), why: clean(x.why, 200), forBil: Boolean(m.client_id) && x.forBil })) : [];
-    const points = s.points.map((p) => clean(p, 200)).filter(Boolean);
+    const points = s.points.map((p) => trimAtSentence(p, 320)).filter(Boolean);
     // Moves, the exit and launch pads are Rein's judgment built on the notes; every other
     // slide needs at least one backed figure or profile to stand.
     const judgment = ['way_in', 'exit', 'launch_pads', 'risks', 'fit', 'opportunity'].includes(s.key);
@@ -976,4 +976,12 @@ async function grokObject<S extends z.ZodType>(
 
 const clean = (s: string, n: number) => String(s ?? '').replace(/\s*—\s*/g, ', ').replace(/\s+/g, ' ').trim().slice(0, n);
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+/** Cleans and, if too long, cuts at the last full sentence (or word) instead of mid-word. */
+function trimAtSentence(t: string, n: number): string {
+  const c = clean(t, 10_000);
+  if (c.length <= n) return c;
+  const cut = c.slice(0, n);
+  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+  return end > n / 2 ? cut.slice(0, end + 1) : `${cut.slice(0, cut.lastIndexOf(' '))}...`;
+}
 
