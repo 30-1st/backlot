@@ -854,6 +854,7 @@ async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget
     xBlock(work),
     briefBlock(work),
     creatorsBlock(work),
+    part === 'core' ? voiceBlock(work) : '',
     `# Your checked research notes (only these may back a number)\n${JSON.stringify(findings)}`,
     `# Sources\n${[...byUrl.values()].map((s) => `${s.id}: ${s.title} (${s.publisher}, ${s.published}, rung ${s.rung}) ${s.url}`).join('\n') || '(none)'}\n${(work.x ?? []).map((x) => `${x.id}: X post count, last 7 days, worldwide: "${x.query}"`).join('\n')}${work.voice?.posts.length ? `\nv1: what buyers say, ${work.voice.posts.length} public X posts (a sample)` : ''}${work.creators ? `\nc1: followers of ${work.creators.count} in-niche creators on X` : ''}`,
     gaps.length ? `# Gaps found in research\n${JSON.stringify(gaps)}` : '',
