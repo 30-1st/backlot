@@ -865,7 +865,7 @@ async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget
     work.notes?.fees ? '# Fees\nFindings marked checkedToday come from today\'s fee and rule check. Where they differ from older notes, today\'s win.' : '',
     part === 'core'
       ? `# Task: write the first part of the meeting: the numbers
-Write only these slides, in this order, each one the notes can back: ${CORE_SECTIONS.join(', ')}. Also write the meeting's title and its one-sentence headline. One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide, built from what buyers say (v1) and published research: at least two when the evidence allows. Always write cost_to_100 when any fee in the notes is known: fill costLines with all eight lines, dollars of every $100 in sales each takes, with its math (state the typical price you assume for per-sale fees), its sources, or null and unknown when there is no basis. The platform's cut and payment processing are always separate lines, even when one page lists both. A partial stack is expected and is shown as "at least"; never skip the slide because some lines are unknown. Leave costLines empty on every other slide. When no source counts buyers, size the reachable audience instead from c1 (in-niche creators and the largest following) and the X counts, labeled as reach, not buyers. The price ladder may come from what buyers say they paid (v1), labeled as a sample. What converts may rest on the trend brief's patterns and the X numbers. Leave moves empty. A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`
+Write only these slides, in this order, each one the notes can back: ${CORE_SECTIONS.join(', ')}. Also write the meeting's title and its one-sentence headline. One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide, built from what buyers say (v1) and published research: at least two when the evidence allows. Always write cost_to_100 when any fee in the notes is known: fill costLines with all eight lines, dollars of every $100 in sales each takes, with its math (state the typical price you assume for per-sale fees), its sources, or null and unknown when there is no basis. The platform's cut and payment processing are always separate lines, even when one page lists both; when the platform's cut already includes processing, processing is 0 with that as its math. A partial stack is expected and is shown as "at least"; never skip the slide because some lines are unknown. Leave costLines empty on every other slide. When no source counts buyers, size the reachable audience instead from c1 (in-niche creators and the largest following) and the X counts, labeled as reach, not buyers. The price ladder may come from what buyers say they paid (v1), labeled as a sample. What converts may rest on the trend brief's patterns and the X numbers. Leave moves empty. A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`
       : `# The first part, already written
 Title: ${work.draftCore?.title ?? ''}
 Headline: ${work.draftCore?.headline ?? ''}
@@ -967,6 +967,29 @@ function finishMeeting(d: z.infer<typeof MeetingDraft>, m: Row, work: Work, byUr
     if (costStack) costStack.lines.forEach((l) => l.sourceIds.forEach((i) => used.add(i)));
     slides.push({ key: s.key, title: clean(s.title, 60), headline: clean(s.headline, 200), body: clean(s.body ?? '', 600), figures, points, profiles, moves, ...(costStack ? { costStack } : {}) });
   }
+  // No size slide from Rein, but code counted reach on X: build it from those measured numbers.
+  if (!slides.some((x) => x.key === 'size') && (work.creators || (work.x ?? []).some((x) => x.total7d > 0))) {
+    const figures = [];
+    if (work.creators) {
+      figures.push({ label: 'In-niche creators found on X', value: String(work.creators.count), basis: 'measured' as const, sourceIds: ['c1'] });
+      figures.push({ label: 'Largest following among them', value: work.creators.followers[0].toLocaleString('en-US'), basis: 'measured' as const, sourceIds: ['c1'] });
+      used.add('c1');
+    }
+    const top = [...(work.x ?? [])].sort((a, b) => b.total7d - a.total7d)[0];
+    if (top && top.total7d > 0) {
+      figures.push({ label: `Posts about it on X, last 7 days (worldwide): ${top.query}`.slice(0, 80), value: top.total7d.toLocaleString('en-US'), basis: 'measured' as const, sourceIds: [top.id] });
+      used.add(top.id);
+    }
+    slides.push({
+      key: 'size', title: 'Size', headline: 'Reach, not buyers: what X shows about this market.',
+      body: 'No source counts the buyers in this market. These are the measured signs of its reach on X; audiences overlap, so they are a ceiling, not a total.',
+      figures, points: [], profiles: [], moves: [],
+    });
+    const order = (k: string) => SECTIONS.indexOf(k as SectionKey);
+    slides.sort((a, b) => order(a.key) - order(b.key));
+    const i = skipped.findIndex((x) => x.section === 'size');
+    if (i >= 0) skipped.splice(i, 1);
+  }
   return {
     version: 2,
     score: scorecard(slides),
@@ -1019,11 +1042,12 @@ function costStackOf(lines: NonNullable<z.infer<typeof MeetingDraft>['slides'][n
 }
 
 /** The meeting scorecard: did it answer the core five with backing (Rein Roadmap, Nov 2, 2026)? */
-function scorecard(slides: Array<{ key: string; figures: unknown[]; profiles: unknown[]; moves: unknown[]; points: unknown[]; costStack?: { lines: Array<{ perHundred: number | null }> } }>) {
+function scorecard(slides: Array<{ key: string; figures: unknown[]; profiles: unknown[]; moves: unknown[]; points: unknown[]; costStack?: { lines: Array<{ line?: string; perHundred: number | null }> } }>) {
   const has = (k: string) => slides.find((s) => s.key === k);
   const checks: Record<string, boolean> = {
     size: Boolean(has('size')?.figures.length),
-    cost_to_100: (has('cost_to_100')?.costStack?.lines.filter((l) => l.perHundred !== null).length ?? 0) >= 2,
+    // The platform's cut is the core of the cost to make $100; some platforms' cut already includes processing.
+    cost_to_100: Boolean(has('cost_to_100')?.costStack?.lines.some((l) => (l as { line?: string }).line === 'platform_cut' && l.perHundred !== null)),
     buyers: (has('buyers')?.profiles.length ?? 0) >= 2,
     way_in: (has('way_in')?.moves.length ?? 0) >= 3,
     exit: (has('exit')?.points.length ?? 0) >= 2,
