@@ -14,11 +14,13 @@ import { Radar } from './icons';
 type Basis = 'measured' | 'estimated' | 'unknown';
 type Figure = { label: string; value: string; low?: number; high?: number; unit?: string; basis: Basis; math?: string; sourceIds: string[] };
 type Profile = { name: string; job: string; paysFor: string[]; products: string[]; ignores: string[]; spend?: string; stays?: string; sourceIds: string[] };
-type Slide = { key: string; title: string; headline: string; body: string; figures: Figure[]; points: string[]; profiles: Profile[]; moves: Array<{ move: string; why: string; forBil: boolean }> };
+type CostLine = { line: string; name: string; perHundred: number | null; basis: Basis; math?: string; sourceIds: string[] };
+type CostStack = { lines: CostLine[]; knownTotal: number; complete: boolean; kept: number | null };
+type Slide = { key: string; title: string; headline: string; body: string; figures: Figure[]; points: string[]; profiles: Profile[]; moves: Array<{ move: string; why: string; forBil: boolean }>; costStack?: CostStack };
 type SourceRef = { id: string; kind: 'web' | 'x'; title: string; publisher: string; published: string; rung: number; url: string | null };
 type MeetingDoc = {
   version: number; market: string; marketName: string; region: MeetingRegion; kind: string; title: string; headline: string;
-  adult: boolean; reusedMarket: boolean; slides: Slide[]; sources: SourceRef[]; skipped: Array<{ section: string; why: string }>; note: string; createdAt: string;
+  adult: boolean; reusedMarket: boolean; score?: { passed: number; of: number; missing: string[] }; slides: Slide[]; sources: SourceRef[]; skipped: Array<{ section: string; why: string }>; note: string; createdAt: string;
 };
 type Row = {
   id: string; status: 'queued' | 'working' | 'ready' | 'failed'; market_input: string; market_name: string | null; region: MeetingRegion;
@@ -188,6 +190,7 @@ export function OpportunitiesPanel({ me, ws, single, openId, go }: { me: Me; ws:
       {shown && (
         <MeetingViewer
           doc={shown.meeting!}
+          showScore={me.role === 'owner'}
           onClose={() => {
             setOpen(null);
             if (openId) go('opportunities');
@@ -237,14 +240,14 @@ function Working({ row }: { row: Row }) {
 
 type Page = { key: string; render: () => ReactNode };
 
-function MeetingViewer({ doc, onClose }: { doc: MeetingDoc; onClose: () => void }) {
+function MeetingViewer({ doc, onClose, showScore = false }: { doc: MeetingDoc; onClose: () => void; showScore?: boolean }) {
   const [i, setI] = useState(0);
   const [dir, setDir] = useState<'next' | 'prev'>('next');
   const [printing, setPrinting] = useState(false);
   const startX = useRef<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const src = useMemo(() => new Map(doc.sources.map((s) => [s.id, s])), [doc]);
-  const pages = useMemo<Page[]>(() => buildPages(doc, src), [doc, src]);
+  const pages = useMemo<Page[]>(() => buildPages(doc, src, false, showScore), [doc, src, showScore]);
   const n = pages.length;
   const at = Math.min(i, n - 1);
   const move = (d: 1 | -1) => {
@@ -352,7 +355,7 @@ function MeetingViewer({ doc, onClose }: { doc: MeetingDoc; onClose: () => void 
   );
 }
 
-function buildPages(doc: MeetingDoc, src: Map<string, SourceRef>, print = false): Page[] {
+function buildPages(doc: MeetingDoc, src: Map<string, SourceRef>, print = false, showScore = false): Page[] {
   const pages: Page[] = [
     {
       key: 'cover',
@@ -364,6 +367,12 @@ function buildPages(doc: MeetingDoc, src: Map<string, SourceRef>, print = false)
           <span className="bl-small">
             Rein · {new Date(doc.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })} · {doc.slides.length} slides, {doc.sources.length} sources
           </span>
+          {showScore && doc.score && (
+            <span className="bl-score">
+              Scorecard {doc.score.passed} of {doc.score.of}
+              {doc.score.missing.length ? ` · missing: ${doc.score.missing.map((k) => SECTION_NAME[k] ?? k).join(', ')}` : ''}
+            </span>
+          )}
         </div>
       ),
     },
@@ -383,7 +392,8 @@ function SlideView({ s, src, print = false }: { s: Slide; src: Map<string, Sourc
       <span className="bl-slide-kick">{SECTION_NAME[s.key] ?? s.title}</span>
       <h2 className="bl-slide-head">{s.headline}</h2>
       {s.body && <p className="bl-slide-body">{s.body}</p>}
-      {s.figures.length > 0 && !(s.profiles.length > 0 && !print) && (
+      {s.costStack && <CostView c={s.costStack} src={src} />}
+      {s.figures.length > 0 && !(s.profiles.length > 0 && !print) && !(s.costStack && s.costStack.lines.some((l) => l.perHundred !== null)) && (
         <div className={`bl-figs n${Math.min(s.figures.length, 4)}`}>
           {s.figures.map((f, k) => (
             <FigureView key={k} f={f} src={src} />
@@ -449,6 +459,44 @@ function SlideView({ s, src, print = false }: { s: Slide; src: Map<string, Sourc
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+const COST_SHADES = ['var(--ink)', 'var(--ink-2)', 'var(--ink-3)', 'var(--line-2)', 'var(--line)', 'var(--mist)', '#b9b8b1', '#a3a29b'];
+
+/** The cost to make $100: the known lines, totaled by code; "at least" while any line is unknown. */
+function CostView({ c, src }: { c: CostStack; src: Map<string, SourceRef> }) {
+  const known = c.lines.filter((l) => l.perHundred !== null);
+  const money = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+  return (
+    <div className="bl-cost">
+      <div className="bl-cost-total">
+        <span className="bl-fig-value num">{c.complete ? money(c.knownTotal) : `At least ${money(c.knownTotal)}`}</span>
+        <span className="bl-fig-label">{c.complete ? `spent to bring in $100. The seller keeps ${money(c.kept ?? 0)}.` : 'of every $100 goes to the costs Rein could back. The lines marked unknown come on top.'}</span>
+      </div>
+      {known.length > 0 && (
+        <div className="bl-cost-bar" role="img" aria-label={`Of every $100: ${known.map((l) => `${l.name} ${money(l.perHundred!)}`).join(', ')}`}>
+          {known.map((l, k) => (
+            <i key={l.line} style={{ flexGrow: l.perHundred!, background: COST_SHADES[k % COST_SHADES.length] }} />
+          ))}
+          {c.complete && <i className="kept" style={{ flexGrow: c.kept ?? 0 }} />}
+          {!c.complete && <i className="rest" style={{ flexGrow: Math.max(0, 100 - c.knownTotal) }} />}
+        </div>
+      )}
+      <ul className="bl-cost-lines">
+        {c.lines.map((l) => (
+          <li key={l.line}>
+            <span className="bl-cost-name">
+              {l.perHundred !== null && <i style={{ background: COST_SHADES[known.indexOf(l) % COST_SHADES.length] }} aria-hidden="true" />}
+              {l.name}
+            </span>
+            <b className="num">{l.perHundred !== null ? money(l.perHundred) : 'Unknown'}</b>
+            {l.math && <small>{l.math}</small>}
+            {l.perHundred !== null && <Cite ids={l.sourceIds} src={src} />}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

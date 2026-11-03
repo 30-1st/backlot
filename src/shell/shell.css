@@ -2860,3 +2860,20 @@ html[data-vt='back']::view-transition-new(root) {
   :root, html, body { color-scheme: light !important; background: #fff !important; }
   @page { margin: 12mm; }
 }
+
+/* The cost to make $100 */
+.bl-cost { display: flex; flex-direction: column; gap: 12px; }
+.bl-cost-total { display: flex; flex-direction: column; gap: 4px; }
+.bl-cost-total .bl-fig-value { font-size: clamp(34px, 8vw, 52px); }
+.bl-cost-bar { display: flex; gap: 2px; height: 16px; border-radius: 8px; overflow: hidden; background: var(--mist); }
+.bl-cost-bar i { display: block; min-width: 2px; }
+.bl-cost-bar i.kept { background: var(--accent); }
+.bl-cost-bar i.rest { background: repeating-linear-gradient(135deg, var(--mist) 0 6px, transparent 6px 12px); }
+.bl-cost-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bl-cost-lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.bl-cost-lines li:last-child { border-bottom: 0; }
+.bl-cost-lines small { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); line-height: 1.35; }
+.bl-cost-lines .bl-cite { grid-column: 1 / -1; }
+.bl-cost-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.bl-cost-name i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.bl-score { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--mist); color: var(--ink-2); }
