@@ -440,8 +440,11 @@ Apply skill R1. If the request is too broad, choose the most promising market in
     .filter((q) => q.length >= 2 && !PERSON_OPERATORS.test(q) && !BAD_OPERATORS.test(q));
   const marketName = clean(out.marketName, 80).toLowerCase() || clean(m.market_input, 80).toLowerCase();
   const key = nicheKey(marketName);
-  const { data: reused } = await db.from('opportunity_markets').select('id, research').eq('market_key', key).eq('region', m.region)
-    .gt('reuse_until', new Date().toISOString()).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  // Same market, same region, inside 6 months: matched on Rein's name for it or on what the user typed.
+  const fresh = new Date().toISOString();
+  const lookup = (col: 'market_key' | 'input_key', v: string) =>
+    db.from('opportunity_markets').select('id, research').eq(col, v).eq('region', m.region).gt('reuse_until', fresh).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  const reused = (await lookup('market_key', key)).data ?? (await lookup('input_key', nicheKey(m.market_input))).data ?? (await lookup('input_key', key)).data;
 
   const buyerQueries = out.buyerQueries
     .map((q) => q.trim().slice(0, 400))
@@ -776,6 +779,7 @@ async function saveMarket(db: SupabaseClient, m: Row, work: Work) {
   const d = work.define!;
   const { data, error } = await db.from('opportunity_markets').insert({
     market_key: nicheKey(d.marketName),
+    input_key: nicheKey(m.market_input).slice(0, 200),
     region: m.region,
     market: d.market,
     research: { notes: { research_market: work.notes?.research_market, research_buyers: work.notes?.research_buyers, research_field: work.notes?.research_field, research_paths: work.notes?.research_paths }, platforms: d.platforms },
@@ -861,7 +865,7 @@ async function writeStage(db: SupabaseClient, m: Row, work: Work, budget: Budget
     work.notes?.fees ? '# Fees\nFindings marked checkedToday come from today\'s fee and rule check. Where they differ from older notes, today\'s win.' : '',
     part === 'core'
       ? `# Task: write the first part of the meeting: the numbers
-Write only these slides, in this order, each one the notes can back: ${CORE_SECTIONS.join(', ')}. Also write the meeting's title and its one-sentence headline. One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide, built from what buyers say (v1) and published research: at least two when the evidence allows. On cost_to_100, fill costLines with all eight lines: dollars of every $100 in sales each takes, with its math (state the typical price you assume for per-sale fees), its sources, or null and unknown when there is no basis. Leave costLines empty on every other slide. Leave moves empty. A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`
+Write only these slides, in this order, each one the notes can back: ${CORE_SECTIONS.join(', ')}. Also write the meeting's title and its one-sentence headline. One claim per slide headline, one to four figures, each figure citing ids from the source list. Use only the notes above for numbers; never add a number they do not hold. Profiles only on the buyers slide, built from what buyers say (v1) and published research: at least two when the evidence allows. Always write cost_to_100 when any fee in the notes is known: fill costLines with all eight lines, dollars of every $100 in sales each takes, with its math (state the typical price you assume for per-sale fees), its sources, or null and unknown when there is no basis. The platform's cut and payment processing are always separate lines, even when one page lists both. A partial stack is expected and is shown as "at least"; never skip the slide because some lines are unknown. Leave costLines empty on every other slide. When no source counts buyers, size the reachable audience instead from c1 (in-niche creators and the largest following) and the X counts, labeled as reach, not buyers. The price ladder may come from what buyers say they paid (v1), labeled as a sample. What converts may rest on the trend brief's patterns and the X numbers. Leave moves empty. A section without backing goes in skipped with why. ${m.kind === 'recommendation' ? 'This meeting is your team\'s recommendation to the client: say so in the opportunity slide body.' : ''} No em dashes.`
       : `# The first part, already written
 Title: ${work.draftCore?.title ?? ''}
 Headline: ${work.draftCore?.headline ?? ''}
@@ -953,7 +957,7 @@ function finishMeeting(d: z.infer<typeof MeetingDraft>, m: Row, work: Work, byUr
     const points = s.points.map((p) => trimAtSentence(p, 320)).filter(Boolean);
     // Moves, the exit and launch pads are Rein's judgment built on the notes; every other
     // slide needs at least one backed figure or profile to stand.
-    const judgment = ['way_in', 'exit', 'launch_pads', 'risks', 'fit', 'opportunity'].includes(s.key);
+    const judgment = ['way_in', 'exit', 'launch_pads', 'risks', 'fit', 'opportunity', 'converts'].includes(s.key);
     if (!judgment && figures.length === 0 && profiles.length === 0 && !(costStack && costStack.lines.some((l) => l.perHundred !== null))) {
       skipped.push({ section: s.key, why: 'Not enough backed numbers.' });
       continue;
