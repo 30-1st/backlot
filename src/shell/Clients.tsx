@@ -64,8 +64,8 @@ export function ClientsScreen({ ws, go, pick }: ScreenProps & { pick: (clientId:
               <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'desk')}>
                 Desk
               </button>
-              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'kris')}>
-                Kris
+              <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'chat')}>
+                Chat
               </button>
               <button type="button" className="bl-ghost" onClick={() => goFor(c.id, 'xev')}>
                 Xev

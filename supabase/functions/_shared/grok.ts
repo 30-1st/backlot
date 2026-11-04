@@ -31,6 +31,8 @@ export const KNOWLEDGE_VERSION = {
   xev: 'k1',
   /** Rein's Opportunity Meeting knowledge pack (knowledge/rein.ts). */
   opportunity: 'k1',
+  /** The team chat's shared rules (team-chat.ts), on top of each agent's own pack. */
+  chat: 'c1',
 } as const;
 
 export function xaiClient() {

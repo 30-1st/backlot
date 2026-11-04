@@ -27,7 +27,9 @@
 //   restore        { campaignId }  bring a discarded campaign back and resume drafting (free)  team, client
 //   ask            { requestId, text, clientId? }  the agent bar: Bil answers and may offer one next step (a few cents)  team
 //   desk           { requestId, clientId, replies? }  engagement desk: trend posts (free), replies to the client (about $0.005 a post)  team
-//   kris           { requestId, clientId, text }  Kris, the client's publicist, answers in her chat (about half a cent)  team, client
+//   kris           { requestId, clientId, text }  Kris alone answers (the old one-to-one chat; the app now uses chat_send)  team, client
+//   chat_send      { requestId, clientId, text }  The team chat: saves the message, the lead agent answers (about a cent)  team, client
+//   chat_chime     { requestId, clientId, turn }  Up to two teammates add to that answer, or nobody does                team, client
 //   report         { requestId, clientId, month }  monthly report from X numbers (about $0.005 a post + one Bil call)  team
 //   game_plan_save                           the Game Plan inputs (free)                                  team, client
 //   network_set / quotes_find / quote_decide the Network list (free), Find quotes now (about $0.15), quote outcomes  team, client
@@ -81,6 +83,7 @@ import {
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, XevReadRequest, xevStatus } from '../_shared/xev.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
+import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest } from '../_shared/team-chat.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
@@ -188,6 +191,10 @@ async function handle(req: Request): Promise<Response> {
       }
       case 'kris':
         return reply(200, await krisChat(member, parse(KrisChatRequest, input)));
+      case 'chat_send':
+        return reply(200, await chatSend(member, parse(ChatSendRequest, input)));
+      case 'chat_chime':
+        return reply(200, await chatChime(member, parse(ChatChimeRequest, input)));
       case 'review_post':
         return reply(200, await reviewPost(member, parse(ReviewPostRequest, input)));
       case 'ways_copy':

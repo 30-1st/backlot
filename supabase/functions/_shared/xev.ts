@@ -12,6 +12,7 @@ import { Budget, serviceClient } from './spend.ts';
 import { BilInputError as XevInputError, loadKit, snapshotText } from './bil.ts';
 import { XEV_KNOWLEDGE } from './knowledge/xev.ts';
 import { type Member, requireClientAccess } from './workspace.ts';
+import { chatXevRead } from './team-chat.ts';
 
 const XEV_MODEL = AGENT_MODELS.xev;
 const FREE_READS = 3;
@@ -32,6 +33,8 @@ export const XevReadRequest = z.object({
   note: z.string().trim().max(300).optional(),
   /** Base64 JPEG or PNG, blurred and shrunk on the phone. 1 to 3, in order. */
   images: z.array(z.object({ data: z.string().min(100).max(3_500_000), mediaType: z.enum(['image/jpeg', 'image/png']) })).min(1).max(3),
+  /** Post the read into the team chat: the note as the person's message, then Xev's card. */
+  chat: z.boolean().optional(),
 });
 
 const XevAnswer = z.object({
@@ -165,7 +168,8 @@ export async function xevRead(m: Member, req: z.infer<typeof XevReadRequest>) {
   const costUsd = Math.round(budget.spentUsd * 1e4) / 1e4;
   const { error: rErr } = await db.from('xev_reads').insert({ id: req.requestId, client_id: req.clientId, workspace_id: m.workspaceId, thread_id: threadId, read_by: m.userId, images: images.length, stage: answer.stage, stopped: answer.stop, cost_usd: costUsd });
   if (rErr) console.error('xev: could not log the read', rErr.message);
-  return { readId: req.requestId, threadId, answer, costUsd, left: m.role === 'owner' ? null : Math.max(0, allowed - used - 1) };
+  const chat = req.chat ? await chatXevRead(db, m, req.clientId, req.note, answer, req.requestId) : null;
+  return { readId: req.requestId, threadId, answer, costUsd, left: m.role === 'owner' ? null : Math.max(0, allowed - used - 1), chat };
 }
 
 export const XevFeedbackRequest = z.object({

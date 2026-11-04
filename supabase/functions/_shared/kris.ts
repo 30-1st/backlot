@@ -43,15 +43,17 @@ const KrisReply = z.object({
 
 export type KrisMessage = {
   id: number;
-  role: 'kris' | 'client' | 'team';
-  kind: 'chat' | 'note' | 'pitch';
+  role: 'kris' | 'rein' | 'bil' | 'xev' | 'client' | 'team';
+  kind: 'chat' | 'note' | 'pitch' | 'read' | 'briefing';
   body: string;
   cards: Array<{ campaignId: string; slot: number }> | null;
   link: string | null;
+  turn: number | null;
+  data: Record<string, unknown> | null;
   createdAt: string;
 };
 
-const SELECT = 'id, role, kind, body, cards, link, created_at';
+export const SELECT = 'id, role, kind, body, cards, link, turn, data, created_at';
 const shape = (r: any): KrisMessage => ({
   id: Number(r.id),
   role: r.role,
@@ -59,6 +61,8 @@ const shape = (r: any): KrisMessage => ({
   body: String(r.body),
   cards: Array.isArray(r.cards) ? r.cards : null,
   link: r.link ?? null,
+  turn: r.turn == null ? null : Number(r.turn),
+  data: r.data && typeof r.data === 'object' ? r.data : null,
   createdAt: String(r.created_at),
 });
 
@@ -73,9 +77,9 @@ export function cleanReply(s: string): string {
     .slice(0, 900);
 }
 
-type Waiting = { key: string; campaignId: string; slot: number; title: string; hook: string; draft: string; review: string };
+export type Waiting = { key: string; campaignId: string; slot: number; title: string; hook: string; draft: string; review: string };
 
-async function waitingDrafts(db: SupabaseClient, clientId: string, workspaceId: string): Promise<Waiting[]> {
+export async function waitingDrafts(db: SupabaseClient, clientId: string, workspaceId: string): Promise<Waiting[]> {
   const { data: camps, error } = await db
     .from('campaigns')
     .select('id, campaign, created_at')
@@ -113,13 +117,13 @@ async function waitingDrafts(db: SupabaseClient, clientId: string, workspaceId: 
 }
 
 /** Last N messages, oldest first. */
-async function recent(db: SupabaseClient, clientId: string, n: number): Promise<KrisMessage[]> {
+export async function recent(db: SupabaseClient, clientId: string, n: number): Promise<KrisMessage[]> {
   const { data, error } = await db.from('kris_messages').select(SELECT).eq('client_id', clientId).order('id', { ascending: false }).limit(n);
   if (error) throw new Error(`Could not read the chat: ${error.message}`);
   return (data ?? []).map(shape).reverse();
 }
 
-async function insert(db: SupabaseClient, row: Record<string, unknown>): Promise<KrisMessage | null> {
+export async function insert(db: SupabaseClient, row: Record<string, unknown>): Promise<KrisMessage | null> {
   const { data, error } = await db.from('kris_messages').insert(row).select(SELECT).maybeSingle();
   if (error) {
     if (error.code === '23505') return null; // that note was already sent

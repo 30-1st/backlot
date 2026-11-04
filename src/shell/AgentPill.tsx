@@ -130,7 +130,7 @@ export function AgentPill({ ws, go, here, docked, isTeam }: { ws: ReturnType<typ
               className="bl-pill-link"
               onClick={() => {
                 close();
-                go('kris');
+                go('chat');
               }}
             >
               Kris&rsquo;s note

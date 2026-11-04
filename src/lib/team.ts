@@ -96,11 +96,13 @@ export type People = {
 
 export type KrisMessage = {
   id: number;
-  role: 'kris' | 'client' | 'team';
-  kind: 'chat' | 'note' | 'pitch';
+  role: 'kris' | 'rein' | 'bil' | 'xev' | 'client' | 'team';
+  kind: 'chat' | 'note' | 'pitch' | 'read' | 'briefing';
   body: string;
   cards: Array<{ campaignId: string; slot: number }> | null;
   link: string | null;
+  turn: number | null;
+  data: Record<string, unknown> | null;
   createdAt: string;
 };
 
@@ -193,6 +195,12 @@ export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string, changed?: boolean) =>
     call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}), ...(changed ? { changed: true } : {}) }),
   /** One chat turn with Kris: returns what was saved (the person's message and hers). */
+  /** The team chat: the person's message and the lead agent's answer (about a cent). */
+  chatSend: (clientId: string, text: string) =>
+    call<{ messages: KrisMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'chat_send', { requestId: crypto.randomUUID(), clientId, text }),
+  /** Up to two teammates add to that answer, or nobody does. */
+  chatChime: (clientId: string, turn: number) =>
+    call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'chat_chime', { requestId: crypto.randomUUID(), clientId, turn }),
   kris: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'kris', { requestId: crypto.randomUUID(), clientId, text }),
   /** Kris writes bio, pinned post and reply options for the ways into the room (about half a cent). */
@@ -224,8 +232,8 @@ export const bil = {
   gamePlanSave: (clientId: string, plan: { sellsTo: string; appealsTo: string; products: { name: string; note: string }[]; goals: string }) =>
     call<{ saved: boolean }>('bil', 'game_plan_save', { clientId, ...plan }),
   xevStatus: (clientId: string) => call<{ used: number; allowed: number; left: number; unlimited: boolean }>('bil', 'xev_status', { clientId }),
-  xevRead: (clientId: string, images: { data: string; mediaType: 'image/jpeg' }[], o: { threadId?: string; label?: string; note?: string }) =>
-    call<{ readId: string; threadId: string | null; answer: Record<string, unknown>; costUsd: number; left: number | null }>('bil', 'xev_read', { requestId: crypto.randomUUID(), clientId, images, ...o }),
+  xevRead: (clientId: string, images: { data: string; mediaType: 'image/jpeg' }[], o: { threadId?: string; label?: string; note?: string; chat?: boolean }) =>
+    call<{ readId: string; threadId: string | null; answer: Record<string, unknown>; costUsd: number; left: number | null; chat: { messages: KrisMessage[]; turn: number | null } | null }>('bil', 'xev_read', { requestId: crypto.randomUUID(), clientId, images, ...o }),
   xevFeedback: (clientId: string, f: { readId?: string; threadId?: string; used?: boolean; outcome?: 'closed' | 'not_closed' }) => call<{ ok: boolean }>('bil', 'xev_feedback', { clientId, ...f }),
   xevGrant: (clientId: string, extra: number) => call<{ extra: number }>('bil', 'xev_grant', { clientId, extra }),
   networkSet: (clientId: string, change: { add?: { handle: string; kind: 'mutual' | 'viral' }; remove?: string }) => call<{ ok: boolean }>('bil', 'network_set', { clientId, ...change }),

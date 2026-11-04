@@ -30,14 +30,14 @@ import { XevScreen } from './Xev';
 
 // The signed-in app is three rooms behind one Home:
 //   Home                      #home
-//   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #brand  #board  #approvals  #kris  #create
+//   Team (team only)          #today  #campaigns[.id]  #clients  #insights  #library  #brand  #board  #approvals  #chat  #create
 //   Client                    #today, #campaigns and #library (Media) for a client; the team previews
 //                             a client's view under #client, #client.campaigns[.id]
 //   Playground (everyone)     #playground  #instagram and #x (narration studios)  #rein
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -177,6 +177,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     case 'desk':
       screen = <DeskScreen {...props} />;
       break;
+    // The team chat; #kris still opens it, for older links and Kris's notes.
+    case 'chat':
     case 'kris':
       screen = <KrisScreen {...props} />;
       break;
@@ -269,7 +271,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, (head === 'campaigns' && !sub) || head === 'approvals')}
         {tab('campaigns.all', 'Campaigns', <Clapper size={22} />, head === 'campaigns' && Boolean(sub))}
-        {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'room', 'xev'].includes(head))}
+        {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'chat', 'room', 'xev'].includes(head))}
         {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
       </nav>
     );
@@ -278,7 +280,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       <nav aria-label="Your posts" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
         {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals' || head === 'reports' || head === 'desk')}
-        {tab('kris', 'Kris', <Bubble size={22} />, head === 'kris' || head === 'room')}
+        {tab('chat', 'Chat', <Bubble size={22} />, head === 'chat' || head === 'kris' || head === 'room')}
         {tab('library', 'Media', <Vault size={22} />, head === 'library' || head === 'board' || head === 'brand' || head === 'insights')}
         {tab('xev', 'Xev', <Page size={22} />, head === 'xev')}
       </nav>
@@ -294,7 +296,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'room', 'xev'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
+  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'xev'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>

@@ -9,7 +9,7 @@ import { PageHead, RuleBadge } from './Present';
 // (on this phone; the originals never leave it), and she tells you who the prospect is,
 // where the chat stands on the buying-stage line, and 2 or 3 replies to send yourself.
 
-const STAGES = [
+export const STAGES = [
   { key: 'first_contact', name: 'First contact' },
   { key: 'intrigue', name: 'Intrigue' },
   { key: 'value', name: 'Value' },
@@ -20,7 +20,7 @@ const STAGES = [
 ] as const;
 type StageKey = (typeof STAGES)[number]['key'];
 
-type Shot = { key: string; source: HTMLCanvasElement; boxes: Box[] };
+export type Shot = { key: string; source: HTMLCanvasElement; boxes: Box[] };
 type Thread = { id: string; label: string; stage: StageKey | null; updatedAt: string; outcome: string | null };
 type Answer = {
   stop: boolean;
@@ -34,7 +34,7 @@ type Answer = {
 };
 
 /** One screenshot with drag-to-blur. */
-function BlurEditor({ shot, onChange, onRemove }: { shot: Shot; onChange: (b: Box[]) => void; onRemove: () => void }) {
+export function BlurEditor({ shot, onChange, onRemove }: { shot: Shot; onChange: (b: Box[]) => void; onRemove: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const [live, setLive] = useState<Box | null>(null);
