@@ -120,7 +120,22 @@ async function call<T>(fn: 'team' | 'bil', action: string, input: Record<string,
   return data as T;
 }
 
+export type Quality = {
+  runs: Array<{ id: string; kind: 'gate' | 'daily'; status: string; startedAt: string; finishedAt: string | null; costUsd: number; avg: number | null; failRate: number | null; scored: number | null; previous: { avg: number | null; failRate: number } | null }>;
+  trend: Record<string, Array<{ day: string; avg: number | null; failRate: number; n: number }>>;
+  lastGate: { id: string; status: string; startedAt: string; scores: QualityScore[] } | null;
+  weakest: QualityScore[];
+  signals: { approvalRate: number | null; changeRate: number | null; xevUsedRate: number | null; xevClosedRate: number | null; chimeRate: number | null; wins: number; winsUsd: number };
+  cases: number;
+  errors: { failedCampaigns: number; failedMeetings: number };
+  spend: { byAgent: Record<string, number>; used: number; cap: number } | null;
+};
+export type QualityScore = { run_id: string; agent: string; label: string; rule_fails: string[]; judge_score: number | null; judge_why: string | null; output: string | null; created_at: string };
+
 export const team = {
+  /** The executive's Quality screen (owner only; the server refuses anyone else). */
+  quality: () => call<Quality>('team', 'quality'),
+  qualityRun: () => call<{ queued: boolean; reason?: string }>('team', 'quality_run'),
   me: () => call<Me>('team', 'me'),
   people: () => call<People>('team', 'people'),
   invite: (role: 'team' | 'client', clientId?: string) =>
@@ -198,6 +213,9 @@ export const bil = {
   /** Bil tags one untagged photo or video frame from a small copy (non-adult clients; about a quarter of a cent). */
   mediaTag: (clientId: string, itemId: string, image: { data: string; mediaType: 'image/jpeg' }) =>
     call<{ itemId: string; tags: string[]; tagged: boolean; costUsd?: number }>('bil', 'media_tag', { requestId: crypto.randomUUID(), clientId, itemId, image }),
+  /** Logs a sale, a booked call, a new subscriber or another win; Xev or Bil reacts in the chat. */
+  winLog: (clientId: string, w: { kind: 'sale' | 'call' | 'subscriber' | 'other'; amountUsd?: number; note?: string }) =>
+    call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'win_log', { requestId: crypto.randomUUID(), clientId, ...w }),
   /** The team chat: the person's message and the lead agent's answer (about a cent). */
   chatSend: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'chat_send', { requestId: crypto.randomUUID(), clientId, text }),

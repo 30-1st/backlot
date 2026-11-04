@@ -11,6 +11,10 @@
 // Once an hour pg_cron also calls it with { "job": "kris_pitches" }, only when some client
 // has an opening, so Kris can bring a pitch on her own (see migration kris_pitches).
 //
+// Every 5 minutes while an eval run is going, and once an hour otherwise, pg_cron calls it
+// with { "job": "eval" }: a gate run when an agent's knowledge changed, the daily sample
+// once a day (see migration wins_and_evals and eval_tick).
+//
 // The caller must present the worker token from public.internal_config. The platform's
 // JWT check is off because the scheduler has no user session.
 //
@@ -23,6 +27,7 @@ import { drain } from '../_shared/bil.ts';
 import { drainOpportunities } from '../_shared/opportunity.ts';
 import { krisPitches } from '../_shared/kris.ts';
 import { scrubStoredMedia } from '../_shared/media-scrub.ts';
+import { evalTick } from '../_shared/evals.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -58,6 +63,15 @@ Deno.serve(async (req) => {
         .catch((err) => console.error('bil-worker: Kris pitches failed', err instanceof Error ? err.message : err)),
     );
     return reply(202, { accepted: true, job: 'kris_pitches' });
+  }
+
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'eval') {
+    EdgeRuntime.waitUntil(
+      evalTick(BOOT_AT)
+        .then((r) => console.log(`bil-worker: eval ${r}`))
+        .catch((err) => console.error('bil-worker: eval failed', err instanceof Error ? err.message : err)),
+    );
+    return reply(202, { accepted: true, job: 'eval' });
   }
 
   if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'scrub_media') {

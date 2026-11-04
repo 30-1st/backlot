@@ -2969,3 +2969,37 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-gc .bl-gc-title .bl-h1 { font-size: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-gc .bl-gc-head .bl-ghost { min-height: 40px; padding: 0 14px; }
 .bl-gc-read { width: min(300px, 70vw); box-sizing: border-box; }
+
+/* Log a win, in the team chat header. */
+.bl-gc-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.bl-gc .bl-gc-head .bl-gc-win { min-height: 40px; padding: 0 14px; }
+@media (max-width: 420px) { .bl-gc-head { flex-wrap: wrap; } .bl-gc-actions { width: 100%; justify-content: flex-end; } }
+
+/* The executive's gear beside the photo, and the Quality screen. */
+.bl-gear { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); border: 1px solid var(--line); background: var(--paper); text-decoration: none; }
+.bl-gear:hover, .bl-gear[aria-current='page'] { color: var(--accent-text); border-color: var(--accent-edge); }
+.bl-gear:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.bl-quality .bl-glass-card { gap: 10px; }
+.bl-chip.warn { background: var(--danger-wash); color: var(--danger); }
+.bl-q-agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.bl-q-agent { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--paper); }
+.bl-q-spark { width: 100%; height: 34px; }
+.bl-q-axis { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bl-q-line { fill: none; stroke: var(--accent-text); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.bl-q-dot { fill: var(--accent-text); }
+.bl-q-signals { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.bl-q-signals > div { padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--paper); }
+.bl-q-signals dt { font-size: 12px; color: var(--ink-2); }
+.bl-q-signals dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
+.bl-q-list, .bl-q-runs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bl-q-runs li { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.bl-q-row { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 10px; align-items: flex-start; padding: 8px 4px; cursor: pointer; border-radius: 10px; min-height: 44px; }
+.bl-q-row:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.bl-q-score { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; flex-shrink: 0; background: var(--mist); color: var(--ink); }
+.bl-q-score.s1, .bl-q-score.s2 { background: var(--danger-wash); color: var(--danger); }
+.bl-q-score.s4, .bl-q-score.s5 { background: var(--accent-wash); color: var(--accent-text); }
+.bl-q-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bl-q-text b { font-size: 14px; overflow-wrap: anywhere; }
+.bl-q-text small { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.bl-q-open { padding: 0 4px 8px 42px; }
+.bl-q-output { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; padding: 10px 12px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); }

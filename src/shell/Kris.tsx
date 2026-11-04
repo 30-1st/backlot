@@ -46,6 +46,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
   const [prefs, setPrefs] = useState<Prefs>({ plain: false, quietFrom: 21, quietTo: 9 });
   const [showPrefs, setShowPrefs] = useState(false);
   const [xevOpen, setXevOpen] = useState(false);
+  const [winOpen, setWinOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -156,9 +157,14 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
           <h1 className="bl-h1 bl-rise">{isTeam ? 'Team chat' : 'Your team'}</h1>
           <span className="bl-small">{isTeam ? `@${client.handle}, Rein, Bil, Kris, Xev and you` : 'Rein, Bil, Kris, Xev and you'}</span>
         </div>
-        <button type="button" className="bl-ghost" aria-expanded={showPrefs} onClick={() => setShowPrefs((s) => !s)}>
-          Settings
-        </button>
+        <div className="bl-gc-actions">
+          <button type="button" className="bl-btn bl-gc-win" onClick={() => setWinOpen(true)}>
+            Log a win
+          </button>
+          <button type="button" className="bl-ghost" aria-expanded={showPrefs} onClick={() => setShowPrefs((s) => !s)}>
+            Settings
+          </button>
+        </div>
       </header>
 
       {showPrefs && (
@@ -304,6 +310,17 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
         </button>
       </form>
 
+      {winOpen && (
+        <WinSheet
+          clientId={client.id}
+          onClose={() => setWinOpen(false)}
+          onLogged={(messages) => {
+            setWinOpen(false);
+            merge(messages);
+          }}
+        />
+      )}
+
       {xevOpen && (
         <XevSheet
           clientId={client.id}
@@ -316,6 +333,80 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
         />
       )}
     </main>
+  );
+}
+
+const WIN_KINDS = [
+  { key: 'sale', name: 'A sale' },
+  { key: 'call', name: 'A booked call' },
+  { key: 'subscriber', name: 'A new subscriber' },
+  { key: 'other', name: 'Something else' },
+] as const;
+
+/** One tap when the money moves: the only way Backlot sees results against the client's goals. */
+function WinSheet({ clientId, onClose, onLogged }: { clientId: string; onClose: () => void; onLogged: (m: KrisMessage[]) => void }) {
+  const [kind, setKind] = useState<(typeof WIN_KINDS)[number]['key']>('sale');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const host = document.querySelector('.bl-root') ?? document.body;
+  const usd = amount.trim() ? Number(amount.replace(/[$,\s]/g, '')) : undefined;
+  const bad = usd !== undefined && (!Number.isFinite(usd) || usd < 0 || usd > 1_000_000);
+
+  async function save() {
+    setBusy(true);
+    setError('');
+    try {
+      const r = await bil.winLog(clientId, { kind, amountUsd: usd, note: note.trim() || undefined });
+      onLogged(r.messages);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the win.');
+      setBusy(false);
+    }
+  }
+
+  return createPortal(
+    <div className="bl-sheet-back" onClick={busy ? undefined : onClose}>
+      <section className="bl-sheet bl-gc-sheet" role="dialog" aria-modal="true" aria-labelledby="gc-win-t" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && !busy && onClose()}>
+        <h2 id="gc-win-t" className="bl-sheet-title">
+          Log a win
+        </h2>
+        <span className="bl-small">The team measures every plan against these. Only you and your team see them.</span>
+        <div className="bl-filters" role="group" aria-label="What happened">
+          {WIN_KINDS.map((k) => (
+            <button key={k.key} type="button" className="bl-tagchip" aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>
+              {k.name}
+            </button>
+          ))}
+        </div>
+        {(kind === 'sale' || kind === 'other') && (
+          <label className="bl-field">
+            <span className="bl-label">How much, in dollars (optional)</span>
+            <input className="bl-input" inputMode="decimal" maxLength={12} value={amount} placeholder="For example: 250" onChange={(e) => setAmount(e.target.value)} />
+          </label>
+        )}
+        <label className="bl-field">
+          <span className="bl-label">A note (optional, no names)</span>
+          <input className="bl-input" maxLength={200} value={note} placeholder="For example: came from Tuesday's post" onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {bad && <p className="bl-error">That amount does not look right.</p>}
+        {error && (
+          <p className="bl-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="bl-row-actions">
+          <button type="button" className="bl-ghost" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="bl-btn" disabled={busy || bad} onClick={() => void save()}>
+            {busy ? 'Saving' : 'Log it'}
+          </button>
+        </div>
+      </section>
+    </div>,
+    host,
   );
 }
 

@@ -30,6 +30,7 @@
 //   kris           { requestId, clientId, text }  Kris alone answers (the old one-to-one chat; the app now uses chat_send)  team, client
 //   chat_send      { requestId, clientId, text }  The team chat: saves the message, the lead agent answers (about a cent)  team, client
 //   chat_chime     { requestId, clientId, turn }  Up to two teammates add to that answer, or nobody does                team, client
+//   win_log        { requestId, clientId, kind, amountUsd?, note? }  Logs a sale, call or subscriber; Xev or Bil reacts in the chat  team, client
 //   media_tag      { requestId, clientId, itemId, image }  Bil tags one untagged photo or video frame (non-adult only)  team, client
 //   report         { requestId, clientId, month }  monthly report from X numbers (about $0.005 a post + one Bil call)  team
 //   game_plan_save                           the Game Plan inputs (free)                                  team, client
@@ -84,7 +85,7 @@ import {
 import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, XevReadRequest, xevStatus } from '../_shared/xev.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
-import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest } from '../_shared/team-chat.ts';
+import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest, winLog, WinLogRequest } from '../_shared/team-chat.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
@@ -197,6 +198,8 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await chatSend(member, parse(ChatSendRequest, input)));
       case 'chat_chime':
         return reply(200, await chatChime(member, parse(ChatChimeRequest, input)));
+      case 'win_log':
+        return reply(200, await winLog(member, parse(WinLogRequest, input)));
       case 'media_tag':
         return reply(200, await mediaTag(member, parse(MediaTagRequest, input)));
       case 'review_post':

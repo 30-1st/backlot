@@ -40,6 +40,7 @@ import { Region } from '../_shared/schemas/rein.ts';
 import { krisNote } from '../_shared/kris-notes.ts';
 import { previewUrl } from '../_shared/rooms.ts';
 import { opportunityAllowance, OpportunityInputError, OpportunityStartRequest, opportunityStart } from '../_shared/opportunity.ts';
+import { qualityData, requestGate } from '../_shared/evals.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -198,6 +199,16 @@ async function handle(req: Request): Promise<Response> {
     if (action !== 'me' && action !== 'password_set') requireOwnPassword(member);
 
     switch (action) {
+      // The executive's Quality screen: eval runs, scores, real signals, cost and errors.
+      // Owner only, checked here on the server; nobody else can read any of it.
+      case 'quality': {
+        if (member.role !== 'owner') return reply(403, { error: 'Only the executive sees this.' });
+        return reply(200, await qualityData());
+      }
+      case 'quality_run': {
+        if (member.role !== 'owner') return reply(403, { error: 'Only the executive sees this.' });
+        return reply(200, await requestGate());
+      }
       case 'me': {
         const [{ data: me }, client] = await Promise.all([
           db.from('members').select('username, must_change_password').eq('id', userId).maybeSingle(),

@@ -8,7 +8,8 @@ import { ReportsScreen } from './Reports';
 import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
-import { Back, Bubble, Chevron, Clapper, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
+import { Back, Bubble, Chevron, Clapper, Gear, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
+import { QualityScreen } from './Quality';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
 import { CreateScreen } from './Create';
@@ -37,7 +38,7 @@ import { XevScreen } from './Xev';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities', 'quality'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -184,6 +185,10 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       break;
     case 'xev':
       screen = <XevScreen {...props} />;
+      break;
+    // The executive's Quality screen, from the gear; QualityScreen and the server both refuse anyone else.
+    case 'quality':
+      screen = me.role === 'owner' ? <QualityScreen {...props} /> : <Notifications {...props} />;
       break;
     case 'room':
       screen = <RoomScreen {...props} />;
@@ -351,6 +356,20 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
                     ))}
                   </select>
                 </label>
+              )}
+              {me.role === 'owner' && (
+                <a
+                  href="#quality"
+                  className="bl-gear"
+                  aria-label="Quality"
+                  aria-current={head === 'quality' ? 'page' : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go('quality');
+                  }}
+                >
+                  <Gear size={20} />
+                </a>
               )}
               <a
                 href="#account"
