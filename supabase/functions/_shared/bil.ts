@@ -2533,7 +2533,7 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
   if (plan.rolling) {
     const wrote = newRows.filter((r) => r.status === 'ok').length;
     if (wrote) await bilSays(db, c, 'note', `batch:${c.id}:${slots[0].slot}`, `I wrote the next ${wrote} ${wrote === 1 ? 'post' : 'posts'} for "${plan.title}", with the newest trends and media in mind. ${wrote === 1 ? 'It is' : 'They are'} waiting for your yes.`, `campaigns.${c.id}`);
-    await setStep(db, c.id, { status: 'ready', step: 'Next posts are written about a day before they go out' });
+    await setStep(db, c.id, { ...((count ?? 0) > 0 ? { status: 'ready' } : {}), step: 'Next posts are written about a day before they go out' });
   }
   return { kind: 'batch', payload: { size: nextSize, redo: nextRedo } };
 }
