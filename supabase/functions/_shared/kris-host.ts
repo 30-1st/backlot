@@ -1,5 +1,7 @@
 // The AI assistant in a client's room (K2). It has no name on the page: it is "@handle's
-// AI assistant". (Inside Backlot the same agent is Kris.) Loaded by the room door only when a chat message
+// AI assistant". Inside Backlot it is Xev (moved from Kris on Nov 4, 2026; her host pack is
+// knowledge/xev-host.ts). The spend still comes out of the room allowance (scope "kris").
+// Loaded by the room door only when a chat message
 // arrives, so opening a room never loads the AI code.
 //
 // Every message goes through code first, in this order, and only what is left reaches
@@ -12,7 +14,7 @@
 //   6. sexual talk         a warm handoff to the client's links (every room, any niche)
 //   7. ready to buy        a warm handoff to the client's links (S1, S2)
 //   8. close to an FAQ     that FAQ's answer
-// Kris's own replies are checked again on the way out: no web addresses, no em dashes,
+// Xev's own replies are checked again on the way out: no web addresses, no em dashes,
 // no markdown, and the sexual-talk check runs on her words too.
 
 import { generateText, Output } from 'npm:ai@7.0.142';
@@ -21,9 +23,9 @@ import { z } from './schemas/common.ts';
 import { AGENT_MODELS, grokBilled, grokCost, grokEstimate } from './models.ts';
 import { grokOptions, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget } from './spend.ts';
-import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
+import { XEV_HOST_KNOWLEDGE } from './knowledge/xev-host.ts';
 
-const MODEL = AGENT_MODELS.kris;
+const MODEL = AGENT_MODELS.xev;
 const MAX_OUTPUT = 300;
 const REASONING_ALLOWANCE = 200;
 // Host replies run without reasoning: they are short and rule-bound, and code does the
@@ -32,7 +34,7 @@ const REASONING_ALLOWANCE = 200;
 const PER_REPLY_CAP = 0.02;
 const HISTORY = 8;
 
-// ---------- what Kris may know in a room ----------
+// ---------- what the host may know in a room ----------
 
 export type RoomKit = {
   handle: string;
@@ -331,7 +333,7 @@ export function codeReply(text: string, kit: RoomKit, flags: VisitFlags = { cris
   return null;
 }
 
-/** Cleans Kris's words before anyone sees them. */
+/** Cleans the host's words before anyone sees them. */
 /** Promises the assistant cannot keep: it has no way to pass messages to anyone. */
 const FALSE_PROMISE = /\b(i('ll| will)|i am going to|i'm going to|we('ll| will))\s+(pass|forward|send|flag|share|escalate|report|let)\b[^.!?]*[.!?]?/gi;
 
@@ -419,18 +421,18 @@ export async function aiReply(opts: {
   ].filter(Boolean).join('\n');
 
   const budget = new Budget('kris', { perCallCap: PER_REPLY_CAP, clientId: opts.mode === 'test' ? undefined : opts.clientId, krisMode: opts.mode });
-  const estimate = grokEstimate(MODEL, KRIS_KNOWLEDGE.length + prompt.length + 1200, MAX_OUTPUT, REASONING_ALLOWANCE);
+  const estimate = grokEstimate(MODEL, XEV_HOST_KNOWLEDGE.length + prompt.length + 1200, MAX_OUTPUT, REASONING_ALLOWANCE);
   const result = await budget.charge(
     'grok',
     Math.round(estimate * 1e6) / 1e6,
     () =>
       generateText({
         model: xaiClient().responses(MODEL),
-        system: KRIS_KNOWLEDGE,
+        system: XEV_HOST_KNOWLEDGE,
         prompt,
         maxOutputTokens: MAX_OUTPUT,
         output: Output.object({ schema: HostReply }),
-        providerOptions: grokOptions('kris', 'none'),
+        providerOptions: grokOptions('xev_host', 'none'),
         abortSignal: AbortSignal.timeout(30_000),
         telemetry: privateTelemetry(opts.mode === 'test' ? 'kris-room-test' : 'kris-room'),
       }),

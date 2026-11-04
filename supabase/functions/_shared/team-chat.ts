@@ -16,6 +16,7 @@
 // about the client's buyers (patterns only, never a prospect's details). All of it runs on
 // the light model under Kris's caps: $0.04 a call, $3 per client and $10 a month in all.
 
+import { pendingTake, TAKE_YES, xevTake } from './x-connect.ts';
 import { generateText, Output } from 'npm:ai@7.0.142';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { id, z } from './schemas/common.ts';
@@ -266,6 +267,17 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
   const ctx = await context(db, req.clientId, m.workspaceId);
   const mine = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role, author_id: m.userId, kind: 'chat', body: req.text });
   if (!mine) throw new Error('Could not save the message.');
+
+  // Xev just asked "Want my take?" on a DM lead and this is a yes: she reads the conversation live.
+  const tagged = req.text.match(MENTION)?.[1]?.toLowerCase();
+  if ((!tagged || tagged === 'xev') && TAKE_YES.test(req.text.replace(MENTION, ''))) {
+    const leadId = await pendingTake(req.clientId, mine.id);
+    if (leadId) {
+      const said = await xevTake(m, req.clientId, leadId, req.requestId);
+      const hers = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'xev', kind: 'chat', body: said.slice(0, 2000), turn: mine.id });
+      return { messages: [mine, hers].filter(Boolean), turn: mine.id, lead: 'xev' as Agent, chime: false, costUsd: 0 };
+    }
+  }
 
   const named = req.text.match(MENTION)?.[1]?.toLowerCase() as Agent | undefined;
   // A team member talking to the client (they @ the client): the agents stay out of it

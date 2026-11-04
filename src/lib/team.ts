@@ -209,8 +209,8 @@ export type Decision = 'approved' | 'changes' | 'posted' | 'not_posted' | 'pendi
 /** Xev's inbox: the X connection and the open DM leads. Never any message text. */
 export type XevInbox = {
   ready: boolean;
-  connection: { username: string; connectedAt: string; checkedAt: string | null; status: 'active' | 'error' | 'revoked'; error: string | null } | null;
-  leads: Array<{ id: string; intent: 'buying' | 'question' | 'booking'; summary: string; status: 'new' | 'seen'; lastAt: string; threadId: string | null }>;
+  connection: { username: string; connectedAt: string; checkedAt: string | null; nextCheckAt: string | null; status: 'active' | 'error' | 'revoked'; error: string | null } | null;
+  leads: Array<{ id: string; intent: 'buying' | 'question' | 'booking'; summary: string; status: 'new' | 'seen'; lastAt: string; openUrl: string | null }>;
 };
 
 export const bil = {
@@ -268,9 +268,7 @@ export const bil = {
   xConnect: (clientId: string) => call<{ url: string }>('bil', 'x_connect', { clientId }),
   xDisconnect: (clientId: string) => call<{ connected: false }>('bil', 'x_disconnect', { clientId }),
   xevInbox: (clientId: string) => call<XevInbox>('bil', 'xev_inbox', { clientId }),
-  leadOpen: (clientId: string, leadId: string) =>
-    call<{ readId: string; threadId: string | null; answer: Record<string, unknown>; left: number | null; openUrl: string }>('bil', 'lead_open', { requestId: crypto.randomUUID(), clientId, leadId }),
-  leadSet: (clientId: string, leadId: string, status: 'dismissed' | 'closed') => call<{ ok: boolean }>('bil', 'lead_set', { clientId, leadId, status }),
+
   networkSet: (clientId: string, change: { add?: { handle: string; kind: 'mutual' | 'viral' }; remove?: string }) => call<{ ok: boolean }>('bil', 'network_set', { clientId, ...change }),
   quotesFind: (clientId: string) => call<{ postsRead: number; drafts: number; costUsd: number; allowanceLeft: number }>('bil', 'quotes_find', { clientId, requestId: crypto.randomUUID() }),
   quoteDecide: (clientId: string, quoteId: string, decision: 'quoted' | 'skipped' | 'ready', postUrl?: string) =>

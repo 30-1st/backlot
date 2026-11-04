@@ -1305,6 +1305,10 @@ export async function reviewPost(m: Member, req: z.infer<typeof ReviewPostReques
     note: req.decision === 'changes' ? note : [req.decision === 'posted' && req.changed ? 'Posted with changes' : '', xPostId ? `Linked to x.com/i/status/${xPostId}` : ''].filter(Boolean).join('. ') || null,
     actor: m,
   });
+  // A post just went up: if X is connected, Xev looks at it within 5 minutes and plans her DM checks around it.
+  if (req.decision === 'posted') {
+    await db.from('x_connections').update({ next_peek_at: new Date(Date.now() + 5 * 60_000).toISOString() }).eq('client_id', c.client_id).eq('status', 'active');
+  }
   return { campaignId: req.campaignId, slot: req.slot, review: req.decision, reviewedAt, xPostId };
 }
 

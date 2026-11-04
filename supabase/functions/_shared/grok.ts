@@ -26,9 +26,11 @@ export const KNOWLEDGE_VERSION = {
   rein: 'k2',
   bil: 'k3',
   check: 'k1',
-  kris: 'k5',
+  kris: 'k6',
   dials: 'k1',
   xev: 'k1',
+  /** Xev hosting visitors on a client's public page (knowledge/xev-host.ts). */
+  xev_host: 'h1',
   /** Rein's Opportunity Meeting knowledge pack (knowledge/rein.ts). */
   opportunity: 'k1',
   /** The team chat's shared rules (team-chat.ts), on top of each agent's own pack. */

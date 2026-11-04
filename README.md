@@ -1,6 +1,6 @@
 # Backlot
 
-Backlot is a self-serve X consultancy in one app. A team of four AI agents does the work a social media agency would: Rein reads the market, Bil plans and writes campaigns, Kris acts as publicist and hosts each client's public room, and Xev coaches sales chats. People approve everything, and they post by hand. Backlot never posts, replies, likes, follows or sends messages on X.
+Backlot is a self-serve X consultancy in one app. A team of four AI agents does the work a social media agency would: Rein reads the market, Bil plans and writes campaigns, Kris is the publicist, and Xev coaches sales chats, watches connected DMs for buyers and hosts each client's public page. People approve everything, and they post by hand. Backlot never posts, replies, likes, follows or sends messages on X.
 
 ## Who uses it
 
@@ -14,8 +14,8 @@ Backlot is a self-serve X consultancy in one app. A team of four AI agents does 
 | --- | --- | --- |
 | Rein | Trends in a niche, and the Opportunity Meeting: a sourced market read shown as slides, exported as a PDF | `supabase/functions/_shared/rein.ts`, `_shared/opportunity.ts`, `src/shell/Rein.tsx`, `src/shell/Opportunities.tsx` |
 | Bil | Strategist: campaigns, reports, quote posts, the voice | `_shared/bil.ts`, `functions/bil`, `functions/bil-worker` |
-| Kris | Publicist and room host | `_shared/kris*.ts`, `functions/room`, `src/shell/Kris.tsx`, `rooms/` |
-| Xev | Sales chat coach: reads screenshots blurred on the phone, never saved | `_shared/xev.ts`, `src/shell/Xev.tsx`, `src/lib/blur.ts` |
+| Kris | Publicist | `_shared/kris.ts`, `src/shell/Kris.tsx` |
+| Xev | Sales coach: reads screenshots blurred on the phone (never saved), watches connected X DMs after posts and offers her take in the chat, hosts each client's public page | `_shared/xev.ts`, `_shared/x-connect.ts`, `_shared/kris-host.ts`, `functions/x-connect`, `functions/room`, `src/shell/Xev.tsx`, `rooms/` |
 
 Each agent's training lives in `supabase/functions/_shared/knowledge/`.
 
