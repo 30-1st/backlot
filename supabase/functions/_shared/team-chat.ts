@@ -14,7 +14,7 @@
 // Every agent speaks from its own pack and its own data: Rein from her trend briefs, Bil
 // from campaigns and reports, Kris from drafts and pitches, Xev from what she has learned
 // about the client's buyers (patterns only, never a prospect's details). All of it runs on
-// the light model under Kris's caps: $0.02 a call, $3 per client and $10 a month in all.
+// the light model under Kris's caps: $0.04 a call, $3 per client and $10 a month in all.
 
 import { generateText, Output } from 'npm:ai@7.0.142';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
@@ -36,7 +36,7 @@ export type Agent = (typeof AGENTS)[number];
 const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
 
 const MODEL = MODELS.light;
-const PER_CALL_CAP = 0.02;
+const PER_CALL_CAP = 0.04;
 const DAILY_MESSAGES = 60;
 const HISTORY = 12;
 const MAX_CHIMES = 2;
