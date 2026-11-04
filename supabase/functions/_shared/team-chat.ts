@@ -216,7 +216,7 @@ async function speak(budget: Budget, ctx: Context, agent: Agent, task: string, a
     ctx.extra[agent],
     `# The chat so far (oldest first)\n${historyText(ctx.history, ctx.kit.xHandle)}`,
     after.length ? `# Just said in this turn\n${after.join('\n')}` : '',
-    `# Your task\n${task}\n${VOICE[agent]}\nWrite numbers as digits and say what each one measures (for example "3 replies per 1,000 views"). Only use numbers that appear above.`,
+    `# Your task\n${task}\n${VOICE[agent]}\nWrite numbers as digits and say what each one measures (for example "3 replies per 1,000 views"). Only use numbers that appear above. Never repeat a point or a number already said in this turn or the last few messages: add something new, or pass.`,
   ].filter(Boolean).join('\n');
   const out = await call(budget, system, prompt, Said, 400, `chat-${agent}-${KNOWLEDGE_VERSION[agent === 'rein' ? 'opportunity' : agent]}`, `chat-${agent}`);
   if (!out || out.pass || !out.reply.trim()) return null;
