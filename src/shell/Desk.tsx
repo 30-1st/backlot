@@ -146,7 +146,7 @@ export function DeskScreen({ ws, single, isTeam }: ScreenProps) {
       <PageHead
         title="Engagement desk"
         chip={isTeam ? `@${client.handle}` : undefined}
-        line="Posts worth answering or joining."
+        line="Posts worth answering. Reply on X by hand, then mark it here."
         how={
           <>
             <p>Backlot never replies or likes. Open the post on X, answer by hand as the client, then mark it here.</p>

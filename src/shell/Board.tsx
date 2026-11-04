@@ -107,7 +107,7 @@ export function BoardScreen({ me, ws, single, isTeam, go }: ScreenProps) {
       <PageHead
         title="Board"
         chip={isTeam ? `@${client.handle}` : undefined}
-        line="More of this, less of that."
+        line="Posts you want more or less of. Bil reads your notes when he plans."
         how={
           <>
             <p>Posts and looks you want more of, or less of. Bil reads your notes before he plans, never the pictures.</p>

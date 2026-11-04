@@ -215,7 +215,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
         chip={isTeam && client ? `@${client.handle}` : undefined}
         line={
           <>
-            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}.`}{' '}
+            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}. Bil plans around the tags.`}{' '}
             <button type="button" className="bl-linkish" onClick={() => go('board')}>
               Board
             </button>

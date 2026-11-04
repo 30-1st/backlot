@@ -122,7 +122,7 @@ export function ReportsScreen({ ws, single, isTeam }: ScreenProps) {
       <PageHead
         title="Reports"
         chip={isTeam ? `@${client.handle}` : undefined}
-        line="How each month went on X."
+        line="How each month went on X, from X's own numbers."
         how={<p>Each report uses X&rsquo;s own public numbers for original posts. Bil writes the summary; the numbers are worked out in code, so they are never guessed.</p>}
       />
 
