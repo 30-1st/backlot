@@ -20,6 +20,7 @@ import { daysSince, shotsWanted, usage } from './gaps';
 import type { ScreenProps } from './Shell';
 import { supabase } from '../lib/supabase';
 import { team } from '../lib/team';
+import { PageHead } from './Present';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
 // campaign around what is really here. Bil reads the tags, never the images.
@@ -209,14 +210,14 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
         if (e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h1 className="bl-h1 bl-rise">Media</h1>
-          <p className="bl-p bl-muted" style={{ margin: '4px 0 0' }}>
-            {isTeam && client ? `@${client.handle}. ` : ''}
-            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}. Bil plans around the tags, and never sees the images.`}{' '}
+      <PageHead
+        title="Media"
+        chip={isTeam && client ? `@${client.handle}` : undefined}
+        line={
+          <>
+            {items === null ? 'Loading.' : `${live.length} ${plural(live.length, 'file')}.`}{' '}
             <button type="button" className="bl-linkish" onClick={() => go('board')}>
-              Your board
+              Board
             </button>
             {!isTeam && (
               <>
@@ -226,11 +227,16 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
                 </button>
               </>
             )}
-          </p>
-        </div>
-        <button type="button" className="bl-btn" onClick={() => picker.current?.click()} disabled={sending}>
-          {sending ? 'Adding' : 'Add photos and videos'}
-        </button>
+          </>
+        }
+        how={<p>Bil plans posts around the tags on each photo and video, and never sees the images themselves.</p>}
+        actions={
+          <button type="button" className="bl-btn" onClick={() => picker.current?.click()} disabled={sending}>
+            {sending ? 'Adding' : 'Add'}
+          </button>
+        }
+      />
+      <div>
         <input
           ref={picker}
           type="file"

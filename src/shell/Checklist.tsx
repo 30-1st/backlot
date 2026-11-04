@@ -67,6 +67,8 @@ export function Checklist({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [guide, setGuide] = useState(false);
+  // One step open at a time: the next one not done, until the user taps another.
+  const [openKey, setOpenKey] = useState<string | null | undefined>(undefined);
 
   async function toggle(s: Step) {
     if (!s.manual) return;
@@ -85,6 +87,7 @@ export function Checklist({
   const mine = (s: Step) => s.who === 'either' || (isTeam ? s.who === 'team' : s.who === 'client');
   const canTick = (s: Step) => Boolean(s.manual) && (isTeam || s.manual === 'delegate');
   const whoWord = (s: Step) => (s.who === 'either' ? (isTeam ? 'You or the client' : 'You or your team') : s.who === 'client' ? (isTeam ? 'The client' : 'You') : isTeam ? 'You' : 'Your team');
+  const shown = openKey === undefined ? (steps.find((s) => !s.done && mine(s)) ?? steps.find((s) => !s.done))?.key ?? null : openKey;
 
   return (
     <div className="bl-check">
@@ -103,11 +106,12 @@ export function Checklist({
               {s.done ? '✓' : ''}
             </span>
             <span className="bl-check-txt">
-              <b>{s.title}</b>
-              <small>
-                {s.done ? 'Done.' : `${whoWord(s)}. ${s.body}`}
-              </small>
-              {!s.done && mine(s) && (
+              <button type="button" className="bl-check-row" aria-expanded={shown === s.key} onClick={() => setOpenKey(shown === s.key ? null : s.key)}>
+                <b>{s.title}</b>
+                <small>{s.done ? 'Done' : whoWord(s)}</small>
+              </button>
+              {shown === s.key && !s.done && <small>{s.body}</small>}
+              {shown === s.key && !s.done && mine(s) && (
                 <span className="bl-row-actions">
                   {s.key === 'delegate' && (
                     <button type="button" className="bl-ghost" onClick={() => setGuide(true)}>
@@ -126,7 +130,7 @@ export function Checklist({
                   )}
                 </span>
               )}
-              {s.done && canTick(s) && (
+              {shown === s.key && s.done && canTick(s) && (
                 <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start', fontSize: 13 }} disabled={busy !== null} onClick={() => void toggle(s)}>
                   Not done yet
                 </button>

@@ -232,8 +232,6 @@ export const bil = {
   quotesFind: (clientId: string) => call<{ postsRead: number; drafts: number; costUsd: number; allowanceLeft: number }>('bil', 'quotes_find', { clientId, requestId: crypto.randomUUID() }),
   quoteDecide: (clientId: string, quoteId: string, decision: 'quoted' | 'skipped' | 'ready', postUrl?: string) =>
     call<{ ok: boolean }>('bil', 'quote_decide', { clientId, quoteId, decision, ...(postUrl ? { postUrl } : {}) }),
-  gamePlanMeeting: (clientId: string, runRequest?: string) =>
-    call<{ requested: true; already: boolean } | { id: string; kind: 'free' | 'extra'; costUsd: number }>('bil', 'game_plan_meeting', { clientId, requestId: crypto.randomUUID(), ...(runRequest ? { runRequest } : {}) }),
   resume: (campaignId: string) => call<{ resumed: boolean }>('bil', 'resume', { campaignId }),
   lookup: (handle: string, images = false) =>
     call<XProfile>('bil', 'lookup', { handle, images }),

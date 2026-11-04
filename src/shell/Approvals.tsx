@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { campaignTitle } from './Notifications';
 import { LABELS } from './Brand';
 import type { ScreenProps } from './Shell';
+import { PageHead } from './Present';
 
 // The approvals log: every decision on a client's work, newest first, as a record of who
 // said yes to what and when. Only the server writes it; nobody can edit a line.
@@ -109,12 +110,12 @@ export function ApprovalsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
 
   return (
     <main className="bl-flow">
-      <div>
-        <h1 className="bl-h1 bl-rise">Approvals</h1>
-        <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          {isTeam ? `@${client.handle}. ` : ''}Every yes, change and posted mark on {isTeam ? 'this client’s' : 'your'} work, newest first. Lines can&rsquo;t be edited.
-        </p>
-      </div>
+      <PageHead
+        title="Approvals"
+        chip={isTeam ? `@${client.handle}` : undefined}
+        line="Every yes, change and posted mark, newest first."
+        how={<p>Every yes, change and posted mark on {isTeam ? 'this client’s' : 'your'} work, newest first. Lines can&rsquo;t be edited, so this is the record everyone can trust.</p>}
+      />
       {error && (
         <p className="bl-error" role="alert">
           {error}

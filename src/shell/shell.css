@@ -1866,6 +1866,9 @@ a.bl-card:hover,
 .bl-check-list li.done .bl-check-txt b { color: var(--ink-2, var(--ink)); }
 .bl-check-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .bl-check-txt small { color: var(--ink-2, var(--ink)); font-size: 13px; line-height: 1.4; }
+.bl-check-row { all: unset; display: flex; flex-direction: column; gap: 2px; cursor: pointer; min-height: 44px; justify-content: center; }
+.bl-check-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.bl-check-row small { opacity: .8; }
 .bl-check-txt .bl-row-actions { margin-top: 4px; }
 .bl-guide { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .bl-guide li { display: flex; gap: 12px; }
@@ -2877,3 +2880,43 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-cost-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 .bl-cost-name i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .bl-score { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--mist); color: var(--ink-2); }
+
+/* =====================================================================
+ * Short pages: header with "How this works", folding sections, rule badges.
+ * ===================================================================== */
+.bl-head { display: flex; flex-direction: column; gap: 6px; }
+.bl-head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bl-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bl-head-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.bl-how { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); font: 500 13px var(--ui); cursor: pointer; }
+.bl-how:hover { border-color: var(--accent); color: var(--accent-text); }
+.bl-how-sheet { max-height: 80dvh; overflow-y: auto; }
+.bl-how-body { display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.bl-how-body p { margin: 0; }
+.bl-folds { display: flex; flex-direction: column; gap: 8px; }
+.bl-fold { border-radius: 18px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; }
+.bl-fold.open { border-color: var(--accent-edge); box-shadow: 0 18px 40px -32px rgba(10, 110, 102, 0.5); }
+.bl-fold-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font: inherit; min-height: 60px; }
+.bl-fold-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bl-fold-text b { font-size: 16px; }
+.bl-fold-text small { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-fold-dot { width: 10px; height: 10px; border-radius: 5px; border: 1.5px solid var(--line-2); flex-shrink: 0; }
+.bl-fold-dot.done { background: var(--accent); border-color: var(--accent); }
+.bl-fold-chev { color: var(--ink-3); transition: transform 0.2s; display: inline-flex; }
+.bl-fold.open .bl-fold-chev { transform: rotate(180deg); }
+.bl-fold-body { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; animation: bl-fold-in 0.22s ease-out both; }
+.bl-fold-body > .bl-glass-card { background: none; border: 0; box-shadow: none; padding: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.bl-fold-body > .bl-glass-card > .bl-section-title:first-child { display: none; }
+@keyframes bl-fold-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bl-fold-body { animation: none; } }
+.bl-fold-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bl-step-body { display: flex; flex-direction: column; gap: 12px; }
+.bl-rule { display: inline-flex; flex-direction: column; gap: 4px; }
+.bl-rule-btn { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; height: 26px; padding: 0 10px; border-radius: 13px; border: 0; background: var(--mist); color: var(--ink-2); font: 600 12px var(--ui); cursor: pointer; }
+.bl-rule-full { max-width: 520px; }
+.bl-rules { display: flex; flex-wrap: wrap; gap: 6px; }
+.bl-save-bar { position: sticky; bottom: calc(var(--dock-room) + 8px); z-index: 5; display: flex; justify-content: center; }
+@media (min-width: 900px) { .bl-save-bar { bottom: 16px; } }
+.bl-save-bar .bl-btn { box-shadow: 0 16px 36px -18px rgba(10, 110, 102, 0.7); }
+/* Dials: name, number and level word on one line, the slider under it. */
+.bl-knob-top .bl-knob-word { flex: 1; min-width: 0; margin-left: 8px; color: var(--ink-3); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

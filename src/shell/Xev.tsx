@@ -3,6 +3,7 @@ import { bil } from '../lib/team';
 import { supabase } from '../lib/supabase';
 import { coverBoxes, exportShot, loadShot, type Box } from '../lib/blur';
 import type { ScreenProps } from './Shell';
+import { PageHead, RuleBadge } from './Present';
 
 // Xev: show her up to 3 screenshots of one sales conversation. Blur names and photos first
 // (on this phone; the originals never leave it), and she tells you who the prospect is,
@@ -178,17 +179,14 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
 
   return (
     <main className="bl-flow bl-xev">
-      <div>
-        <h1 className="bl-h1 bl-rise">Xev</h1>
-        <p className="bl-p" style={{ margin: '6px 0 0' }}>
-          Hi, I&rsquo;m Xev. Show me a sales chat and I&rsquo;ll tell you what he actually wants, where you are with him, and exactly what to send next. You do the sending, I do the scheming.
-        </p>
-        {status && (
-          <span className="bl-small">
-            {status.unlimited ? 'You can read as many as you like.' : `${status.left} of ${status.allowed} reads left.`}
-          </span>
-        )}
-      </div>
+      <PageHead
+        title="Xev"
+        chip={status && (status.unlimited || typeof status.left === 'number') ? (status.unlimited ? 'Unlimited reads' : `${status.left} of ${status.allowed} reads left`) : undefined}
+        line="Show me a sales chat. I'll tell you what to send next."
+        how={
+          <p>Hi, I&rsquo;m Xev. Show me a sales chat and I&rsquo;ll tell you what he actually wants, where you are with him, and exactly what to send next. You do the sending, I do the scheming.</p>
+        }
+      />
 
       <section className="bl-glass-card bl-xev-form" aria-labelledby="xev-new">
         <h2 id="xev-new" className="bl-h2">
@@ -240,7 +238,7 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
         <button type="button" className="bl-btn bl-start" disabled={!canRead} onClick={() => void read()}>
           {busy ? 'Xev is reading' : 'Read it, Xev'}
         </button>
-        <span className="bl-small">Screenshots are read once and never saved. Xev keeps only a short note of where the chat stands, for 30 days.</span>
+        <RuleBadge label="Never saved" full="Screenshots are read once and never saved. Xev keeps only a short note of where the chat stands, for 30 days." />
         {error && (
           <p className="bl-error" role="alert">
             {error}

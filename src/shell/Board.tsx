@@ -19,6 +19,7 @@ import { plural } from '../lib/format';
 import { campaignTitle } from './Notifications';
 import type { ScreenProps } from './Shell';
 import { NetworkList } from './Network';
+import { Fold, PageHead } from './Present';
 
 // The inspiration board: X posts and screenshots the client or team want more of, or less
 // of. A short note says what about it. Bil reads the verdict and the note before he plans,
@@ -37,6 +38,7 @@ export function BoardScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('live');
   const [editing, setEditing] = useState<string | null>(null);
+  const [fold, setFold] = useState<'add' | 'net' | null>(null);
 
   const load = useCallback(async () => {
     if (!clientId) return;
@@ -102,21 +104,30 @@ export function BoardScreen({ me, ws, single, isTeam, go }: ScreenProps) {
 
   return (
     <main className="bl-flow bl-board">
-      <div>
-        <h1 className="bl-h1 bl-rise">Board</h1>
-        <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          {isTeam ? `@${client.handle}. ` : ''}Posts and looks you want more of, or less of. Bil reads your notes before he plans, never the pictures. Items fade after {FADE_DAYS} days unless pinned.
-        </p>
-      </div>
-
-      <NetworkList clientId={clientId} />
-
-      <AddItem
-        full={kept.length >= MAX_ITEMS}
-        onAdd={(kind, value, verdict, note) =>
-          act(() => (kind === 'link' ? addLink(clientId, value as string, verdict, note) : addShot(me.workspaceId, clientId, value as File, verdict, note)))
+      <PageHead
+        title="Board"
+        chip={isTeam ? `@${client.handle}` : undefined}
+        line="More of this, less of that."
+        how={
+          <>
+            <p>Posts and looks you want more of, or less of. Bil reads your notes before he plans, never the pictures.</p>
+            <p>Items fade after {FADE_DAYS} days unless pinned.</p>
+          </>
         }
       />
+
+      <Fold id="bd-add" title="Add to the board" summary={kept.length >= MAX_ITEMS ? 'The board is full' : 'An X link or a screenshot, with a note'} open={fold === 'add'} onToggle={() => setFold(fold === 'add' ? null : 'add')}>
+        <AddItem
+          full={kept.length >= MAX_ITEMS}
+          onAdd={(kind, value, verdict, note) =>
+            act(() => (kind === 'link' ? addLink(clientId, value as string, verdict, note) : addShot(me.workspaceId, clientId, value as File, verdict, note)))
+          }
+        />
+      </Fold>
+
+      <Fold id="bd-net" title="Network" summary="Accounts worth quoting and checking in on" open={fold === 'net'} onToggle={() => setFold(fold === 'net' ? null : 'net')}>
+        <NetworkList clientId={clientId} />
+      </Fold>
 
       {error && (
         <p className="bl-error" role="alert">

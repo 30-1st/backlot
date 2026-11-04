@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { DEFAULT_DIALS, DIALS, type Dials } from '../lib/dials';
+import { PageHead } from './Present';
 
 // Monthly reports: how each month went on X, from X's own public numbers. Code works out
 // every number; Bil writes the plain-words part. The team makes them; clients read them.
@@ -118,12 +119,12 @@ export function ReportsScreen({ ws, single, isTeam }: ScreenProps) {
 
   return (
     <main className="bl-flow">
-      <div>
-        <h1 className="bl-h1 bl-rise">Reports</h1>
-        <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          {isTeam ? `@${client.handle}. ` : ''}How each month went on X, from X&rsquo;s own public numbers for original posts. Bil writes the summary; the numbers are worked out in code.
-        </p>
-      </div>
+      <PageHead
+        title="Reports"
+        chip={isTeam ? `@${client.handle}` : undefined}
+        line="How each month went on X."
+        how={<p>Each report uses X&rsquo;s own public numbers for original posts. Bil writes the summary; the numbers are worked out in code, so they are never guessed.</p>}
+      />
 
       {isTeam && (
         <section className="bl-glass-card bl-brand-group" aria-labelledby="make-t">

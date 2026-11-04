@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { bil } from '../lib/team';
 import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, dialClashes, riskyDials, type Dials, type HumorStyle } from '../lib/dials';
 import type { ScreenProps } from './Shell';
 import { VoiceSection } from './Insights';
+import { Fold, PageHead, StepDeck } from './Present';
 
 // The brand kit: everything Bil reads about a client before he plans or writes, on one
 // page. The team's edits go straight in. A client's edits wait for the team's OK, so
@@ -143,6 +144,8 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [stepping, setStepping] = useState<number | null>(null);
 
   useEffect(() => {
     setKit(startFrom);
@@ -242,37 +245,12 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
   const goals = kit.goals.length ? kit.goals : [{ goal: 'sales', detail: '', target: '' }];
   const setGoal = (i: number, patch: Partial<Goal>) => set({ goals: goals.map((g, j) => (j === i ? { ...g, ...patch } : g)) });
 
-  return (
-    <main className="bl-flow bl-brand">
-      <div>
-        <h1 className="bl-h1 bl-rise">Brand kit</h1>
-        <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          @{client.handle}. Everything Bil reads before he plans or writes. {isTeam ? 'Your changes go straight in.' : 'Your changes go to your team for an OK first.'}
-        </p>
-      </div>
-
-      {pending && pendingKeys.length > 0 && (
-        <section className="bl-glass-card bl-in" aria-labelledby="pending-title">
-          <b id="pending-title">{isTeam ? 'The client suggested changes' : 'Waiting for your team'}</b>
-          <span className="bl-small">
-            {pendingKeys.map((k) => LABELS[k]).join(', ')}
-            {client.pendingAt ? `, ${new Date(client.pendingAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}.
-          </span>
-          {isTeam && (
-            <div className="bl-row-actions">
-              <button type="button" className="bl-ghost" disabled={busy} onClick={() => void review(false)}>
-                Drop it
-              </button>
-              <button type="button" className="bl-btn" disabled={busy} onClick={() => void review(true)}>
-                Take their changes
-              </button>
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="who">
-        <h2 id="who" className="bl-section-title">Who they are</h2>
+  // Same words, shorter page (Nov 2, 2026): each section folds to one line with its summary,
+  // or the whole kit can be stepped through one section per screen.
+  const filled = (b: boolean) => b;
+  const sections: Array<{ id: string; title: string; summary: string; done: boolean; hint?: string; body: () => ReactNode }> = [
+    { id: 'who', title: 'Who they are', done: filled(Boolean(kit.niche.trim() && kit.offer.trim())), summary: [kit.displayName, kit.niche].filter((x) => x.trim()).join(' · ') || 'Name, niche, what they sell and to whom', body: () => (
+      <>
         <label className="bl-field">
           <span className="bl-label">Name</span>
           <input className="bl-input" value={kit.displayName} maxLength={80} onChange={(e) => set({ displayName: e.target.value })} />
@@ -293,10 +271,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
           <span className="bl-label">What sets them apart</span>
           <textarea className="bl-input" rows={3} maxLength={1000} value={kit.positioning} onChange={(e) => set({ positioning: e.target.value })} />
         </label>
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="goals">
-        <h2 id="goals" className="bl-section-title">Goals</h2>
+      </>
+    ) },
+    { id: 'goals', title: 'Goals', done: filled(goals.some((g) => g.detail.trim())), summary: goals.map((g) => GOALS.find(([v]) => v === g.goal)?.[1] ?? g.goal).join(', '), body: () => (
+      <>
         {goals.map((g, i) => (
           <div key={i} className="bl-brand-goal">
             <select className="bl-input" aria-label={`Goal ${i + 1}`} value={g.goal} onChange={(e) => setGoal(i, { goal: e.target.value })}>
@@ -320,10 +298,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             Add a goal
           </button>
         )}
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="words">
-        <h2 id="words" className="bl-section-title">Words</h2>
+      </>
+    ) },
+    { id: 'words', title: 'Words', hint: 'How they sound, and words they never use, live in their voice.', done: filled(Boolean(lists.tags.trim() || lists.keys.trim())), summary: `${current.allowedHashtags.length} hashtags · ${current.nicheKeywords.length} keywords · ${current.competitors.length} competitors`, body: () => (
+      <>
         <label className="bl-field">
           <span className="bl-label">Hashtags they are happy to use</span>
           <input className="bl-input" value={lists.tags} placeholder="Separated by commas, up to 15" onChange={(e) => setLists({ ...lists, tags: e.target.value })} />
@@ -341,16 +319,12 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
         <p className="bl-small" style={{ margin: 0 }}>
           How they sound, and words they never use, live in their voice below.
         </p>
-      </section>
-
-      {single && <VoiceSection ws={ws} clientId={single} isTeam={isTeam} />}
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="dials">
-        <h2 id="dials" className="bl-section-title">Dials</h2>
-        <p className="bl-small" style={{ margin: 0 }}>
-          How every post should feel, from 1 to 7. Bil and Kris write at these levels, give or take one notch, and never go above controversy or spice.
-          {!kit.dials && ' These are the starting levels until someone sets them.'}
-        </p>
+      </>
+    ) },
+    ...(single ? [{ id: 'voice', title: 'The voice Bil writes in', done: Boolean(ws.data?.voices.find((v) => v.clientId === single)?.approved), summary: ws.data?.voices.find((v) => v.clientId === single)?.approved ? 'Approved' : 'Waiting for an OK', body: () => <VoiceSection ws={ws} clientId={single} isTeam={isTeam} /> }] : []),
+    { id: 'dials', title: 'Dials', hint: 'How every post should feel, from 1 to 7. Bil and Kris write at these levels, give or take one notch, and never go above controversy or spice.', done: Boolean(kit.dials), summary: DIALS.slice(0, 4).map((d) => `${d.name} ${dials[d.key]}`).join(' · ') + (DIALS.length > 4 ? ' ...' : ''), body: () => (
+      <>
+        {!kit.dials && <p className="bl-small" style={{ margin: 0 }}>These are the starting levels until someone sets them.</p>}
         {start && (
           <div className="bl-wash bl-dial-start">
             <span className="bl-small">
@@ -371,10 +345,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
           <label key={d.key} className="bl-knob">
             <span className="bl-knob-top">
               <span className="bl-label">{d.name}</span>
+              <span className="bl-knob-word">{anchorFor(d.at, dials[d.key])}</span>
               <b className="num">{dials[d.key]}</b>
             </span>
             <input type="range" min={1} max={7} step={1} value={dials[d.key]} aria-valuetext={`${dials[d.key]}, ${anchorFor(d.at, dials[d.key])}`} onChange={(e) => setDial(d.key, Number(e.target.value))} />
-            <span className="bl-small">{anchorFor(d.at, dials[d.key])}</span>
           </label>
         ))}
         {riskyDials(dials) && (
@@ -396,13 +370,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             </label>
           ))}
         </fieldset>
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="faq">
-        <h2 id="faq" className="bl-section-title">Questions people ask</h2>
-        <p className="bl-small" style={{ margin: 0 }}>
-          Kris answers from these and never makes up the rest.
-        </p>
+      </>
+    ) },
+    { id: 'faq', title: 'Questions people ask', hint: 'Kris answers from these and never makes up the rest.', done: current.faq.length > 0, summary: current.faq.length ? `${current.faq.length} answered` : 'None yet', body: () => (
+      <>
         {kit.faq.map((f, i) => (
           <div key={i} className="bl-brand-goal">
             <input className="bl-input" aria-label={`Question ${i + 1}`} value={f.q} maxLength={200} placeholder="The question" onChange={(e) => setFaq(i, { q: e.target.value })} />
@@ -417,13 +388,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             Add a question
           </button>
         )}
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="links">
-        <h2 id="links" className="bl-section-title">Links</h2>
-        <p className="bl-small" style={{ margin: 0 }}>
-          The only links Bil and Kris may put in a post. Anything else gets rewritten.
-        </p>
+      </>
+    ) },
+    { id: 'links', title: 'Links', hint: 'The only links Bil and Kris may put in a post. Anything else gets rewritten.', done: current.links.length > 0, summary: current.links.length ? current.links.map((l) => l.label).join(', ') : 'None yet', body: () => (
+      <>
         {kit.links.map((l, i) => (
           <div key={i} className="bl-brand-goal">
             <input className="bl-input" aria-label={`Link ${i + 1} name`} value={l.label} maxLength={60} placeholder="Name, like Shop or Booking" onChange={(e) => setLink(i, { label: e.target.value })} />
@@ -443,13 +411,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             {badLink.label}: use a full address that starts with https://
           </p>
         )}
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="offers">
-        <h2 id="offers" className="bl-section-title">Offers</h2>
-        <p className="bl-small" style={{ margin: 0 }}>
-          What they sell. Kris points visitors to the one that fits, and Bil names them in posts. Neither makes up an offer, a price or a deal.
-        </p>
+      </>
+    ) },
+    { id: 'offers', title: 'Offers', hint: 'What they sell. Kris points visitors to the one that fits, and Bil names them in posts. Neither makes up an offer, a price or a deal.', done: current.offers.length > 0, summary: current.offers.length ? current.offers.map((o) => o.name).join(', ') : 'None yet', body: () => (
+      <>
         {kit.offers.map((o, i) => (
           <div key={i} className="bl-brand-goal bl-offer">
             <input className="bl-input" aria-label={`Offer ${i + 1} name`} value={o.name} maxLength={60} placeholder="Name, like Monthly subscription" onChange={(e) => setOffer(i, { name: e.target.value })} />
@@ -498,10 +463,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             {badCode.name}: codes use letters, numbers, - or _, 3 to 24 long.
           </p>
         )}
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="posting">
-        <h2 id="posting" className="bl-section-title">Posting</h2>
+      </>
+    ) },
+    { id: 'posting', title: 'Posting', done: true, summary: `${kit.postsPerWeek} a week · ${kit.language || 'en'} · ${kit.timezone || 'time zone not set'}${kit.xPremium ? ' · X Premium' : ''}`, body: () => (
+      <>
         <div className="bl-brand-row">
           <label className="bl-field">
             <span className="bl-label">Posts a week</span>
@@ -520,10 +485,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
           <input type="checkbox" checked={kit.xPremium} onChange={(e) => set({ xPremium: e.target.checked })} />
           <span>On X Premium, so long posts are allowed</span>
         </label>
-      </section>
-
-      <section className="bl-glass-card bl-brand-group" aria-labelledby="adult">
-        <h2 id="adult" className="bl-section-title">Adult content</h2>
+      </>
+    ) },
+    { id: 'adult', title: 'Adult content', done: true, summary: kit.adultContent ? (kit.adultsOnlyConfirmed ? 'Adult niche, 18+ confirmed' : 'Adult niche, 18+ not confirmed yet') : 'Not an adult niche', body: () => (
+      <>
         <label className="bl-brand-check">
           <input type="checkbox" checked={kit.adultContent} onChange={(e) => set({ adultContent: e.target.checked, ...(e.target.checked ? {} : { adultsOnlyConfirmed: false }) })} />
           <span>This is an adult niche</span>
@@ -534,7 +499,60 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
             <span>Everyone involved is 18 or older and consenting</span>
           </label>
         )}
-      </section>
+      </>
+    ) },
+  ];
+  const doneCount = sections.filter((x) => x.done).length;
+  const saveLabel = busy ? 'Saving' : changed.length === 0 ? 'No changes' : isTeam ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Send to your team';
+  const canSave = !busy && changed.length > 0 && !badLink && !badCode;
+
+  return (
+    <main className="bl-flow bl-brand">
+      <PageHead
+        title="Brand kit"
+        chip={`@${client.handle}`}
+        line={`${doneCount} of ${sections.length} filled`}
+        actions={
+          <button type="button" className="bl-ghost" onClick={() => setStepping(0)}>
+            Step through it
+          </button>
+        }
+        how={
+          <>
+            <p>Everything Bil reads before he plans or writes, and Kris before she answers anyone. {isTeam ? 'Your changes go straight in.' : 'Your changes go to your team for an OK first.'}</p>
+            <p>Open any section to change it, or step through the whole kit one section at a time.</p>
+          </>
+        }
+      />
+
+      {pending && pendingKeys.length > 0 && (
+        <section className="bl-glass-card bl-in" aria-labelledby="pending-title">
+          <b id="pending-title">{isTeam ? 'The client suggested changes' : 'Waiting for your team'}</b>
+          <span className="bl-small">
+            {pendingKeys.map((k) => LABELS[k]).join(', ')}
+            {client.pendingAt ? `, ${new Date(client.pendingAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}.
+          </span>
+          {isTeam && (
+            <div className="bl-row-actions">
+              <button type="button" className="bl-ghost" disabled={busy} onClick={() => void review(false)}>
+                Drop it
+              </button>
+              <button type="button" className="bl-btn" disabled={busy} onClick={() => void review(true)}>
+                Take their changes
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="bl-folds">
+        {sections.map((x) => (
+          <Fold key={x.id} id={`kit-${x.id}`} title={x.title} summary={x.summary} done={x.done} open={openId === x.id} onToggle={() => setOpenId(openId === x.id ? null : x.id)}>
+            {x.hint && <span className="bl-small">{x.hint}</span>}
+            {x.body()}
+          </Fold>
+        ))}
+      </div>
 
       {error && (
         <p className="bl-error" role="alert">
@@ -546,9 +564,23 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
           {note}
         </p>
       )}
-      <button type="button" className="bl-btn bl-wide" disabled={busy || changed.length === 0 || !!badLink || !!badCode} onClick={() => void save()}>
-        {busy ? 'Saving' : changed.length === 0 ? 'No changes' : isTeam ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Send to your team'}
-      </button>
+      {changed.length > 0 && (
+        <div className="bl-save-bar">
+          <button type="button" className="bl-btn" disabled={!canSave} onClick={() => void save()}>
+            {saveLabel}
+          </button>
+        </div>
+      )}
+
+      {stepping !== null && (
+        <StepDeck
+          label="Brand kit"
+          start={stepping}
+          steps={sections.map((x) => ({ key: x.id, title: x.title, hint: x.hint, body: x.body() }))}
+          onClose={() => setStepping(null)}
+          finish={{ label: changed.length ? saveLabel : 'Done', busy, disabled: changed.length > 0 && !canSave, run: () => (changed.length ? void save().then(() => setStepping(null)) : setStepping(null)) }}
+        />
+      )}
     </main>
   );
 }

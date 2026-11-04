@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
+import { PageHead } from './Present';
 
 // The engagement desk: posts worth answering or joining. Backlot never replies or likes.
 // A person opens the post on X, acts by hand through X Delegate, then marks it here.
@@ -142,12 +143,17 @@ export function DeskScreen({ ws, single, isTeam }: ScreenProps) {
 
   return (
     <main className="bl-flow">
-      <div>
-        <h1 className="bl-h1 bl-rise">Engagement desk</h1>
-        <p className="bl-small" style={{ margin: '6px 0 0' }}>
-          {isTeam ? `@${client.handle}. ` : ''}Posts worth answering or joining. Backlot never replies or likes: open the post on X, answer by hand as the client, then mark it here. Items go after 7 days.
-        </p>
-      </div>
+      <PageHead
+        title="Engagement desk"
+        chip={isTeam ? `@${client.handle}` : undefined}
+        line="Posts worth answering or joining."
+        how={
+          <>
+            <p>Backlot never replies or likes. Open the post on X, answer by hand as the client, then mark it here.</p>
+            <p>Items go after 7 days.</p>
+          </>
+        }
+      />
 
       {isTeam && (
         <section className="bl-glass-card bl-brand-group" aria-labelledby="fill-t">
