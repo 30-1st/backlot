@@ -2398,7 +2398,27 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     await setStep(db, c.id, { status: (rows ?? []).length ? 'ready' : 'drafting', step: 'Next posts are written about a day before they go out' });
     return { kind: 'batch', payload: { size, redo }, delaySeconds: Math.max(600, Math.ceil((wake - Date.now()) / 1000)) };
   }
-  const slots = ready.slice(0, size);
+  // Rolling batches stay small, so the dial check after drafting has time to run.
+  const slots = ready.slice(0, plan.rolling ? Math.min(size, 3) : size);
+  // Rolling: posts saved earlier without dial readings (the check ran out of time) get read now.
+  if (plan.rolling) {
+    const unread = (rows ?? []).filter((r: any) => r.status === 'ok' && !r.post?.dials).slice(0, 6);
+    if (unread.length) {
+      const stageOf = new Map(plan.slots.map((sl) => [sl.slot, sl.stage]));
+      const got = await checkDials(dialBudget(c.id, db), kit.profile.dials, unread.map((r: any) => ({ slot: r.slot, stage: stageOf.get(r.slot) ?? 'discover', draft: String(r.post?.draft ?? ''), test: null })), Math.min(40_000, timeLeft(deadline) - 70_000));
+      for (const r of unread as any[]) {
+        const read = got.get(r.slot);
+        if (!read) continue;
+        const post = { ...r.post, dials: { readings: read.readings, target: read.target } };
+        const blocked = read.overLimit;
+        const patch = blocked
+          ? { status: 'blocked', post: { ...post, compliance: { ...(post.compliance ?? {}), blockedReasons: ["Controversy or spice runs above the client's setting.", ...read.fixes].slice(0, 10) } } }
+          : { post };
+        const { error: uErr } = await db.from('campaign_posts').update(patch).eq('campaign_id', c.id).eq('slot', r.slot).eq('review', 'pending');
+        if (uErr) console.error('bil: could not save a late dial reading', uErr.message);
+      }
+    }
+  }
   const hooks = (rows ?? [])
     .filter((r: any) => r.status === 'ok')
     .slice(-20)
