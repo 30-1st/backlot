@@ -37,9 +37,9 @@ const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xe
 /** Each voice, repeated right before the task so it wins over the pack's own tone. */
 const VOICE: Record<Agent, string> = {
   rein: 'Your voice: casual and online, lowercase is fine, playful, a little dramatic about trends. You talk about what is happening out there on X right now.',
-  bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Quietly funny, never silly. You are the consultant and you sound certain: say what is wrong, what you are changing, and one number as proof. Never just read out statistics.',
+  bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Quietly funny, never silly. You are the consultant and you sound certain. Shape: first the diagnosis in plain words (what is wrong), then the prescription (exactly what you are changing in this week\'s plan, by day or by post), then at most one number as proof. The scores in their voice card are for you to think with, not to recite; never open with a statistic.',
   kris: 'Your voice: warm, polished and a little teasing. Normal capitals. You think in stories and headlines, never in ads.',
-  xev: 'Your voice: blunt and confident. Short sentences, normal capitals. You cut to what makes a buyer say yes, and you are not shy about correcting your teammates.',
+  xev: 'Your voice: blunt and confident. Short sentences, normal capitals. You talk about buyers, never about post scores: what this client\'s buyers want, what stops them paying, and the next selling step (the offer, the proof, the ask, the booking). Name the real objection. Never cite a number, a plan or a teammate\'s point you were not given, and do not repeat Bil. You are not shy about correcting your teammates.',
 };
 
 const MODEL = MODELS.light;
@@ -127,6 +127,17 @@ export async function context(db: SupabaseClient, clientId: string, workspaceId:
   const reportText = summary?.headline
     ? `# Latest monthly report (${report.data!.month})\n${summary.headline}. Worked: ${(summary.worked ?? []).join('; ') || '(none)'}. Try next: ${(summary.tryNext ?? []).join('; ') || '(none)'}`
     : '# Latest monthly report\n(none yet)';
+  const live = (camps.data ?? []).find((c: any) => c.plan?.rolling && c.status !== 'failed');
+  const today = Date.now();
+  const weekText = live
+    ? `# This week's plan, slot by slot (yours; prescribe changes against it)\nGoals: ${(live.plan.goals ?? []).join('; ')}. Split: ${(live.plan.goalSplit ?? []).map((g: any) => `${g.share}% ${g.goal}`).join(', ')}.\n${(live.plan.slots ?? [])
+      .map((sl: any) => {
+        const day = new Date(Date.parse(`${live.plan.startDate}T12:00:00Z`) + sl.dayOffset * 86_400_000);
+        const past = day.getTime() < today - 86_400_000;
+        return `- ${day.toISOString().slice(0, 10)} ${sl.postWindow}${past ? ' (past)' : ''}: ${sl.open ? 'OPEN slot' : String(sl.idea ?? '').slice(0, 120)} [goal: ${String(sl.goal ?? '').slice(0, 60)}]${sl.mediaId ? ' with media' : ''}`;
+      })
+      .join('\n')}`
+    : '# This week\'s plan\n(no rolling week running: when it fits, offer to plan one)';
   const campText = `# Their latest campaigns\n${(camps.data ?? []).map((c: any) => `- "${String(c.plan?.title ?? c.request?.goal ?? 'Campaign').slice(0, 80)}": ${c.status}, ${c.posts_done ?? 0} of ${c.posts_total ?? 0} posts written${c.plan?.rolling ? `, a rolling 7-day plan from ${c.plan.startDate} (goals: ${(c.plan.goals ?? []).join('; ')}; why this rate: ${String(c.plan.rateWhy ?? '').slice(0, 300)})` : ''}`).join('\n') || '(none yet)'}\nYou write each rolling post about a day before it goes out. When a week ends, ask whether to keep pushing the goals or change them; a team member starts the next week from Plan a campaign.`;
   const waitingText = `# Drafts waiting for a yes (key, campaign, slot, hook, start of the post)\n${waiting.length ? waiting.map((w) => `- ${w.key}: "${w.title}", post ${w.slot}${w.review === 'changes' ? ' (changes asked)' : ''}. Hook: ${w.hook}. Post: ${w.draft}`).join('\n') : '(none)'}`;
   const trendText = `# Your latest trend brief for their niche${nb?.created_at ? ` (${String(nb.created_at).slice(0, 10)})` : ''}\n${trends.length ? trends.join('\n') : '(no brief yet: say so, and that you can run one)'}${working ? `\nWhat is working: ${JSON.stringify(working).slice(0, 800)}` : ''}`;
@@ -143,7 +154,7 @@ export async function context(db: SupabaseClient, clientId: string, workspaceId:
     waiting,
     extra: {
       rein: trendText,
-      bil: [reportText, campText, waitingText, winsText].join('\n'),
+      bil: [reportText, weekText, campText, waitingText, winsText].join('\n'),
       kris: [waitingText, prefs.data?.plain ? 'The client asked for plain notices: do not pitch ideas unless they ask.' : '', riskyDials(kit.profile.dials) ? 'Controversy and spice are high: the client approves each post themselves.' : ''].filter(Boolean).join('\n'),
       xev: [xevText, winsText].join('\n'),
     },
