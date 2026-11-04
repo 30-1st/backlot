@@ -235,8 +235,10 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
   if (!mine) throw new Error('Could not save the message.');
 
   const named = req.text.match(MENTION)?.[1]?.toLowerCase() as Agent | undefined;
-  // A team member talking to the client: the agents stay out of it unless named.
-  if (role === 'team' && !named) return { messages: [mine], turn: mine.id, lead: null, chime: false, costUsd: 0 };
+  // A team member talking to the client (they @ the client): the agents stay out of it
+  // unless one of them is named too.
+  const toClient = new RegExp(`@(client|${ctx.kit.xHandle.replace(/[^A-Za-z0-9_]/g, '')})\\b`, 'i').test(req.text);
+  if (role === 'team' && toClient && !named) return { messages: [mine], turn: mine.id, lead: null, chime: false, costUsd: 0 };
 
   const budget = new Budget('kris', { runId: req.requestId, perCallCap: PER_CALL_CAP, clientId: req.clientId });
   const lastAgent = [...ctx.history].reverse().find((h) => (AGENTS as readonly string[]).includes(h.role))?.role as Agent | undefined;

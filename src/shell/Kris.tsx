@@ -189,7 +189,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
               </select>
             </label>
           </div>
-          <span className="bl-small">No pitches in quiet hours, in your time zone, and never more than one a day. Tip: start a message with @Rein, @Bil, @Kris or @Xev to ask one of them directly.</span>
+          <span className="bl-small">No pitches in quiet hours, in your time zone, and never more than one a day. Tip: start a message with @Rein, @Bil, @Kris or @Xev to ask one of them directly.{isTeam ? ` Tag @${client.handle} to talk to the client without the agents jumping in.` : ''}</span>
         </section>
       )}
 
