@@ -37,6 +37,11 @@
 //   network_set / quotes_find / quote_decide the Network list (free), Find quotes now (about $0.15), quote outcomes  team, client
 //   xev_status / xev_read / xev_feedback      Xev reads up to 3 screenshots (about 1 to 3 cents; 3 free)  team, client
 //   xev_grant      { clientId, extra }       extra Xev reads, until payments open                       owner
+//   x_connect      { clientId }              starts X's sign-in to connect the client's own X account (free)  team, client
+//   x_disconnect   { clientId }              revokes at X, deletes the tokens and every lead (free)           team, client
+//   xev_inbox      { clientId }              the connection and Xev's open DM leads (free)                    team, client
+//   lead_open      { requestId, clientId, leadId }  fetches the conversation live; Xev gives 2 replies (counts as a read)  team, client
+//   lead_set       { clientId, leadId, status }     dismiss a lead or mark it closed (free)                 team, client
 
 import {
   askBil,
@@ -87,6 +92,7 @@ import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, Xe
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
 import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest, winLog, WinLogRequest } from '../_shared/team-chat.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
+import { LeadOpenRequest, LeadSetRequest, XConnectRequest, xConnectStart, xDisconnect, xevInbox, xevLeadOpen, xevLeadSet } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
@@ -153,6 +159,16 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await xevFeedback(member, parse(XevFeedbackRequest, input)));
       case 'xev_grant':
         return reply(200, await xevGrant(member, parse(XevGrantRequest, input)));
+      case 'x_connect':
+        return reply(200, await xConnectStart(member, parse(XConnectRequest, input)));
+      case 'x_disconnect':
+        return reply(200, await xDisconnect(member, parse(XConnectRequest, input)));
+      case 'xev_inbox':
+        return reply(200, await xevInbox(member, parse(XConnectRequest, input)));
+      case 'lead_open':
+        return reply(200, await xevLeadOpen(member, parse(LeadOpenRequest, input)));
+      case 'lead_set':
+        return reply(200, await xevLeadSet(member, parse(LeadSetRequest, input)));
       case 'network_set':
         return reply(200, await networkSet(member, parse(NetworkSetRequest, input)));
       case 'quotes_find':

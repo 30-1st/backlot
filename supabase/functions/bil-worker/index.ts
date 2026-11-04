@@ -15,6 +15,9 @@
 // with { "job": "eval" }: a gate run when an agent's knowledge changed, the daily sample
 // once a day (see migration wins_and_evals and eval_tick).
 //
+// Every 15 minutes, while some client has X connected, pg_cron calls it with
+// { "job": "xev_inbox" } so Xev can check those DMs for buyers (migration x_connect).
+//
 // The caller must present the worker token from public.internal_config. The platform's
 // JWT check is off because the scheduler has no user session.
 //
@@ -28,6 +31,7 @@ import { drainOpportunities } from '../_shared/opportunity.ts';
 import { krisPitches } from '../_shared/kris.ts';
 import { scrubStoredMedia } from '../_shared/media-scrub.ts';
 import { evalTick } from '../_shared/evals.ts';
+import { inboxTick } from '../_shared/x-connect.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
@@ -72,6 +76,15 @@ Deno.serve(async (req) => {
         .catch((err) => console.error('bil-worker: eval failed', err instanceof Error ? err.message : err)),
     );
     return reply(202, { accepted: true, job: 'eval' });
+  }
+
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'xev_inbox') {
+    EdgeRuntime.waitUntil(
+      inboxTick(BOOT_AT)
+        .then((r) => console.log(`bil-worker: xev inbox ${r}`))
+        .catch((err) => console.error('bil-worker: xev inbox failed', err instanceof Error ? err.message : err)),
+    );
+    return reply(202, { accepted: true, job: 'xev_inbox' });
   }
 
   if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'scrub_media') {

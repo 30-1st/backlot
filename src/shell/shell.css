@@ -2581,6 +2581,9 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-xev-line li.is-now .bl-xev-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
 .bl-xev-moves { display: flex; flex-direction: column; gap: 10px; }
 .bl-xev-move { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.bl-xev-leads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bl-xev-lead { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.bl-xev-lead.is-new { border-color: var(--accent); }
 .bl-view-bar { align-self: flex-start; }
 
 /* ---------- Today feed: one card at a time ---------- */

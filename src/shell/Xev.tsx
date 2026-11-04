@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { bil } from '../lib/team';
+import { bil, type XevInbox } from '../lib/team';
 import { supabase } from '../lib/supabase';
 import { coverBoxes, exportShot, loadShot, type Box } from '../lib/blur';
 import type { ScreenProps } from './Shell';
@@ -8,6 +8,25 @@ import { PageHead, RuleBadge } from './Present';
 // Xev: show her up to 3 screenshots of one sales conversation. Blur names and photos first
 // (on this phone; the originals never leave it), and she tells you who the prospect is,
 // where the chat stands on the buying-stage line, and 2 or 3 replies to send yourself.
+//
+// Or connect X (approved Nov 4, 2026): with the client's OK, Xev checks their DMs every 15
+// minutes, flags people who sound ready to buy, book or ask, and drafts 2 replies when they
+// open a lead. The client sends from X themselves; Backlot cannot send anything.
+
+const OUTCOME: Record<string, { ok: boolean; text: string }> = {
+  connected: { ok: true, text: "X is connected. Xev checks your DMs every 15 minutes and posts in the chat when someone sounds ready." },
+  declined: { ok: false, text: 'X was not connected. You said no on X, which is fine; connect any time.' },
+  expired: { ok: false, text: 'That sign-in took too long or was used already. Try Connect X again.' },
+  wrong_account: { ok: false, text: "That X account isn't this client's. Sign in to X as the client's account, then connect again." },
+  no_dm: { ok: false, text: 'X did not grant message access, so Xev cannot read DMs. Try again and allow it.' },
+  failed: { ok: false, text: 'Connecting X did not work. Try again in a minute.' },
+};
+const INTENT: Record<string, string> = { buying: 'Ready to buy', booking: 'Wants to book', question: 'Has a question' };
+const ago = (iso: string | null) => {
+  if (!iso) return 'not yet';
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : min < 1440 ? `${Math.round(min / 60)} h ago` : `${Math.round(min / 1440)} d ago`;
+};
 
 export const STAGES = [
   { key: 'first_contact', name: 'First contact' },
@@ -106,6 +125,14 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
   const [result, setResult] = useState<{ readId: string; threadId: string | null; answer: Answer } | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [extra, setExtra] = useState('');
+  const [inbox, setInbox] = useState<XevInbox | null>(null);
+  const [consent, setConsent] = useState(false);
+  const [leadBusy, setLeadBusy] = useState('');
+  const [openUrl, setOpenUrl] = useState('');
+  const [outcome] = useState(() => {
+    const word = window.location.hash.split('.')[1] ?? '';
+    return OUTCOME[word] ?? null;
+  });
   const picker = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -115,6 +142,7 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
       supabase.from('xev_threads').select('id, label, stage, updated_at, outcome').eq('client_id', client.id).order('updated_at', { ascending: false }).limit(20),
     ]);
     if (s) setStatus(s);
+    setInbox(await bil.xevInbox(client.id).catch(() => null));
     setThreads((t.data ?? []).map((r) => ({ id: r.id, label: r.label, stage: r.stage, updatedAt: r.updated_at, outcome: r.outcome })));
   }, [client]);
   useEffect(() => {
@@ -147,6 +175,7 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
     setBusy(true);
     setError('');
     setResult(null);
+    setOpenUrl('');
     try {
       const images = shots.map((s) => exportShot(coverBoxes(s.source, s.boxes)));
       const r = await bil.xevRead(client!.id, images, { threadId: threadId || undefined, label: threadId ? undefined : label.trim() || undefined, note: note.trim() || undefined });
@@ -160,6 +189,61 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
       setError(e instanceof Error ? e.message : 'Xev could not read that right now.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function connectX() {
+    setBusy(true);
+    setError('');
+    try {
+      const { url } = await bil.xConnect(client!.id);
+      // Only ever X's own sign-in page.
+      if (new URL(url).origin !== 'https://x.com') throw new Error('Unexpected sign-in address.');
+      window.location.assign(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start connecting X.');
+      setBusy(false);
+    }
+  }
+
+  async function disconnectX() {
+    setBusy(true);
+    setError('');
+    try {
+      await bil.xDisconnect(client!.id);
+      setConsent(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not disconnect X.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openLead(leadId: string) {
+    setLeadBusy(leadId);
+    setError('');
+    setResult(null);
+    setOpenUrl('');
+    try {
+      const r = await bil.leadOpen(client!.id, leadId);
+      setResult({ readId: r.readId, threadId: r.threadId, answer: r.answer as Answer });
+      setOpenUrl(r.openUrl.startsWith('https://x.com/messages/') ? r.openUrl : '');
+      await load();
+      window.setTimeout(() => document.getElementById('xev-a')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Xev could not open that conversation.');
+    } finally {
+      setLeadBusy('');
+    }
+  }
+
+  async function setLead(leadId: string, to: 'dismissed' | 'closed') {
+    try {
+      await bil.leadSet(client!.id, leadId, to);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save that.');
     }
   }
 
@@ -187,6 +271,79 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
           <p>Hi, I&rsquo;m Xev. Show me a sales chat and I&rsquo;ll tell you what he actually wants, where you are with him, and exactly what to send next. You do the sending, I do the scheming.</p>
         }
       />
+
+      {outcome && (
+        <p className={outcome.ok ? 'bl-small' : 'bl-error'} role="status">
+          {outcome.text}
+        </p>
+      )}
+
+      {inbox?.ready && (
+        <section className="bl-glass-card bl-xev-form" aria-labelledby="xev-inbox">
+          <h2 id="xev-inbox" className="bl-h2">
+            Your DMs
+          </h2>
+          {inbox.connection?.status === 'active' ? (
+            <>
+              <span className="bl-small">
+                Connected as @{inbox.connection.username} · checked {ago(inbox.connection.checkedAt)}
+              </span>
+              {inbox.leads.length === 0 ? (
+                <p className="bl-small" style={{ margin: 0 }}>
+                  No one is asking to buy right now. Xev posts in the chat the moment someone does.
+                </p>
+              ) : (
+                <ul className="bl-xev-leads">
+                  {inbox.leads.map((l) => (
+                    <li key={l.id} className={`bl-xev-lead${l.status === 'new' ? ' is-new' : ''}`}>
+                      <span className="bl-chip">{INTENT[l.intent] ?? l.intent}</span>
+                      <p className="bl-p" style={{ margin: 0 }}>{l.summary}</p>
+                      <span className="bl-small">{ago(l.lastAt)}</span>
+                      <div className="bl-row-actions">
+                        <button type="button" className="bl-btn" disabled={Boolean(leadBusy) || (!status?.unlimited && (status?.left ?? 0) <= 0)} onClick={() => void openLead(l.id)}>
+                          {leadBusy === l.id ? 'Xev is reading' : 'Get 2 replies'}
+                        </button>
+                        <button type="button" className="bl-ghost" onClick={() => void setLead(l.id, 'closed')}>
+                          Closed it
+                        </button>
+                        <button type="button" className="bl-ghost" onClick={() => void setLead(l.id, 'dismissed')}>
+                          Not a lead
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <RuleBadge label="Read only" full="Xev can read your DMs but never send, post, like or follow. Message text is never saved: only who wants what, in a short private note, for 30 days. Disconnect any time here or in your X settings." />
+              <button type="button" className="bl-ghost bl-start" disabled={busy} onClick={() => void disconnectX()}>
+                Disconnect X
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="bl-p" style={{ margin: 0 }}>
+                Connect X and Xev watches your DMs for people ready to buy, book or ask, tells you in the chat, and writes 2 replies when you open one. You send them yourself.
+              </p>
+              {inbox.connection?.error && <p className="bl-error">{inbox.connection.error}</p>}
+              <ul className="bl-report-list">
+                <li>Xev reads DMs only. She can never send, post, like or follow.</li>
+                <li>Message text is never saved. Xev keeps a short private note on each lead for 30 days.</li>
+                <li>Disconnect any time, here or in your X settings.</li>
+              </ul>
+              <label className="bl-check-line">
+                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> This is @{client.handle}&rsquo;s own account and they agree to Xev reading its DMs (
+                <a href="/privacy.html" target="_blank" rel="noopener">
+                  privacy policy
+                </a>
+                ).
+              </label>
+              <button type="button" className="bl-btn bl-start" disabled={!consent || busy} onClick={() => void connectX()}>
+                Connect X
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="bl-glass-card bl-xev-form" aria-labelledby="xev-new">
         <h2 id="xev-new" className="bl-h2">
@@ -302,6 +459,12 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
                 {copied === -1 ? 'Copied' : 'Copy the note'}
               </button>
             </div>
+          )}
+
+          {openUrl && (
+            <a className="bl-btn bl-start" href={openUrl} target="_blank" rel="noopener noreferrer">
+              Open the chat in X
+            </a>
           )}
 
           {result.threadId && (

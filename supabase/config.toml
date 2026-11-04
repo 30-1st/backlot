@@ -39,3 +39,8 @@ verify_jwt = false
 # checks everything itself: the rooms site's address, preview tickets, the bot check and
 # limits. It returns only what a room shows.
 verify_jwt = false
+
+# X's sign-in redirect lands here with no Backlot login; a single-use state proves who
+# started it (see functions/x-connect/index.ts).
+[functions.x-connect]
+verify_jwt = false

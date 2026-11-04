@@ -58,6 +58,8 @@ export const X_PRICES = {
   countsRequest: 0.005,
   /** Trends by location: billed per request. */
   trendsRequest: 0.01,
+  /** One DM event read with a user's sign-in. Estimate until the X console price is confirmed. */
+  dmEventRead: 0.01,
 } as const;
 
 /** Token counts as the AI SDK reports them (`result.usage`). */

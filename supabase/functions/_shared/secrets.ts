@@ -7,6 +7,8 @@
 const NAMES = {
   xaiApiKey: ['xai api key', 'XAI_API_KEY'],
   xBearerToken: ['bearer token', 'X_BEARER_TOKEN'],
+  xClientId: ['X_CLIENT_ID', 'x client id'],
+  xClientSecret: ['X_CLIENT_SECRET', 'x client secret'],
   langfusePublicKey: ['langfuse public key', 'LANGFUSE_PUBLIC_KEY'],
   langfuseSecretKey: ['langfuse secret key', 'LANGFUSE_SECRET_KEY'],
   turnstileSecretKey: ['turnstile secret key', 'TURNSTILE_SECRET_KEY'],
