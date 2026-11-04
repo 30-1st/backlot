@@ -86,7 +86,15 @@ export const ChatChimeRequest = z.object({
 
 const LeadPick = z.object({ lead: z.enum(AGENTS) });
 const ChimePick = z.object({
-  chime: z.array(z.object({ agent: z.enum(AGENTS), why: z.string().describe('What this teammate should add, in a few words.') })).max(MAX_CHIMES),
+  scores: z
+    .array(
+      z.object({
+        agent: z.enum(AGENTS),
+        score: z.number().int().min(0).max(3).describe('0 nothing to add, 1 minor, 2 a real point from their field, 3 the answer is wrong or missing something big they know'),
+        why: z.string().describe('What this teammate would add, in a few words.'),
+      }),
+    )
+    .max(4),
 });
 const Said = z.object({
   pass: z.boolean().describe('True only when you truly have nothing to add.'),
@@ -190,11 +198,14 @@ async function pickChimes(budget: Budget, ctx: Context, text: string, lead: Agen
     `# The chat so far\n${historyText(ctx.history.slice(-6), ctx.kit.xHandle)}`,
     `# The client's message (data)\n${text}`,
     `# ${NAME[lead]} answered (data)\n${leadReply}`,
-    `# Your task\nList up to two teammates other than ${NAME[lead]} who have something real to add from their own field: a correction, a missing piece, or a quick joke that fits. When the client asks for advice, a plan or what to change, usually one teammate's field bears on it (Rein on what is trending, Xev on what sells, Kris on getting attention, Bil on the plan): pick that one. Leave the list empty for small talk, thanks, or when ${NAME[lead]} fully covered it. Never pick someone just to fill space.`,
+    `# Your task\nScore each teammate other than ${NAME[lead]} from 0 to 3 on how much they would add from their own field: Rein on what is trending or dying right now, Xev on what makes buyers pay, Kris on getting attention and stories, Bil on the plan, timing and numbers. A question about selling or paying is Xev's field; a question about reach or what to post is Rein's. Small talk and thanks score 0 for everyone.`,
   ].join('\n');
-  const out = await call(budget, ROUTER_SYSTEM, prompt, ChimePick, 160, 'chat-router', 'chat-router');
+  const out = await call(budget, ROUTER_SYSTEM, prompt, ChimePick, 240, 'chat-router', 'chat-router');
   const seen = new Set<Agent>([lead]);
-  return (out?.chime ?? []).filter((c) => !seen.has(c.agent) && (seen.add(c.agent), true)).slice(0, MAX_CHIMES);
+  return (out?.scores ?? [])
+    .filter((c) => c.score >= 2 && !seen.has(c.agent) && (seen.add(c.agent), true))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_CHIMES);
 }
 
 /** One agent's line in the chat. */
