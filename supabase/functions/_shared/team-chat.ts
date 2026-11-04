@@ -37,7 +37,7 @@ const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xe
 /** Each voice, repeated right before the task so it wins over the pack's own tone. */
 const VOICE: Record<Agent, string> = {
   rein: 'Your voice: casual and online, lowercase is fine, playful, a little dramatic about trends. You talk about what is happening out there on X right now.',
-  bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Numbers first, explained in plain words. Quietly funny, never silly. You are the strategist and you sound certain.',
+  bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Quietly funny, never silly. You are the consultant and you sound certain: say what is wrong, what you are changing, and one number as proof. Never just read out statistics.',
   kris: 'Your voice: warm, polished and a little teasing. Normal capitals. You think in stories and headlines, never in ads.',
   xev: 'Your voice: blunt and confident. Short sentences, normal capitals. You cut to what makes a buyer say yes, and you are not shy about correcting your teammates.',
 };
@@ -86,10 +86,10 @@ export const ChatChimeRequest = z.object({
 
 const LeadPick = z.object({ lead: z.enum(AGENTS) });
 const ChimePick = z.object({
-  chime: z.array(z.object({ agent: z.enum(AGENTS), why: z.string() })).max(MAX_CHIMES),
+  chime: z.array(z.object({ agent: z.enum(AGENTS), why: z.string().describe('What this teammate should add, in a few words.') })).max(MAX_CHIMES),
 });
 const Said = z.object({
-  pass: z.boolean().describe('True when you have nothing worth adding. Most of the time a teammate should pass.'),
+  pass: z.boolean().describe('True only when you truly have nothing to add.'),
   reply: z.string().describe('What you say. One to three short sentences. Empty when passing.'),
   drafts: z.array(z.string()).max(3).describe('Keys like "d2" of waiting drafts to show as cards. Usually empty.'),
 });
@@ -185,7 +185,7 @@ async function pickLead(budget: Budget, ctx: Context, text: string): Promise<Age
 }
 
 /** Up to two teammates with something real to add to the lead's answer; usually none or one. */
-async function pickChimes(budget: Budget, ctx: Context, text: string, lead: Agent, leadReply: string): Promise<Agent[]> {
+async function pickChimes(budget: Budget, ctx: Context, text: string, lead: Agent, leadReply: string): Promise<Array<{ agent: Agent; why: string }>> {
   const prompt = [
     `# The chat so far\n${historyText(ctx.history.slice(-6), ctx.kit.xHandle)}`,
     `# The client's message (data)\n${text}`,
@@ -194,7 +194,7 @@ async function pickChimes(budget: Budget, ctx: Context, text: string, lead: Agen
   ].join('\n');
   const out = await call(budget, ROUTER_SYSTEM, prompt, ChimePick, 160, 'chat-router', 'chat-router');
   const seen = new Set<Agent>([lead]);
-  return (out?.chime ?? []).map((c) => c.agent).filter((a) => !seen.has(a) && (seen.add(a), true)).slice(0, MAX_CHIMES);
+  return (out?.chime ?? []).filter((c) => !seen.has(c.agent) && (seen.add(c.agent), true)).slice(0, MAX_CHIMES);
 }
 
 /** One agent's line in the chat. */
@@ -205,7 +205,7 @@ async function speak(budget: Budget, ctx: Context, agent: Agent, task: string, a
     ctx.extra[agent],
     `# The chat so far (oldest first)\n${historyText(ctx.history, ctx.kit.xHandle)}`,
     after.length ? `# Just said in this turn\n${after.join('\n')}` : '',
-    `# Your task\n${task}\n${VOICE[agent]}\nAny number you mention, say what it means in plain words (never a bare score). Only use numbers that appear above.`,
+    `# Your task\n${task}\n${VOICE[agent]}\nWrite numbers as digits and say what each one measures (for example "3 replies per 1,000 views"). Only use numbers that appear above.`,
   ].filter(Boolean).join('\n');
   const out = await call(budget, system, prompt, Said, 400, `chat-${agent}-${KNOWLEDGE_VERSION[agent === 'rein' ? 'opportunity' : agent]}`, `chat-${agent}`);
   if (!out || out.pass || !out.reply.trim()) return null;
@@ -285,12 +285,12 @@ export async function chatChime(m: Member, req: z.infer<typeof ChatChimeRequest>
   const picks = await pickChimes(budget, ctx, asked.body, lead, answers[0].body);
   const said: string[] = [`${NAME[lead]}: ${answers[0].body}`];
   const out: KrisMessage[] = [];
-  for (const a of picks) {
+  for (const { agent: a, why } of picks) {
     const line = await speak(
       budget,
       ctx,
       a,
-      `${NAME[lead]} just answered the client. Chime in as ${NAME[a]} only if you have something real to add, correct or a quick joke that fits, in one or two short sentences. Otherwise pass.`,
+      `${NAME[lead]} just answered the client. Chime in as ${NAME[a]} in one or two short sentences, the way a teammate jumps into a group chat. What you have to add: ${why}. Add something new from your own field, or correct ${NAME[lead]} if they missed it. Pass only if it was already said.`,
       said,
     );
     if (!line) continue;
