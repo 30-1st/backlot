@@ -37,7 +37,8 @@ export function versions(): Record<string, string> {
 
 // ---------- rules ----------
 
-const numbersIn = (s: string) => [...new Set((s.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, '')).filter((n) => n.length >= 2 || n.includes('.')))];
+// "per 1,000 views" is a unit, not a claim, so numbers right after "per" are left out.
+const numbersIn = (s: string) => [...new Set((s.replace(/\bper\s+[\d,]+/gi, 'per') .match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, '')).filter((n) => n.length >= 2 || n.includes('.')))];
 
 /** Free checks on one chat line. Each failure is a short plain sentence. */
 export function chatRules(agent: string, text: string, earlier: string[], data: string): string[] {

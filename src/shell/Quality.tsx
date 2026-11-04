@@ -208,7 +208,7 @@ export function QualityScreen({ me }: ScreenProps) {
                 <li key={r.id}>
                   <span>{r.kind === 'gate' ? 'Gate' : 'Daily sample'}</span>
                   <span className="bl-small">
-                    {when(r.startedAt)} · {r.status} · {r.scored ?? 0} scored · ${r.costUsd.toFixed(3)}
+                    {when(r.startedAt)} · {r.kind === 'daily' && r.status === 'passed' ? (r.avg != null ? `average ${r.avg} of 5` : 'scored') : r.status} · {r.scored ?? 0} scored · ${r.costUsd.toFixed(3)}
                   </span>
                 </li>
               ))}
