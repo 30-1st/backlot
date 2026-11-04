@@ -34,6 +34,13 @@ import { XEV_KNOWLEDGE } from './knowledge/xev.ts';
 export const AGENTS = ['rein', 'bil', 'kris', 'xev'] as const;
 export type Agent = (typeof AGENTS)[number];
 const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
+/** Each voice, repeated right before the task so it wins over the pack's own tone. */
+const VOICE: Record<Agent, string> = {
+  rein: 'Your voice: casual and online, lowercase is fine, playful, a little dramatic about trends. You talk about what is happening out there on X right now.',
+  bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Numbers first, explained in plain words. Quietly funny, never silly. You are the strategist and you sound certain.',
+  kris: 'Your voice: warm, polished and a little teasing. Normal capitals. You think in stories and headlines, never in ads.',
+  xev: 'Your voice: blunt and confident. Short sentences, normal capitals. You cut to what makes a buyer say yes, and you are not shy about correcting your teammates.',
+};
 
 const MODEL = MODELS.light;
 const PER_CALL_CAP = 0.04;
@@ -183,7 +190,7 @@ async function pickChimes(budget: Budget, ctx: Context, text: string, lead: Agen
     `# The chat so far\n${historyText(ctx.history.slice(-6), ctx.kit.xHandle)}`,
     `# The client's message (data)\n${text}`,
     `# ${NAME[lead]} answered (data)\n${leadReply}`,
-    `# Your task\nList up to two teammates other than ${NAME[lead]} who have something real to add from their own field: a correction, a missing piece, or a quick joke that fits. Leave the list empty when ${NAME[lead]} covered it, which is often. Never pick someone just to fill space.`,
+    `# Your task\nList up to two teammates other than ${NAME[lead]} who have something real to add from their own field: a correction, a missing piece, or a quick joke that fits. When the client asks for advice, a plan or what to change, usually one teammate's field bears on it (Rein on what is trending, Xev on what sells, Kris on getting attention, Bil on the plan): pick that one. Leave the list empty for small talk, thanks, or when ${NAME[lead]} fully covered it. Never pick someone just to fill space.`,
   ].join('\n');
   const out = await call(budget, ROUTER_SYSTEM, prompt, ChimePick, 160, 'chat-router', 'chat-router');
   const seen = new Set<Agent>([lead]);
@@ -198,7 +205,7 @@ async function speak(budget: Budget, ctx: Context, agent: Agent, task: string, a
     ctx.extra[agent],
     `# The chat so far (oldest first)\n${historyText(ctx.history, ctx.kit.xHandle)}`,
     after.length ? `# Just said in this turn\n${after.join('\n')}` : '',
-    `# Your task\n${task}`,
+    `# Your task\n${task}\n${VOICE[agent]}\nAny number you mention, say what it means in plain words (never a bare score). Only use numbers that appear above.`,
   ].filter(Boolean).join('\n');
   const out = await call(budget, system, prompt, Said, 400, `chat-${agent}-${KNOWLEDGE_VERSION[agent === 'rein' ? 'opportunity' : agent]}`, `chat-${agent}`);
   if (!out || out.pass || !out.reply.trim()) return null;
