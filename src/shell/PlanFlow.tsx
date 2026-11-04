@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 
-// Plan a campaign, one question at a time: the goal, the shape, anything extra, then the
-// price before anything is spent. Bil writes in the background and Today says when the
-// posts are ready to approve.
+// Plan the week, one question at a time: up to three goals, what the client can really do,
+// anything extra, then the price before anything is spent. Rolling 7-day plans (approved
+// Nov 4, 2026): Bil, the consultant, sets how many posts and when, inside the client's
+// capacity; keeps about one slot in four open for Rein's trends and new media; and writes
+// each post about a day before it goes out. After the week, the client keeps the goals or
+// changes them.
 
 type Step = 'goal' | 'shape' | 'extras' | 'price';
 const STEPS: Step[] = ['goal', 'shape', 'extras', 'price'];
@@ -53,8 +56,9 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
       // Nothing to clear.
     }
   }, []);
-  const [days, setDays] = useState<3 | 7 | 14>(7);
-  const [perDay, setPerDay] = useState<1 | 2 | 3>(2);
+  const [goals, setGoals] = useState<string[]>([]);
+  const [capacity, setCapacity] = useState<1 | 2 | 3 | 4 | 5>(2);
+  const days = 7;
   const [start, setStart] = useState(tomorrow());
   const [trends, setTrends] = useState(true);
   const [region, setRegion] = useState<'worldwide' | 'us' | 'uk' | 'canada'>('worldwide');
@@ -65,7 +69,9 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [requestId] = useState(() => crypto.randomUUID());
-  const posts = Math.min(60, days * perDay);
+  // The most Bil may plan in the week; he decides the real number.
+  const posts = Math.min(21, days * capacity);
+  const allGoals = [goal.trim(), ...goals.map((g) => g.trim())].filter((g) => g.length >= 3).slice(0, 3);
   const at = STEPS.indexOf(step);
 
   // The price is free to work out, so it is fetched as soon as the last step opens.
@@ -85,8 +91,8 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
 
   const summary = useMemo(
     () =>
-      `${posts} posts over ${days} days, starting ${new Date(`${start}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.${trends ? ' Checks what is trending first.' : ''}${reward !== 'none' ? ` With a ${reward === 'draw' ? 'giveaway' : 'guaranteed reward'}.` : ''}`,
-    [posts, days, start, trends, reward],
+      `A 7-day plan starting ${new Date(`${start}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}. Bil decides how many posts (up to ${posts}) and when, keeps some open for what trends this week, and writes each one about a day before it goes out.${reward !== 'none' ? ` With a ${reward === 'draw' ? 'giveaway' : 'guaranteed reward'}.` : ''}`,
+    [posts, start, reward],
   );
 
   if (!client) {
@@ -128,10 +134,12 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
       await bil.campaign({
         requestId,
         clientId: client.id,
-        goal: goal.trim(),
+        goal: allGoals.join(' · ').slice(0, 280),
+        goals: allGoals,
+        rolling: true,
+        capacityPerDay: capacity,
         startDate: start,
         lengthDays: days,
-        posts,
         useTrends: trends,
         region,
         reward,
@@ -165,7 +173,7 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
       {step === 'goal' && (
         <section className="bl-flow-step bl-in" key="goal">
           <label className="bl-flow-q" htmlFor="goal">
-            What should this campaign get them?
+            What should this week get them?
           </label>
           <textarea
             id="goal"
@@ -176,15 +184,31 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
             placeholder="For example: 10 new paying fans by Friday"
             onChange={(e) => setGoal(e.target.value)}
           />
-          <span className="bl-small">One clear goal works best. Bil builds every post toward it.</span>
+          {goals.map((g, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <label className="bl-sr" htmlFor={`goal-${i}`}>
+                Goal {i + 2}
+              </label>
+              <input id={`goal-${i}`} className="bl-input" style={{ flex: 1 }} maxLength={200} value={g} placeholder="Another goal, for example: grow to 5,000 followers" onChange={(e) => setGoals((all) => all.map((x, k) => (k === i ? e.target.value : x)))} />
+              <button type="button" className="bl-ghost" aria-label={`Remove goal ${i + 2}`} onClick={() => setGoals((all) => all.filter((_, k) => k !== i))}>
+                Remove
+              </button>
+            </div>
+          ))}
+          {goals.length < 2 && (
+            <button type="button" className="bl-ghost bl-start" onClick={() => setGoals((all) => [...all, ''])}>
+              Add another goal
+            </button>
+          )}
+          <span className="bl-small">Up to three. Bil weighs them and splits the week between them, first one first.</span>
         </section>
       )}
 
       {step === 'shape' && (
         <section className="bl-flow-step bl-in" key="shape">
-          <h2 className="bl-flow-q">How big?</h2>
-          <Choice label="How long" value={days} options={[3, 7, 14] as const} onChange={setDays} show={(d) => `${d} days`} />
-          <Choice label="Posts a day" value={perDay} options={[1, 2, 3] as const} onChange={setPerDay} show={(n) => String(n)} />
+          <h2 className="bl-flow-q">What can {client.handle ? `@${client.handle}` : 'they'} really do?</h2>
+          <Choice label="The most posts they can put up in a day, by hand" value={capacity} options={[1, 2, 3, 4, 5] as const} onChange={setCapacity} show={(n) => String(n)} />
+          <span className="bl-small">Bil sets the rate and the times; this is the one limit he plans inside.</span>
           <label className="bl-choice-label" htmlFor="start">
             Starts
           </label>
@@ -193,7 +217,10 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
             <input type="checkbox" checked={trends} onChange={(e) => setTrends(e.target.checked)} />
             <span>Check what is trending first</span>
           </label>
-          <span className="bl-small num">{posts} posts in all.</span>
+          <label className="bl-choice-label" htmlFor="notes">
+            What they can&rsquo;t do this week (optional)
+          </label>
+          <textarea id="notes" className="bl-input" rows={2} maxLength={1000} value={notes} placeholder="For example: no posts Sunday, can't film until Wednesday" onChange={(e) => setNotes(e.target.value)} />
         </section>
       )}
 
@@ -224,10 +251,6 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
               <input id="reward" className="bl-input" maxLength={400} value={rewardDetails} placeholder="For example: a signed photo for 3 winners" onChange={(e) => setRewardDetails(e.target.value)} />
             </>
           )}
-          <label className="bl-choice-label" htmlFor="notes">
-            Notes for Bil
-          </label>
-          <textarea id="notes" className="bl-input" rows={2} maxLength={1000} value={notes} placeholder="For example: no posts on Sunday" onChange={(e) => setNotes(e.target.value)} />
         </section>
       )}
 
@@ -240,9 +263,11 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
             </span>
             <span className="bl-small">at most</span>
           </div>
-          <p className="bl-p" style={{ margin: 0 }}>
-            {goal.trim()}
-          </p>
+          <ol className="bl-p" style={{ margin: 0, paddingLeft: 20 }}>
+            {allGoals.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ol>
           <p className="bl-p bl-muted" style={{ margin: 0 }}>
             {summary} The real cost is usually lower. Bil writes in the background, and Today tells you when the posts are ready to approve.
           </p>
@@ -265,7 +290,7 @@ export function PlanFlow({ ws, go, single }: ScreenProps) {
           </button>
         ) : (
           <button type="button" className="bl-btn" onClick={() => void startIt()} disabled={busy || !price}>
-            {busy ? 'Starting' : 'Start the campaign'}
+            {busy ? 'Starting' : 'Start the week'}
           </button>
         )}
       </div>

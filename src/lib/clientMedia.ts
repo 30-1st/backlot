@@ -240,3 +240,52 @@ export function cleanTag(t: string): string | null {
   const c = t.toLowerCase().trim().replace(/\s+/g, ' ');
   return /^[a-z0-9][a-z0-9 -]{0,31}$/.test(c) ? c : null;
 }
+
+// ---------- Bil's tagging (approved Nov 4, 2026) ----------
+
+const TAG_EDGE = 768;
+
+/** Draws a picture or one frame of a video small, as base64 JPEG, for Bil to tag. Nothing leaves the phone until it is this small copy. */
+function toJpeg(source: CanvasImageSource, w: number, h: number): string {
+  const scale = Math.min(1, TAG_EDGE / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * scale));
+  c.height = Math.max(1, Math.round(h * scale));
+  c.getContext('2d')!.drawImage(source, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+}
+
+async function frameOf(src: string, kind: 'photo' | 'video'): Promise<string> {
+  if (kind === 'photo') {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+    await img.decode();
+    return toJpeg(img, img.naturalWidth, img.naturalHeight);
+  }
+  const v = document.createElement('video');
+  v.crossOrigin = 'anonymous';
+  v.muted = true;
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.src = src;
+  await new Promise<void>((ok, fail) => {
+    v.onloadeddata = () => ok();
+    v.onerror = () => fail(new Error('Could not read the video.'));
+  });
+  await new Promise<void>((ok) => {
+    v.onseeked = () => ok();
+    v.currentTime = Math.min(1, (v.duration || 2) / 2);
+  });
+  return toJpeg(v, v.videoWidth, v.videoHeight);
+}
+
+/** A small copy of a file in Media, from its signed address or the file just picked. */
+export async function smallCopy(from: { file?: File; url?: string }, kind: 'photo' | 'video'): Promise<{ data: string; mediaType: 'image/jpeg' }> {
+  const src = from.file ? URL.createObjectURL(from.file) : from.url!;
+  try {
+    return { data: await frameOf(src, kind), mediaType: 'image/jpeg' };
+  } finally {
+    if (from.file) URL.revokeObjectURL(src);
+  }
+}

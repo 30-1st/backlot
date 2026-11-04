@@ -195,6 +195,9 @@ export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string, changed?: boolean) =>
     call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}), ...(changed ? { changed: true } : {}) }),
   /** One chat turn with Kris: returns what was saved (the person's message and hers). */
+  /** Bil tags one untagged photo or video frame from a small copy (non-adult clients; about a quarter of a cent). */
+  mediaTag: (clientId: string, itemId: string, image: { data: string; mediaType: 'image/jpeg' }) =>
+    call<{ itemId: string; tags: string[]; tagged: boolean; costUsd?: number }>('bil', 'media_tag', { requestId: crypto.randomUUID(), clientId, itemId, image }),
   /** The team chat: the person's message and the lead agent's answer (about a cent). */
   chatSend: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'chat_send', { requestId: crypto.randomUUID(), clientId, text }),
@@ -252,11 +255,15 @@ export const bil = {
     goal: string;
     startDate: string;
     lengthDays: number;
-    posts: number;
+    posts?: number;
     useTrends: boolean;
     region: 'worldwide' | 'us' | 'uk' | 'canada';
     reward: 'none' | 'draw' | 'guaranteed';
     rewardDetails?: string;
     notes?: string;
+    /** Rolling 7-day plan: Bil sets the rate and writes each post about a day ahead. */
+    rolling?: boolean;
+    goals?: string[];
+    capacityPerDay?: number;
   }) => call<{ campaignId: string; status: string }>('bil', 'campaign', r),
 };

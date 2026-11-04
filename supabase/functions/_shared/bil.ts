@@ -1541,8 +1541,21 @@ export const CampaignRequest = z.object({
   reward: z.enum(['none', 'draw', 'guaranteed']).default('none'),
   rewardDetails: shortText(400).optional(),
   notes: text(1000).optional(),
+  /** Rolling 7-day plans (approved Nov 4, 2026): Bil sets the rate and times, keeps slots open
+   *  for trends and new media, and writes each post about a day before it goes out. */
+  rolling: z.boolean().default(false),
+  /** Up to three goals Bil weighs at once. `goal` carries them joined, for older screens. */
+  goals: z.array(shortText(200)).min(1).max(3).optional(),
+  /** The most posts a day the client says they can put up by hand. Bil plans within it. */
+  capacityPerDay: z.number().int().min(1).max(5).optional(),
 });
 export type CampaignRequest = z.infer<typeof CampaignRequest>;
+
+/** Rolling plans: the most posts one week may hold, and how far ahead a post is written. */
+export const ROLLING_DAYS = 7;
+const ROLLING_MAX_POSTS = 21;
+const ROLLING_LEAD_MS = 36 * 3_600_000;
+const capacityOf = (r: { capacityPerDay?: number }, postsPerWeek: number) => r.capacityPerDay ?? Math.max(1, Math.min(5, Math.ceil(postsPerWeek / 7)));
 
 /**
  * Upper-bound cost of a campaign before it starts, at uncached prices (caching with
@@ -1578,7 +1591,11 @@ export async function startCampaign(ownerId: string, req: CampaignRequest) {
   const today = new Date().toISOString().slice(0, 10);
   if (req.startDate < addDays(today, -1)) throw new BilInputError('The start date is in the past.');
 
-  const posts = req.posts ?? Math.min(MAX_POSTS, Math.max(1, Math.round((kit.profile.postsPerWeek * req.lengthDays) / 7)));
+  if (req.rolling) req = { ...req, lengthDays: ROLLING_DAYS };
+  // Rolling: Bil decides the rate inside the client's capacity; this is the most it can be.
+  const posts = req.rolling
+    ? Math.min(ROLLING_MAX_POSTS, capacityOf(req, kit.profile.postsPerWeek) * ROLLING_DAYS)
+    : req.posts ?? Math.min(MAX_POSTS, Math.max(1, Math.round((kit.profile.postsPerWeek * req.lengthDays) / 7)));
   const estimate = estimateCampaign(posts, req.useTrends, snapshotText(kit).length);
   const summary: any = await new Budget('campaign', { db }).summary();
   const cap = Number(summary?.limits?.campaign ?? 1);
@@ -1978,8 +1995,32 @@ async function algorithmContext(): Promise<AlgorithmContext> {
   };
 }
 
+/** Rolling 7-day plans: Bil prescribes the week inside the client's capacity, with slots kept open. */
+function rollingTask(c: Campaign, kit: Kit, maxPosts: number): string {
+  const r = c.request;
+  const goals = r.goals?.length ? r.goals : [r.goal];
+  const cap = capacityOf(r, kit.profile.postsPerWeek);
+  return `# Your task: plan this week, as their consultant
+You are planning a rolling ${r.lengthDays}-day plan, not a fixed campaign. You set the rate; the client does not.
+Goals, all at once (weigh them; the first matters most unless the notes say otherwise):
+${goals.map((g, i) => `${i + 1}. ${g}`).join('\n')}
+Start date: ${r.startDate}. The client posts every post by hand and can manage at most ${cap} a day. Plan between ${Math.min(maxPosts, r.lengthDays)} and ${maxPosts} posts; choose the number that serves the goals best given their media, what performs on their page and the trends, and say why in rateWhy.
+${r.notes ? `What the client told you they can and cannot do: ${r.notes}\n` : ''}- goalSplit: how the week splits across the goals, with shares adding to 100.
+- Keep about one slot in four open (open: true): the idea is a placeholder, because you will fill it about a day before with the newest trend from Rein or new media the client adds. Spread open slots across the week, never all at the end.
+- Every slot names the goal it serves (goal), exactly as written above.
+- You will write each post about a day before it goes out, so the plan is the arc: pillars, slots, windows and which media each one needs. Fixed slots may still take fresh media later if none fits now.
+- Start from what already performs on their page (whatWorks in their voice card), then push past it. Design every slot to earn the actions X ranks highest (replies, quotes, shares).
+- Choose 2 to 4 pillars. Every slot uses a pillar slug from your list and a post type slug from their library.
+- Never more than ${cap} posts on one day. postWindow is local time in ${kit.profile.timezone}.
+- media: give a slot one file from their media library by its ref when its tags fit. Use each file once at most. Never invent a ref.
+- kpis: one main measure per goal they can see in X's analytics or their own records.
+- Inspiration board: lean toward "more like this", steer clear of "not this". In inspiredBy, list the refs this plan really leans on; never invent one.
+- No reward or giveaway unless the client asked for one.`;
+}
+
 function planTask(c: Campaign, kit: Kit, posts: number): string {
   const r = c.request;
+  if (r.rolling) return rollingTask(c, kit, posts);
   const reward = r.reward === 'none'
     ? 'No reward or giveaway: leave reward empty.'
     : `The client wants a ${r.reward === 'draw' ? 'giveaway (chance draw)' : 'guaranteed reward'}${r.rewardDetails ? `: ${r.rewardDetails}` : ''}. Design it under skill 17. Use a disclosure tag built from their name, like #${kit.profile.displayName.replace(/[^A-Za-z0-9]/g, '').slice(0, 30) || 'Brand'}_${r.reward === 'draw' ? 'Contest' : 'Rewards'}.`;
@@ -2091,6 +2132,8 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
       idea: cut(s.idea, 300) ?? 'Post idea pending.',
       trendTopic,
       mediaId,
+      ...(r.rolling && s.open ? { open: true } : {}),
+      ...(r.rolling && s.goal ? { goal: cut(s.goal, 200) } : {}),
     });
   }
   if (slots.length === 0) throw new Error('The plan had no posts');
@@ -2100,6 +2143,18 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
   for (const s of slots) perDay.set(s.dayOffset, (perDay.get(s.dayOffset) ?? 0) + 1);
   const busy = [...perDay.entries()].filter(([, n]) => n > 3);
   if (busy.length) adjustments.push(`${busy.length} day(s) have more than 3 posts; X discounts several posts from one account close together.`);
+  if (r.rolling) {
+    // The client's capacity is the one limit Bil plans inside: extras on a day are dropped.
+    const cap = capacityOf(r, kit.profile.postsPerWeek);
+    const seen = new Map<number, number>();
+    const kept = slots.filter((sl) => {
+      const n = (seen.get(sl.dayOffset) ?? 0) + 1;
+      seen.set(sl.dayOffset, n);
+      return n <= cap;
+    });
+    if (kept.length < slots.length) adjustments.push(`${slots.length - kept.length} post(s) went over ${cap} a day, the most the client can post, so they were dropped.`);
+    slots.splice(0, slots.length, ...kept.map((sl, i) => ({ ...sl, slot: i + 1 })));
+  }
 
   let reward: RewardProgram | undefined;
   if (r.reward !== 'none' && draft.reward) {
@@ -2153,8 +2208,28 @@ async function planStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, b
     algorithm,
     adjustments: adjustments.slice(0, 30),
     inspiredBy,
+    ...(r.rolling
+      ? {
+        rolling: true,
+        goals: (r.goals?.length ? r.goals : [r.goal]).map((g) => cut(g, 200)!).filter(Boolean),
+        rateWhy: cut(draft.rateWhy, 600),
+        goalSplit: (draft.goalSplit ?? []).slice(0, 3).map((g) => ({ goal: cut(g.goal, 200) ?? '', share: clampInt(g.share, 0, 100, 0), how: cut(g.how, 160) ?? '' })).filter((g) => g.goal),
+      }
+      : {}),
   });
 
+  if (plan.rolling) {
+    await setStep(db, c.id, { plan, posts_total: plan.slots.length, status: 'drafting', step: 'Writing the first posts' });
+    const open = plan.slots.filter((sl) => sl.open).length;
+    const split = (plan.goalSplit ?? []).map((g) => `${g.share}% ${g.goal}`).join(', ');
+    await bilSays(db, c, 'briefing', `plan:${c.id}`, [
+      `This week: ${plan.slots.length} posts over ${plan.lengthDays} days, starting ${plan.startDate}.`,
+      plan.rateWhy ?? '',
+      split ? `The split: ${split}.` : '',
+      open ? `${open} of them stay open for whatever Rein finds or whatever you shoot this week. I write each post about a day before it goes out.` : 'I write each post about a day before it goes out.',
+    ].filter(Boolean).join(' '), `campaigns.${c.id}`);
+    return { kind: 'batch', payload: { size: BATCH_START, redo: {} } };
+  }
   await setStep(db, c.id, { plan, posts_total: plan.slots.length, status: 'drafting', step: `Drafting posts 1 to ${Math.min(BATCH_START, plan.slots.length)}` });
   return { kind: 'batch', payload: { size: BATCH_START, redo: {} } };
 }
@@ -2315,7 +2390,15 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     await finalizeCampaign(db, c);
     return { kind: null };
   }
-  const slots = pending.slice(0, size);
+  // Rolling: only posts going out in the next day and a half are written now; the rest wait.
+  const dueAt = (sl: PlanSlot) => Date.parse(`${plan.startDate}T12:00:00Z`) + sl.dayOffset * 86_400_000;
+  const ready = plan.rolling ? pending.filter((sl) => dueAt(sl) <= Date.now() + ROLLING_LEAD_MS) : pending;
+  if (plan.rolling && ready.length === 0) {
+    const wake = Math.min(...pending.map(dueAt)) - ROLLING_LEAD_MS;
+    await setStep(db, c.id, { status: (rows ?? []).length ? 'ready' : 'drafting', step: 'Next posts are written about a day before they go out' });
+    return { kind: 'batch', payload: { size, redo }, delaySeconds: Math.max(600, Math.ceil((wake - Date.now()) / 1000)) };
+  }
+  const slots = ready.slice(0, size);
   const hooks = (rows ?? [])
     .filter((r: any) => r.status === 'ok')
     .slice(-20)
@@ -2337,7 +2420,44 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     const t = tests.get(sl.slot);
     return t ? ({ ...sl, dialTest: testLine(t, targetDials(baseDials, sl.stage)) } as PlanSlot) : sl;
   });
-  const prompt = draftPrompt(kit, plan, promptSlots, redo, hooks, mediaFiles);
+  let prompt = draftPrompt(kit, plan, promptSlots, redo, hooks, mediaFiles);
+  // Rolling: what is true today, newer than the plan: Rein's latest trends and fresh media.
+  const freshRefs = new Map<string, string>();
+  if (plan.rolling) {
+    const usedIds = new Set<string>([
+      ...plan.slots.map((sl) => sl.mediaId).filter((m): m is string => Boolean(m)),
+      ...(rows ?? []).map((r: any) => String(r.post?.mediaId ?? '')).filter(Boolean),
+    ]);
+    const fresh = (await loadLibraryFiles(db, kit.clientId, kit.ownerId)).filter((f) => !usedIds.has(f.id) && f.tags.length).slice(0, 30);
+    fresh.forEach((f, i) => {
+      freshRefs.set(`m${i + 1}`, f.id);
+      mediaFiles.set(f.id, f);
+    });
+    const { data: cb } = await db.from('client_briefs').select('brief_id').eq('client_id', kit.clientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    const { data: nb } = cb ? await db.from('niche_briefs').select('brief, created_at').eq('id', cb.brief_id).maybeSingle() : { data: null };
+    const trendLines = (Array.isArray((nb?.brief as any)?.trends) ? (nb!.brief as any).trends : [])
+      .slice(0, 5)
+      .map((t: any) => `- ${String(t.topic ?? '').slice(0, 120)}: ${String(t.summary ?? '').slice(0, 260)}`);
+    prompt += [
+      '',
+      '# Rolling plan: what is true today (newer than the plan)',
+      `Rein's latest trends${nb?.created_at ? ` (${String(nb.created_at).slice(0, 10)})` : ''}:`,
+      trendLines.length ? trendLines.join('\n') : '(none new)',
+      'Fresh media not used yet (ref, kind, tags):',
+      fresh.length ? fresh.map((f, i) => JSON.stringify({ ref: `m${i + 1}`, kind: f.kind, tags: f.tags, ...(f.note ? { note: f.note } : {}) })).join('\n') : '(none)',
+      '- Slots with "open": true: choose the idea now from the trends or fresh media above, write it in idea, and put one fresh file in media when one fits.',
+      '- Slots with no media: put a fresh file in media only when it clearly fits the post.',
+      '- A fixed slot may lean toward a trend above when it serves the same goal better. Never use a trend outside its window.',
+    ].join('\n');
+  }
+  const usedFresh = new Set<string>();
+  const withFresh = (sl: PlanSlot, p: { idea?: string; media?: string }): PlanSlot => {
+    if (!plan.rolling) return sl;
+    const id = p.media ? freshRefs.get(String(p.media).trim().toLowerCase()) : undefined;
+    const take = id && !sl.mediaId && !usedFresh.has(id) ? id : undefined;
+    if (take) usedFresh.add(take);
+    return { ...sl, ...(sl.open && p.idea ? { idea: cut(p.idea, 300) ?? sl.idea } : {}), ...(take ? { mediaId: take } : {}) };
+  };
   const ctx = checkContextFor(kit, plan);
 
   const newRows: Array<{ campaign_id: string; owner_id: string; slot: number; status: 'ok' | 'blocked'; post: unknown }> = [];
@@ -2364,8 +2484,9 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     const bySlot = new Map<number, (typeof result.output.posts)[number]>();
     for (const p of result.output.posts) if (!bySlot.has(p.slot)) bySlot.set(p.slot, p);
 
-    for (const s of slots) {
-      const p = bySlot.get(s.slot);
+    for (const s0 of slots) {
+      const p = bySlot.get(s0.slot);
+      const s = p ? withFresh(s0, p) : s0;
       const earlier = redo[String(s.slot)];
       if (!p) {
         if (earlier) blockRow(s, ['Bil could not draft this slot after two tries.', ...earlier]);
@@ -2409,7 +2530,26 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
     return { kind: null };
   }
   const nextSize = ms > 0 && ms < FAST_BATCH_MS ? BATCH_MAX : BATCH_START;
+  if (plan.rolling) {
+    const wrote = newRows.filter((r) => r.status === 'ok').length;
+    if (wrote) await bilSays(db, c, 'note', `batch:${c.id}:${slots[0].slot}`, `I wrote the next ${wrote} ${wrote === 1 ? 'post' : 'posts'} for "${plan.title}", with the newest trends and media in mind. ${wrote === 1 ? 'It is' : 'They are'} waiting for your yes.`, `campaigns.${c.id}`);
+    await setStep(db, c.id, { status: 'ready', step: 'Next posts are written about a day before they go out' });
+  }
   return { kind: 'batch', payload: { size: nextSize, redo: nextRedo } };
+}
+
+/** Bil speaks in the client's team chat: a plan briefing or a short update. One per ref. */
+async function bilSays(db: SupabaseClient, c: Campaign, kind: 'briefing' | 'note', ref: string, body: string, link?: string) {
+  const { error } = await db.from('kris_messages').insert({
+    workspace_id: c.owner_id,
+    client_id: c.client_id,
+    role: 'bil',
+    kind,
+    body: body.replace(/\s*—\s*/g, ', ').slice(0, 2000),
+    link: link ? link.slice(0, 80) : null,
+    ref: ref.slice(0, 120),
+  });
+  if (error && error.code !== '23505') console.error('bil: chat message failed', ref, error.message);
 }
 
 /** Closes a campaign: approved when every post passed, ready when some need the client. */
@@ -2452,6 +2592,9 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string) 
       body: `Bil finished ${plan.success ? `"${plan.data.title}"` : 'your campaign'}: ${okCount} ${okCount === 1 ? 'post is' : 'posts are'} ready for your yes${blocked ? `, and ${blocked} need${blocked === 1 ? 's' : ''} a detail from you first` : ''}. Want me to show you a few here?`,
       link: `campaigns.${c.id}`,
     });
+  }
+  if (plan.success && plan.data.rolling && status !== 'failed') {
+    await bilSays(db, c, 'note', `wrap:${c.id}`, `That is the whole week for "${plan.data.title}" written. When the last post is out, tell me here: keep pushing these goals, or change them? I will plan the next 7 days from what this week shows.`, `campaigns.${c.id}`);
   }
   await setStep(db, c.id, {
     status,

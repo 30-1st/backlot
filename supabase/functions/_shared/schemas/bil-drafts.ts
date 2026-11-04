@@ -114,9 +114,17 @@ export const PlanDraft = z.object({
         idea: str('What this post does and its angle. Under 300 characters.'),
         trendTopic: z.string().optional().describe('Only when it uses a trend you marked "use", exactly as named.'),
         media: z.string().optional().describe('The ref of one file from their media library (like "m3") whose tags fit this post. Leave out for text posts or when nothing fits. Never invent a ref.'),
+        open: z.boolean().optional().describe('Rolling plans only: true for a slot you keep open, to fill about a day before with the newest trend or media.'),
+        goal: z.string().optional().describe('Rolling plans only: which of the client\'s goals this post serves, as written.'),
       }),
     )
     .max(60),
+  rateWhy: z.string().optional().describe('Rolling plans only: why this many posts at these times, in two or three plain sentences to the client, as their consultant.'),
+  goalSplit: z
+    .array(z.object({ goal: z.string(), share: z.number().int().describe('Percent of the week, 0 to 100.'), how: z.string().describe('How the week serves it. Under 160 characters.') }))
+    .max(3)
+    .optional()
+    .describe('Rolling plans only: how the week splits across the client\'s goals.'),
   reward: RewardDraft.optional().describe('Only when the client asked for a giveaway or reward.'),
   inspiredBy: z.array(z.string()).max(10).optional().describe('Refs (like "b2") of the "more like this" board items this plan leans on. Never invent a ref.'),
   notes: str('Why this plan, what to watch, and what is a guess (posting windows are). Under 1,000 characters.'),
@@ -133,6 +141,8 @@ export const BatchDraft = z.object({
         hook: str('The first line, exactly as it appears in the draft.'),
         draft: str('The full post, ready to copy, including any required #ad, contest tag or disclaimer.'),
         callToAction: z.string().optional(),
+        idea: z.string().optional().describe('Open slots only: the idea you chose for it now. Under 300 characters.'),
+        media: z.string().optional().describe('Open slots, or slots with no media yet: the ref of one fresh file (like "m3") whose tags fit. Never invent a ref.'),
         mediaIdea: z.string().optional().describe('A description only. Never images of real people. Under 400 characters.'),
         engagementPlan: z.string().optional().describe('What the client does by hand after posting. Under 400 characters.'),
         algorithmScore: z.number().int().describe('0 to 100: how well this fits X\'s ranking, from the settings given. A guide, not a promise.'),
@@ -167,6 +177,10 @@ export const PlanSlot = z.object({
   trendTopic: shortText(120).optional(),
   /** A Library file Bil matched to this post by its tags. */
   mediaId: id.optional(),
+  /** Rolling plans: a slot kept open, filled about a day before with the newest trend or media. */
+  open: z.boolean().optional(),
+  /** Rolling plans: which goal this post serves. */
+  goal: shortText(200).optional(),
 });
 export type PlanSlot = z.infer<typeof PlanSlot>;
 
@@ -196,5 +210,10 @@ export const CampaignPlan = z.object({
   adjustments: z.array(shortText(300)).max(30),
   /** Inspiration board items ("more like this") the plan leaned on. */
   inspiredBy: z.array(id).max(10).optional(),
+  /** Rolling 7-day plans (Nov 4, 2026): Bil sets the rate and writes each post about a day ahead. */
+  rolling: z.boolean().optional(),
+  goals: z.array(shortText(200)).max(3).optional(),
+  rateWhy: text(600).optional(),
+  goalSplit: z.array(z.object({ goal: shortText(200), share: z.number().int().min(0).max(100), how: shortText(160) })).max(3).optional(),
 });
 export type CampaignPlan = z.infer<typeof CampaignPlan>;

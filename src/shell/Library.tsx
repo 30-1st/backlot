@@ -12,6 +12,7 @@ import {
   setStatus,
   setTags,
   signedUrls,
+  smallCopy,
   type LibraryItem,
   type MediaStatus,
 } from '../lib/clientMedia';
@@ -19,11 +20,12 @@ import { plural } from '../lib/format';
 import { daysSince, shotsWanted, usage } from './gaps';
 import type { ScreenProps } from './Shell';
 import { supabase } from '../lib/supabase';
-import { team } from '../lib/team';
+import { bil, team } from '../lib/team';
 import { PageHead } from './Present';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
-// campaign around what is really here. Bil reads the tags, never the images.
+// campaign around what is really here. Bil tags new files himself from a small copy made on
+// the phone (non-adult clients, Nov 4, 2026); adult accounts tag by hand and he never sees them.
 
 type Upload = { key: string; name: string; state: 'waiting' | 'sending' | 'done' | 'failed'; error?: string };
 
@@ -68,6 +70,9 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [typeTags, setTypeTags] = useState<string[]>([]);
   const [showRemoved, setShowRemoved] = useState(false);
   const [order, setOrder] = useState<'high' | 'low'>('high');
+  const [tagging, setTagging] = useState<{ done: number; total: number; failed: number } | null>(null);
+  // Bil tags media himself for non-adult clients (Nov 4, 2026); adult accounts tag by hand.
+  const adult = Boolean((client?.profile as { adultContent?: boolean } | undefined)?.adultContent);
   const [ranked, setRanked] = useState<{ tags: Array<{ tag: string; posts: number; score: number }>; measured: number } | null>(null);
   const [niche, setNiche] = useState<Array<{ pattern: string; why: string }> | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -166,23 +171,46 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
                 : live.filter((i) => i.tags.includes(filter));
   const open = kept.find((i) => i.id === openId) ?? null;
 
+  /** Bil tags these one at a time from small copies made here; a person's tags always win. */
+  async function bilTag(list: Array<{ id: string; kind: 'photo' | 'video'; file?: File; url?: string }>) {
+    if (!clientId || adult || !list.length) return;
+    let done = 0;
+    let failed = 0;
+    setTagging({ done, total: list.length, failed });
+    for (const it of list) {
+      try {
+        if (!it.file && !it.url) throw new Error('no picture');
+        await bil.mediaTag(clientId, it.id, await smallCopy({ file: it.file, url: it.url }, it.kind));
+      } catch {
+        failed++;
+      }
+      done++;
+      setTagging({ done, total: list.length, failed });
+    }
+    await load();
+    window.setTimeout(() => setTagging(null), failed ? 6000 : 2500);
+  }
+
   async function addFiles(files: FileList | File[]) {
     if (!clientId) return;
     const list = [...files];
+    const added: Array<{ id: string; kind: 'photo' | 'video'; file: File }> = [];
     const queue: Upload[] = list.map((f, i) => ({ key: `${Date.now()}-${i}`, name: f.name, state: refuse(f) ? 'failed' : 'waiting', error: refuse(f) ?? undefined }));
     setUploads(queue);
     for (let i = 0; i < list.length; i++) {
       if (queue[i].state === 'failed') continue;
       setUploads((u) => u.map((x, k) => (k === i ? { ...x, state: 'sending' } : x)));
       try {
-        await addFile(me.workspaceId, clientId, list[i]);
+        const newId = await addFile(me.workspaceId, clientId, list[i]);
+        added.push({ id: newId, kind: list[i].type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(list[i].name) ? 'video' : 'photo', file: list[i] });
         setUploads((u) => u.map((x, k) => (k === i ? { ...x, state: 'done' } : x)));
       } catch (e) {
         setUploads((u) => u.map((x, k) => (k === i ? { ...x, state: 'failed', error: e instanceof Error ? e.message : 'Upload failed.' } : x)));
       }
     }
     await load();
-    setFilter('untagged');
+    if (adult) setFilter('untagged');
+    else await bilTag(added);
   }
 
   if (!clientId) {
@@ -229,7 +257,13 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
             )}
           </>
         }
-        how={<p>Bil plans posts around the tags on each photo and video, and never sees the images themselves.</p>}
+        how={
+          adult ? (
+            <p>Bil plans posts around the tags on each photo and video. On adult accounts he never sees the pictures, so tag each file by hand.</p>
+          ) : (
+            <p>Bil tags new photos and videos himself from a small copy, and plans posts around the tags. You can change any tag; yours always win.</p>
+          )
+        }
         actions={
           <button type="button" className="bl-btn" onClick={() => picker.current?.click()} disabled={sending}>
             {sending ? 'Adding' : 'Add'}
@@ -249,6 +283,16 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           }}
         />
       </div>
+
+      {tagging && (
+        <p className="bl-small" role="status">
+          {tagging.done < tagging.total
+            ? `Bil is tagging ${tagging.done + 1} of ${tagging.total}.`
+            : tagging.failed
+              ? `Bil tagged ${tagging.total - tagging.failed} of ${tagging.total}. Tag the rest by hand.`
+              : `Bil tagged ${tagging.total === 1 ? 'it' : `all ${tagging.total}`}. Change any tag he got wrong.`}
+        </p>
+      )}
 
       {error && (
         <p className="bl-error" role="alert">
@@ -293,7 +337,12 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           <ul>
             {untagged.length > 0 && (
               <li>
-                {untagged.length} {plural(untagged.length, 'file needs', 'files need')} tags. Bil can only plan around tagged files.
+                {untagged.length} {plural(untagged.length, 'file needs', 'files need')} tags. Bil can only plan around tagged files.{' '}
+                {!adult && !tagging && (
+                  <button type="button" className="bl-linkish" onClick={() => void bilTag(untagged.map((i) => ({ id: i.id, kind: i.kind, url: urls[i.path] })))}>
+                    Let Bil tag {untagged.length === 1 ? 'it' : 'them'}
+                  </button>
+                )}
               </li>
             )}
             {gaps.map((g) => (

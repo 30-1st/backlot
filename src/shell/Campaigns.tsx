@@ -240,6 +240,9 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
   const working = (campaign.status === 'planning' || campaign.status === 'drafting') && !campaign.hold;
   const inspired = (campaign.plan as { inspiredBy?: unknown } | null)?.inspiredBy;
   const leaned = Array.isArray(inspired) ? inspired.length : 0;
+  // Rolling 7-day plans: Bil's reason for the rate, and how many posts are still to be written.
+  const rolling = (campaign.plan as { rolling?: boolean; rateWhy?: string } | null) ?? null;
+  const toWrite = rolling?.rolling ? Math.max(0, total - posts.length) : 0;
 
   async function decide(p: Post, decision: Decision, text?: string, postUrl?: string) {
     if (postUrl && !X_POST.test(postUrl.trim())) {
@@ -360,6 +363,12 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
           <span className="bl-label bl-ellipsis">Goal: {String((campaign.request as { goal?: string } | null)?.goal ?? '')}</span>
         </div>
       </div>
+      {rolling?.rolling && (
+        <p className="bl-small" style={{ margin: 0 }}>
+          {rolling.rateWhy ? `${rolling.rateWhy} ` : ''}
+          {toWrite > 0 ? `${toWrite} more ${toWrite === 1 ? 'post is' : 'posts are'} written about a day before ${toWrite === 1 ? 'it goes' : 'they go'} out, with the newest trends and media.` : 'Every post this week is written.'}
+        </p>
+      )}
       {leaned > 0 && (
         <p className="bl-small" style={{ margin: 0 }}>
           Bil leaned on {leaned} {leaned === 1 ? 'item' : 'items'} from the board marked &ldquo;more like this.&rdquo;
