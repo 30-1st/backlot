@@ -39,6 +39,8 @@
 //   xev_grant      { clientId, extra }       extra Xev reads, until payments open                       owner
 //   x_connect      { clientId }              starts X's sign-in to connect the client's own X account (free)  team, client
 //   x_disconnect   { clientId }              revokes at X, deletes the tokens and every lead (free)           team, client
+//   desk_send      { requestId, text }       the person's own desk chat with the four agents, over every client they may see  owner, team
+//   desk_chime     { requestId, turn }       up to two teammates add to a desk turn, once                       owner, team
 //   xev_inbox      { clientId }              the connection and Xev's open DM leads (free)                    team, client
 //                  (Xev offers her take on a lead in the team chat; a yes there runs it, see chat_send)
 
@@ -90,6 +92,7 @@ import { userContextFromRequest } from '../_shared/toolbox.ts';
 import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, XevReadRequest, xevStatus } from '../_shared/xev.ts';
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
 import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest, winLog, WinLogRequest } from '../_shared/team-chat.ts';
+import { deskChime, DeskChimeRequest, deskSend, DeskSendRequest } from '../_shared/desk.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
 import { XConnectRequest, xConnectStart, xDisconnect, xevInbox } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
@@ -207,6 +210,10 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await krisChat(member, parse(KrisChatRequest, input)));
       case 'chat_send':
         return reply(200, await chatSend(member, parse(ChatSendRequest, input)));
+      case 'desk_send':
+        return reply(200, await deskSend(member, parse(DeskSendRequest, input)));
+      case 'desk_chime':
+        return reply(200, await deskChime(member, parse(DeskChimeRequest, input)));
       case 'chat_chime':
         return reply(200, await chatChime(member, parse(ChatChimeRequest, input)));
       case 'win_log':

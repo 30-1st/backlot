@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { isTeamRole, type Me } from '../lib/team';
 import { Logo } from '../components/ui';
-import { Clapper, Reel, StarDoor } from './icons';
+import { Bubble, Clapper, Gear, Reel, StarDoor } from './icons';
 import { ModeSwitch } from './ModeSwitch';
 
 // Home: three rooms (two for a client) on a lit stage. A warm key light falls from the
@@ -66,7 +66,7 @@ export function Stage() {
 export function Deck({ rooms, go, label }: { rooms: Room[]; go: (p: string) => void; label: string }) {
   const [at, setAt] = useState(0);
   return (
-    <nav className={`bl-deck${rooms.length === 2 ? ' two' : ''} bl-in`} aria-label={label} style={{ animationDelay: '140ms' }}>
+    <nav className={`bl-deck${rooms.length === 2 ? ' two' : ''}${rooms.length >= 4 ? ' four' : ''} bl-in`} aria-label={label} style={{ animationDelay: '140ms', gridTemplateColumns: `repeat(${rooms.length}, minmax(0, 1fr))` }}>
       <span className="bl-deck-glow" aria-hidden="true" style={{ width: `${100 / rooms.length}%`, transform: `translateX(${at * 100}%)` }}>
         <span className="bl-deck-beam">
           <i />
@@ -98,6 +98,7 @@ export function HomeRooms({ me, go, needs }: { me: Me; go: (p: string) => void; 
   const rooms: Room[] = isTeam
     ? [
         { key: 'team', name: 'Team', path: 'today', icon: <Clapper /> },
+        { key: 'hq', name: me.role === 'owner' ? 'HQ' : 'Chat', path: 'hq', icon: <Bubble /> },
         { key: 'client', name: 'Client', path: 'client', icon: <StarDoor /> },
         { key: 'play', name: 'Playground', path: 'playground', icon: <Reel /> },
       ]
@@ -114,6 +115,19 @@ export function HomeRooms({ me, go, needs }: { me: Me; go: (p: string) => void; 
         <span className="bl-word">Backlot</span>
         <div className="bl-bar-end">
           <ModeSwitch />
+          {me.role === 'owner' && (
+            <a
+              href="#quality"
+              className="bl-gear"
+              aria-label="Quality"
+              onClick={(e) => {
+                e.preventDefault();
+                go('quality');
+              }}
+            >
+              <Gear size={20} />
+            </a>
+          )}
           <a
             href="#account"
             className={`bl-avatar${isTeam ? '' : ' soft'}`}

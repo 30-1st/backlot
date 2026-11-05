@@ -1365,6 +1365,8 @@ body[data-bl='light'] .home-logo {
   box-shadow: var(--deck-shadow);
 }
 .bl-deck.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.bl-deck.four .bl-room { gap: 10px; padding-inline: 4px; }
+.bl-deck.four .bl-room-name { font-size: 13px; }
 .bl-deck::before {
   content: '';
   position: absolute;

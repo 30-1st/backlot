@@ -34,9 +34,9 @@ import { XEV_KNOWLEDGE } from './knowledge/xev.ts';
 
 export const AGENTS = ['rein', 'bil', 'kris', 'xev'] as const;
 export type Agent = (typeof AGENTS)[number];
-const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
+export const NAME: Record<Agent, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
 /** Each voice, repeated right before the task so it wins over the pack's own tone. */
-const VOICE: Record<Agent, string> = {
+export const VOICE: Record<Agent, string> = {
   rein: 'Your voice: casual and online, lowercase is fine, playful, a little dramatic about trends. You talk about what is happening out there on X right now.',
   bil: 'Your voice: formal and dry. Full sentences with normal capitals, no contractions, no slang. Quietly funny, never silly. You are the consultant and you sound certain. Shape: first the diagnosis in plain words (what is wrong), then the prescription (exactly what you are changing in this week\'s plan, by day or by post), then at most one number as proof. The scores in their voice card are for you to think with, not to recite; never open with a statistic.',
   kris: 'Your voice: warm, polished and a little teasing. Normal capitals. You think in stories and headlines, never in ads.',
@@ -49,7 +49,7 @@ const DAILY_MESSAGES = 60;
 const HISTORY = 12;
 const MAX_CHIMES = 2;
 
-const PACK: Record<Agent, string> = { rein: REIN_MEETING_KNOWLEDGE, bil: BIL_KNOWLEDGE, kris: KRIS_KNOWLEDGE, xev: XEV_KNOWLEDGE };
+export const PACK: Record<Agent, string> = { rein: REIN_MEETING_KNOWLEDGE, bil: BIL_KNOWLEDGE, kris: KRIS_KNOWLEDGE, xev: XEV_KNOWLEDGE };
 
 /** The shared rules, after each agent's own pack so the pack stays the cached opening. */
 const TEAM_RULES = `# The team chat
@@ -113,7 +113,7 @@ export async function context(db: SupabaseClient, clientId: string, workspaceId:
     recent(db, clientId, HISTORY),
     waitingDrafts(db, clientId, workspaceId),
     db.from('client_reports').select('month, summary').eq('client_id', clientId).order('month', { ascending: false }).limit(1).maybeSingle(),
-    db.from('campaigns').select('status, request, plan, posts_total, posts_done, created_at').eq('client_id', clientId).order('created_at', { ascending: false }).limit(3),
+    db.from('campaigns').select('status, request, plan, posts_total, posts_done, created_at').eq('client_id', clientId).is('discarded_at', null).order('created_at', { ascending: false }).limit(3),
     db.from('client_briefs').select('brief_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('xev_threads').select('stage, outcome, summary, updated_at').eq('client_id', clientId).order('updated_at', { ascending: false }).limit(5),
     db.from('kris_prefs').select('plain').eq('client_id', clientId).maybeSingle(),
@@ -172,7 +172,7 @@ function options(cacheKey: string) {
   return { xai: { store: false, promptCacheKey: `${cacheKey}-${KNOWLEDGE_VERSION.chat}`, reasoningEffort: 'low' as const } };
 }
 
-async function call<T extends z.ZodTypeAny>(budget: Budget, system: string, prompt: string, schema: T, maxOut: number, cacheKey: string, fn: string): Promise<z.infer<T> | null> {
+export async function call<T extends z.ZodTypeAny>(budget: Budget, system: string, prompt: string, schema: T, maxOut: number, cacheKey: string, fn: string): Promise<z.infer<T> | null> {
   const estimate = grokEstimate(MODEL, system.length + prompt.length, maxOut, 800);
   const result = await budget.charge(
     'grok',
@@ -225,7 +225,7 @@ export async function pickChimes(budget: Budget, ctx: Context, text: string, lea
 }
 
 /** One agent's line in the chat. Writes nothing to the database, so evals can replay it. */
-export async function speak(budget: Budget, ctx: Context, agent: Agent, task: string, after: string[]): Promise<{ body: string; cards: Array<{ campaignId: string; slot: number }> } | null> {
+export async function speak(budget: Budget, ctx: Context, agent: Agent, task: string, after: string[], mustAnswer = false): Promise<{ body: string; cards: Array<{ campaignId: string; slot: number }> } | null> {
   const system = `${PACK[agent]}\n\n${TEAM_RULES}\n\n# You are ${NAME[agent]}.`;
   const prompt = [
     snapshotText(ctx.kit),
@@ -234,7 +234,12 @@ export async function speak(budget: Budget, ctx: Context, agent: Agent, task: st
     after.length ? `# Just said in this turn\n${after.join('\n')}` : '',
     `# Your task\n${task}\n${VOICE[agent]}\nWrite numbers as digits and say what each one measures (for example "3 replies per 1,000 views"). Only use numbers that appear above. Never repeat a point or a number already said in this turn or the last few messages: add something new, or pass.`,
   ].filter(Boolean).join('\n');
-  const out = await call(budget, system, prompt, Said, 400, `chat-${agent}-${KNOWLEDGE_VERSION[agent === 'rein' ? 'opportunity' : agent]}`, `chat-${agent}`);
+  const key = `chat-${agent}-${KNOWLEDGE_VERSION[agent === 'rein' ? 'opportunity' : agent]}`;
+  let out = await call(budget, system, prompt, Said, 400, key, `chat-${agent}`);
+  // Whoever leads a turn always answers: a greeting or small talk gets a short, friendly line back.
+  if (mustAnswer && (!out || out.pass || !out.reply.trim())) {
+    out = await call(budget, system, `${prompt}\nYou are leading this turn, so you must answer. Passing is not allowed. If it is small talk or a greeting, answer like a teammate in one short line and, if it fits, ask what they are working on.`, Said, 400, key, `chat-${agent}`);
+  }
   if (!out || out.pass || !out.reply.trim()) return null;
   const byKey = new Map(ctx.waiting.map((w) => [w.key, w]));
   const cards = [...new Set(out.drafts ?? [])]
@@ -247,8 +252,8 @@ export async function speak(budget: Budget, ctx: Context, agent: Agent, task: st
 
 // ---------- the turn ----------
 
-const ACK = /^(ok(ay)?|k|kk|thanks?( you)?|thx|ty|cool|nice|great|perfect|got it|bet|lol|lmao|haha+|yes|yep|yeah|no|nope|sounds good)[.! ]*$/i;
-const MENTION = /@(rein|bil|kris|xev)\b/i;
+export const ACK = /^(ok(ay)?|k|kk|thanks?( you)?|thx|ty|cool|nice|great|perfect|got it|bet|lol|lmao|haha+|yes|yep|yeah|no|nope|sounds good)[.! ]*$/i;
+export const MENTION = /@(rein|bil|kris|xev)\b/i;
 
 async function dailyCount(db: SupabaseClient, userId: string): Promise<number> {
   const since = new Date(Date.now() - 86_400_000).toISOString();
@@ -293,7 +298,7 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
   const task = ack
     ? `${who} just said "${req.text}". Answer in a few words, or pass if nothing is needed.`
     : `Answer ${who}'s new message as ${NAME[lead]}: "${req.text}". If they want to see or approve drafts, put up to three keys in "drafts".`;
-  const said = await speak(budget, ctx, lead, task, []);
+  const said = await speak(budget, ctx, lead, task, [], !ack);
   const theirs = said ? await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: lead, kind: 'chat', body: said.body, cards: said.cards.length ? said.cards : null, turn: mine.id }) : null;
   return {
     messages: [mine, theirs].filter(Boolean),

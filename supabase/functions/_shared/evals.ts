@@ -31,6 +31,13 @@ const DAILY_SAMPLE = 30;
 const DROP_SCORE = 0.5;
 const RISE_FAILS = 0.2;
 
+/** Postgres stores jsonb with its own key order, so versions are compared key by key. */
+export function sameVersions(a: Record<string, unknown> | null | undefined, b: Record<string, unknown>): boolean {
+  const ka = Object.keys(a ?? {}).sort();
+  const kb = Object.keys(b).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i] && String((a ?? {})[k]) === String(b[k]));
+}
+
 export function versions(): Record<string, string> {
   return { chat: KNOWLEDGE_VERSION.chat, bil: KNOWLEDGE_VERSION.bil, kris: KNOWLEDGE_VERSION.kris, xev: KNOWLEDGE_VERSION.xev, rein: KNOWLEDGE_VERSION.opportunity };
 }
@@ -245,7 +252,7 @@ export async function evalTick(bootAt: number): Promise<string> {
     const { data: lastDaily } = await db.from('eval_runs').select('started_at').eq('kind', 'daily').order('started_at', { ascending: false }).limit(1).maybeSingle();
     const { count: cases } = await db.from('eval_cases').select('id', { count: 'exact', head: true }).eq('active', true);
     const kind: 'gate' | 'daily' | null =
-      (cases ?? 0) > 0 && JSON.stringify(lastGate?.versions ?? {}) !== JSON.stringify(v) ? 'gate'
+      (cases ?? 0) > 0 && !sameVersions(lastGate?.versions as Record<string, unknown> | null, v) ? 'gate'
       : !lastDaily || Date.now() - Date.parse(lastDaily.started_at) > 20 * 3_600_000 ? 'daily'
       : null;
     if (!kind) return 'nothing due';

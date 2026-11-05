@@ -213,6 +213,9 @@ export type XevInbox = {
   leads: Array<{ id: string; intent: 'buying' | 'question' | 'booking'; summary: string; status: 'new' | 'seen'; lastAt: string; openUrl: string | null }>;
 };
 
+/** One line in a person's HQ chat. "me" is the person; the rest are the agents. */
+export type DeskMessage = { id: number; role: 'me' | 'rein' | 'bil' | 'kris' | 'xev'; body: string; turn: number | null; created_at: string };
+
 export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string, changed?: boolean) =>
     call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}), ...(changed ? { changed: true } : {}) }),
@@ -223,6 +226,10 @@ export const bil = {
   /** Logs a sale, a booked call, a new subscriber or another win; Xev or Bil reacts in the chat. */
   winLog: (clientId: string, w: { kind: 'sale' | 'call' | 'subscriber' | 'other'; amountUsd?: number; note?: string }) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'win_log', { requestId: crypto.randomUUID(), clientId, ...w }),
+  /** The HQ chat: the executive's or a team member's own chat with the four agents, over every client they may see. */
+  deskSend: (text: string) =>
+    call<{ messages: DeskMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'desk_send', { requestId: crypto.randomUUID(), text }),
+  deskChime: (turn: number) => call<{ messages: DeskMessage[]; costUsd: number }>('bil', 'desk_chime', { requestId: crypto.randomUUID(), turn }),
   /** The team chat: the person's message and the lead agent's answer (about a cent). */
   chatSend: (clientId: string, text: string) =>
     call<{ messages: KrisMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'chat_send', { requestId: crypto.randomUUID(), clientId, text }),

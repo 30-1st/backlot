@@ -8,6 +8,7 @@ import { ReportsScreen } from './Reports';
 import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
+import { HqScreen } from './Hq';
 import { Back, Bubble, Chevron, Clapper, Gear, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
 import { QualityScreen } from './Quality';
 import { useTheme } from './theme';
@@ -38,7 +39,7 @@ import { XevScreen } from './Xev';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities', 'quality'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities', 'quality', 'hq'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -179,6 +180,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       screen = <DeskScreen {...props} />;
       break;
     // The team chat; #kris still opens it, for older links and Kris's notes.
+    case 'hq':
+      screen = isTeam ? <HqScreen {...props} /> : null;
+      break;
     case 'chat':
     case 'kris':
       screen = <KrisScreen {...props} />;
@@ -244,7 +248,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   }
 
   const title =
-    room === 'team' ? 'Team' : room === 'client' ? 'Your posts' : room === 'preview' ? 'Client' : room === 'play' ? 'Playground' : 'Account';
+    head === 'hq' ? (me.role === 'owner' ? 'HQ' : 'Chat') : room === 'team' ? 'Team' : room === 'client' ? 'Your posts' : room === 'preview' ? 'Client' : room === 'play' ? 'Playground' : 'Account';
   const nested = head === 'rein' || head === 'opportunities';
 
   const budget = me.budget;
@@ -299,7 +303,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     );
   }
 
-  const showPicker = isTeam && clients.length > 0 && (room === 'team' || room === 'preview');
+  const showPicker = isTeam && clients.length > 0 && head !== 'hq' && head !== 'quality' && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
   const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'xev'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
