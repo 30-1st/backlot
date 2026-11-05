@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import {
   MIN_PASSWORD,
+  passwordOk,
   PROBLEM_TEXT,
   USERNAME_RULE,
   cleanUsername,
@@ -150,7 +151,7 @@ function Door({ mode, go, saving }: { mode: 'in' | 'join'; go: (v: View) => void
     let problem: LoginProblem | null = null;
     if (!name || !password) return setError('Type your username and password.');
     if (!USERNAME_RULE.test(name)) problem = join ? 'username_format' : 'wrong';
-    else if (join && password.length < MIN_PASSWORD) problem = 'password_length';
+    else if (join && !passwordOk(password)) problem = 'password_length';
     if (problem) return setError(PROBLEM_TEXT[problem]);
     if (join && !adult) return setError('Tick the box to confirm you are 18 or older and have read the privacy note.');
 
@@ -236,7 +237,7 @@ function Door({ mode, go, saving }: { mode: 'in' | 'join'; go: (v: View) => void
             type="password"
             value={password}
             maxLength={72}
-            placeholder={join ? `At least ${MIN_PASSWORD} characters` : undefined}
+            placeholder={join ? `${MIN_PASSWORD}+ characters: aA, 1 and a symbol` : undefined}
             autoComplete={join ? 'new-password' : 'current-password'}
             onChange={(e) => setPassword(e.target.value)}
           />

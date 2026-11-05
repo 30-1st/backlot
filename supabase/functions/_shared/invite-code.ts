@@ -41,8 +41,16 @@ export async function hashCode(code: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** A temporary password a teammate reads out once: 16 characters, about 79 bits. */
+/**
+ * A temporary password a teammate reads out once: 16 characters in four groups, about 79 bits.
+ * Supabase Auth here requires a lowercase letter, a capital, a number and a symbol in every
+ * password, so the second group is lowercase, the dashes are the symbol, and a draw without
+ * all four kinds is thrown away.
+ */
 export function temporaryPassword(): string {
-  const c = randomChars(16);
-  return `${c.slice(0, 4)}-${c.slice(4, 8)}-${c.slice(8, 12)}-${c.slice(12)}`;
+  for (;;) {
+    const c = randomChars(16);
+    const pw = `${c.slice(0, 4)}-${c.slice(4, 8).toLowerCase()}-${c.slice(8, 12)}-${c.slice(12)}`;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)) return pw;
+  }
 }

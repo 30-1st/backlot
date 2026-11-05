@@ -368,7 +368,7 @@ async function handle(req: Request): Promise<Response> {
         const { error } = await db.auth.admin.updateUserById(userId, { password: r.password });
         if (error) {
           const code = (error as { code?: string }).code ?? '';
-          if (code === 'weak_password' || code === 'same_password') throw new InputError('Pick a different, stronger password.');
+          if (code === 'weak_password' || code === 'same_password') throw new InputError(code === 'same_password' ? 'Pick a password different from the temporary one.' : 'Use at least 8 characters, with a lowercase letter, a capital letter, a number and a symbol.');
           throw new Error(`Could not change the password: ${error.message}`);
         }
         await db.from('members').update({ must_change_password: false }).eq('id', userId);

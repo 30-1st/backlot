@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { team } from '../lib/team';
-import { MIN_PASSWORD } from '../lib/auth';
+import { MIN_PASSWORD, PASSWORD_RULE_TEXT, passwordOk } from '../lib/auth';
 import { Back } from './icons';
 
 /**
@@ -29,7 +29,7 @@ export function ChangePassword({
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!forced && !current) return setError('Type your current password.');
-    if (next.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters.`);
+    if (!passwordOk(next)) return setError(PASSWORD_RULE_TEXT);
     if (next !== repeat) return setError('The two new passwords do not match.');
     setBusy(true);
     setError('');
@@ -75,7 +75,7 @@ export function ChangePassword({
           type="password"
           autoComplete="new-password"
           maxLength={72}
-          placeholder={`At least ${MIN_PASSWORD} characters`}
+          placeholder={`${MIN_PASSWORD}+ characters: aA, 1 and a symbol`}
           value={next}
           onChange={(e) => setNext(e.target.value)}
         />

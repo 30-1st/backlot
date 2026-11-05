@@ -15,6 +15,11 @@ import { supabase } from './supabase';
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 export const USERNAME_RULE = /^[a-z0-9._]{3,24}$/;
 export const MIN_PASSWORD = 8;
+/** What Supabase Auth requires here: 8 or more characters with a lowercase letter, a capital, a number and a symbol. */
+export const PASSWORD_RULE_TEXT = `Use at least ${MIN_PASSWORD} characters, with a lowercase letter, a capital letter, a number and a symbol.`;
+export function passwordOk(pw: string): boolean {
+  return pw.length >= MIN_PASSWORD && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw);
+}
 
 const addressFor = (username: string) => `${username}@${LOGIN_DOMAIN}`;
 
@@ -38,8 +43,8 @@ export const PROBLEM_TEXT: Record<LoginProblem, string> = {
   invite_invalid: 'That invite code is not valid. It may be mistyped, used already or older than 7 days. Ask your team for a new one, or leave the code empty for a Playground login.',
   username_format: 'Use 3 to 24 lowercase letters, numbers, dots or underscores for the username.',
   username_taken: 'That username is taken. Try another one.',
-  password_length: `Use at least ${MIN_PASSWORD} characters for the password.`,
-  password_weak: 'That password is too easy to guess. Try a longer one.',
+  password_length: PASSWORD_RULE_TEXT,
+  password_weak: `That password is too easy to guess. ${PASSWORD_RULE_TEXT}`,
   wrong: 'Wrong username or password.',
   too_many: 'Too many tries from this connection. Wait a while and try again.',
   adult_required: 'Tick the box to confirm you are 18 or older and have read the privacy note.',
