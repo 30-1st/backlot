@@ -204,7 +204,7 @@ function UpNext({ ws, go, single, pick }: Pick<ScreenProps, 'ws' | 'go' | 'singl
           </button>
         )}
       </div>
-      <span className="bl-small">Bil reads their latest posts on X and their goals, then writes one post for the next good hour. About 3 to 6 cents.</span>
+      <span className="bl-small">Bil reads their latest posts on X and their goals, then writes one post for the next good hour. About 5 to 15 cents.</span>
     </section>
   );
 }

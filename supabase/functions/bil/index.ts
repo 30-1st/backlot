@@ -19,7 +19,7 @@
 //   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25) team
 //   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)                 team
 //   campaign       CampaignRequest            queues a campaign and returns at once                  team
-//   next_post      { requestId, clientId }  Bil reads their latest X posts and goals and writes the next post in line (about 3 to 6 cents, 3 a day)  team
+//   next_post      { requestId, clientId }  Bil reads their latest X posts and goals and writes the next post in line (about 5 to 15 cents, 3 a day)  team
 //                  (a client asks for it in the team chat: "@Bil write my next post")
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client

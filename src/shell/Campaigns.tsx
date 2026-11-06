@@ -133,7 +133,7 @@ export function NextPostButton({ clientId, ws, label = 'Next post' }: { clientId
   }
   return (
     <>
-      <button type="button" className="bl-btn" disabled={state === 'busy' || writing} onClick={() => void go()} title="Bil reads their latest X posts and goals and writes one post for the next good hour. About 3 to 6 cents.">
+      <button type="button" className="bl-btn" disabled={state === 'busy' || writing} onClick={() => void go()} title="Bil reads their latest X posts and goals and writes one post for the next good hour. About 5 to 15 cents.">
         {writing || state === 'busy' ? 'Bil is writing' : label}
       </button>
       {msg && (
