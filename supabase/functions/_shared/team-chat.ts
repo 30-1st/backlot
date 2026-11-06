@@ -25,7 +25,7 @@ import { riskyDials } from './schemas/client.ts';
 import { MODELS, grokBilled, grokCost, grokEstimate } from './models.ts';
 import { KNOWLEDGE_VERSION, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient } from './spend.ts';
-import { BilInputError, type Kit, loadKit, snapshotText } from './bil.ts';
+import { BilInputError, type Kit, loadKit, nextPost, snapshotText } from './bil.ts';
 import { cleanReply, insert, type KrisMessage, recent, waitingDrafts, type Waiting } from './kris.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
 import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
@@ -253,6 +253,8 @@ export async function speak(budget: Budget, ctx: Context, agent: Agent, task: st
 // ---------- the turn ----------
 
 export const ACK = /^(ok(ay)?|k|kk|thanks?( you)?|thx|ty|cool|nice|great|perfect|got it|bet|lol|lmao|haha+|yes|yep|yeah|no|nope|sounds good)[.! ]*$/i;
+/** Asking Bil to write a post now: a writing verb, then "next/new/a ... post". A question like "when is my next post?" is not one. */
+export const NEXT_POST = /\b(write|make|draft|create|give|cook up|whip up|do)\s+(me\s+|us\s+)?(my|our|the|a|an)?\s*(next|new|fresh|another|one more)?\s*post\b/i;
 export const MENTION = /@(rein|bil|kris|xev)\b/i;
 
 async function dailyCount(db: SupabaseClient, userId: string): Promise<number> {
@@ -282,6 +284,20 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
       const hers = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'xev', kind: 'chat', body: said.slice(0, 2000), turn: mine.id });
       return { messages: [mine, hers].filter(Boolean), turn: mine.id, lead: 'xev' as Agent, chime: false, costUsd: 0 };
     }
+  }
+
+  // "@Bil write my next post" (or "next post" to Bil): he reads their latest X posts and goals
+  // and writes the next post in line. The note when it is ready lands here too.
+  if ((!tagged || tagged === 'bil') && NEXT_POST.test(req.text)) {
+    let said: string;
+    try {
+      const r = await nextPost(m, { requestId: req.requestId, clientId: req.clientId });
+      said = r.repeated ? "I'm already on your next post. It'll show up first on your Schedule in a minute or two." : "On it. I'm reading your latest posts and your goals, and I'll write your next post. It'll be first on your Schedule in a minute or two.";
+    } catch (e) {
+      said = e instanceof BilInputError ? e.message : "I couldn't start your next post just now. Try me again in a minute.";
+    }
+    const his = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'bil', kind: 'chat', body: said.slice(0, 2000), turn: mine.id });
+    return { messages: [mine, his].filter(Boolean), turn: mine.id, lead: 'bil' as Agent, chime: false, costUsd: 0 };
   }
 
   const named = req.text.match(MENTION)?.[1]?.toLowerCase() as Agent | undefined;

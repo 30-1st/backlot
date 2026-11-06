@@ -28,6 +28,7 @@ export type MeetingRegion = 'us' | 'uk' | 'canada';
 export type ReinRegion = 'worldwide' | 'us' | 'uk' | 'canada';
 /** The one next step Bil offers from the agent bar. Nothing runs until the person confirms. */
 export type AskAction = { clientId: string; handle: string } & (
+  | { type: 'next' }
   | { type: 'trends'; region: ReinRegion }
   | { type: 'report'; month: string }
   | { type: 'desk' }
@@ -226,6 +227,9 @@ export const bil = {
   /** Logs a sale, a booked call, a new subscriber or another win; Xev or Bil reacts in the chat. */
   winLog: (clientId: string, w: { kind: 'sale' | 'call' | 'subscriber' | 'other'; amountUsd?: number; note?: string }) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'win_log', { requestId: crypto.randomUUID(), clientId, ...w }),
+  /** Bil reads the client's latest X posts and goals and writes the next post in line. */
+  nextPost: (clientId: string) =>
+    call<{ campaignId: string; status: string; repeated: boolean }>('bil', 'next_post', { requestId: crypto.randomUUID(), clientId }),
   /** The HQ chat: the executive's or a team member's own chat with the four agents, over every client they may see. */
   deskSend: (text: string) =>
     call<{ messages: DeskMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'desk_send', { requestId: crypto.randomUUID(), text }),

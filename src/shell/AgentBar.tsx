@@ -21,6 +21,8 @@ const monthName = (ym: string) => new Date(`${ym}-15T12:00:00Z`).toLocaleDateStr
 function offerText(a: AskAction, reinFree: boolean | null, postsPerWeek: number): { title: string; price: string | null; button: string } {
   const who = `@${a.handle}`;
   switch (a.type) {
+    case 'next':
+      return { title: `Write the next post for ${who}`, price: 'About 3 to 6 cents: their latest posts plus one Bil call. It lands first on the Schedule.', button: 'Write it' };
     case 'trends':
       return { title: `Check what is rising for ${who}`, price: reinFree === null ? 'Checking the price' : reinFree ? 'Free: Rein checked this niche in the last 6 hours.' : 'Up to $1.10 from this month’s AI budget.', button: 'Check now' };
     case 'report': {
@@ -88,6 +90,10 @@ export function AgentBar({ clientId, clients, go, pick }: { clientId: string | n
     setError('');
     try {
       switch (a.type) {
+        case 'next':
+          await bil.nextPost(a.clientId);
+          pick?.(a.clientId);
+          return open('campaigns');
         case 'trends':
           await team.reinClientUpdate(a.clientId, a.region);
           return open('insights');

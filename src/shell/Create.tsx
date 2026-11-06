@@ -3,8 +3,14 @@ import { supabase } from '../lib/supabase';
 import { Check, Chevron } from './icons';
 import type { ScreenProps } from './Shell';
 import { AgentBar } from './AgentBar';
+import { NextPostButton } from './Campaigns';
+import { isNextPost } from './Notifications';
+import { clock, timedPosts, when } from './timing';
 
 // Ask Bil: what he can do for the team, each with its price shown before anything runs.
+// Up next (Nov 6, 2026) comes first: the post next in line for the picked client, where it
+// stands, and Bil's one-tap "Write the next post". With no client picked, it lists every
+// client's next post so one tap opens the right one.
 
 type Action = { key: string; title: string; body: string; path: string; ready: boolean };
 
@@ -58,6 +64,8 @@ export function CreateScreen({ ws, go, single, pick }: ScreenProps & { pick?: (i
         You see the price before anything runs.
       </p>
 
+      <UpNext ws={ws} go={go} single={single} pick={pick} />
+
       <AgentBar clientId={single} clients={ws.data?.clients ?? []} go={go} pick={pick} />
 
       <ul className="bl-rows">
@@ -107,5 +115,96 @@ export function CreateScreen({ ws, go, single, pick }: ScreenProps & { pick?: (i
         </section>
       )}
     </main>
+  );
+}
+
+/** What Bil has next in line, before anything else on his tab. */
+function UpNext({ ws, go, single, pick }: Pick<ScreenProps, 'ws' | 'go' | 'single'> & { pick?: (id: string) => void }) {
+  const data = ws.data;
+  if (!data || data.clients.length === 0) return null;
+  const now = Date.now();
+  const due = (focus: string | null) => timedPosts(data, focus).filter((t) => t.end.getTime() > now && t.post.review !== 'posted' && t.post.review !== 'not_posted');
+  const client = data.clients.find((c) => c.id === single) ?? null;
+  const writing = (id: string) => data.campaigns.some((c) => c.clientId === id && isNextPost(c) && (c.status === 'planning' || c.status === 'drafting'));
+  const word = (r: string, st: string) => (st === 'blocked' ? 'Needs a detail' : r === 'approved' ? 'Approved' : r === 'changes' ? 'Changes asked' : 'Waiting for a yes');
+
+  if (!client) {
+    return (
+      <section className="bl-cmd-card bl-upnext bl-in" aria-labelledby="upnext">
+        <h2 id="upnext" className="bl-section-title">
+          Up next
+        </h2>
+        <ul className="bl-cmd-board">
+          {data.clients.map((c) => {
+            const t = due(c.id)[0];
+            return (
+              <li key={c.id}>
+                <a
+                  href="#create"
+                  className="bl-cmd-client"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    pick?.(c.id);
+                  }}
+                >
+                  <span className="bl-cmd-what">
+                    <b>@{c.handle}</b>
+                    <span className="bl-small">{writing(c.id) ? 'Bil is writing the next post' : t ? `${when(t)} · ${word(t.post.review, t.post.status)}` : 'Nothing scheduled ahead'}</span>
+                  </span>
+                  <span className="bl-band-go" aria-hidden="true">
+                    Open ›
+                  </span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
+  }
+
+  const list = due(client.id);
+  const t = list[0];
+  const text = t ? String(t.post.status === 'blocked' ? t.post.post.idea ?? 'Waiting on a detail' : t.post.post.draft ?? t.post.post.hook ?? '') : '';
+  const c = t ? clock(t.start, t.tz) : null;
+  return (
+    <section className="bl-cmd-card bl-upnext bl-in" aria-labelledby="upnext">
+      <h2 id="upnext" className="bl-section-title">
+        Up next for @{client.handle}
+      </h2>
+      {t && c ? (
+        <a
+          href="#campaigns"
+          className="bl-upnext-post"
+          onClick={(e) => {
+            e.preventDefault();
+            go('campaigns');
+          }}
+        >
+          <span className="bl-wk-time num">
+            {c.time}
+            <small>{c.half}</small>
+          </span>
+          <span className="bl-wk-text">
+            <b>{when(t)}</b>
+            <span>{text || 'No text yet'}</span>
+          </span>
+          <span className={`bl-chip${t.post.status === 'blocked' ? ' changes' : t.post.review === 'approved' ? ' approved' : ' needs'}`}>{word(t.post.review, t.post.status)}</span>
+        </a>
+      ) : (
+        <p className="bl-small" style={{ margin: 0 }}>
+          {writing(client.id) ? 'Bil is writing the next post now. It lands here and first on the Schedule.' : 'Nothing is scheduled ahead. Bil can write the next one from their latest posts and goals.'}
+        </p>
+      )}
+      <div className="bl-row-actions">
+        <NextPostButton clientId={client.id} ws={ws} label="Write the next post" />
+        {list.length > 1 && (
+          <button type="button" className="bl-ghost" onClick={() => go('campaigns')}>
+            {list.length - 1} more on the Schedule
+          </button>
+        )}
+      </div>
+      <span className="bl-small">Bil reads their latest posts on X and their goals, then writes one post for the next good hour. About 3 to 6 cents.</span>
+    </section>
   );
 }

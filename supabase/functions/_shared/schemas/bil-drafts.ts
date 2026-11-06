@@ -215,5 +215,7 @@ export const CampaignPlan = z.object({
   goals: z.array(shortText(200)).max(3).optional(),
   rateWhy: text(600).optional(),
   goalSplit: z.array(z.object({ goal: shortText(200), share: z.number().int().min(0).max(100), how: shortText(160) })).max(3).optional(),
+  /** Next post (Nov 6, 2026): one post, next in line, written from the client's latest X posts and goals. */
+  nextPost: z.boolean().optional(),
 });
 export type CampaignPlan = z.infer<typeof CampaignPlan>;

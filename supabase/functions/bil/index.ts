@@ -19,6 +19,8 @@
 //   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25) team
 //   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)                 team
 //   campaign       CampaignRequest            queues a campaign and returns at once                  team
+//   next_post      { requestId, clientId }  Bil reads their latest X posts and goals and writes the next post in line (about 3 to 6 cents, 3 a day)  team
+//                  (a client asks for it in the team chat: "@Bil write my next post")
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
 //   ways_copy      { requestId, clientId }  Kris writes bio, pinned post and reply text for the ways in (about half a cent)  team, client
@@ -73,6 +75,8 @@ import {
   saveBrand,
   reviewBrand,
   reviewPost,
+  nextPost,
+  NextPostRequest,
   startCampaign,
   CampaignActionRequest,
   approveAll,
@@ -210,6 +214,9 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await krisChat(member, parse(KrisChatRequest, input)));
       case 'chat_send':
         return reply(200, await chatSend(member, parse(ChatSendRequest, input)));
+      case 'next_post':
+        requireTeam(member);
+        return reply(202, await nextPost(member, parse(NextPostRequest, input)));
       case 'desk_send':
         return reply(200, await deskSend(member, parse(DeskSendRequest, input)));
       case 'desk_chime':

@@ -8,7 +8,7 @@ import { loadHistory, type Campaign, type Post } from './data';
 import { Back } from './icons';
 import { listAccounts } from '../lib/library';
 import { rememberLayer, setXIntent } from '../components/CampaignLayer';
-import { campaignTitle } from './Notifications';
+import { campaignTitle, isNextPost } from './Notifications';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
 
@@ -43,7 +43,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
 
   // Schedule (reworked Nov 5, 2026): one screen. The live plans sit on top as bands, the
   // posts below as a week list or a month; older and discarded plans load only in History.
-  const live = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
+  const live = ws.data.campaigns.filter((c) => (!focus || c.clientId === focus) && !isNextPost(c));
   const timed = timedPosts(ws.data, focus).length > 0;
   const bar = (
     <>
@@ -60,6 +60,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
               </button>
             </span>
           )}
+          {isTeam && <NextPostButton clientId={focus} ws={ws} />}
           {isTeam && (
             <button type="button" className="bl-ghost" onClick={() => go('create')}>
               Plan with Bil
@@ -102,6 +103,46 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
     );
   }
   return <DayView key={day ?? ''} {...props} bar={bar} footer={history} startDay={day} />;
+}
+
+/**
+ * Bil writes the next post in line from the client's latest X posts and goals (Nov 6, 2026).
+ * It lands first on this list; the button shows Bil at work until it does.
+ */
+export function NextPostButton({ clientId, ws, label = 'Next post' }: { clientId: string | null; ws: ScreenProps['ws']; label?: string }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'error'>('idle');
+  const [msg, setMsg] = useState('');
+  const writing = Boolean(clientId && ws.data?.campaigns.some((c) => c.clientId === clientId && isNextPost(c) && (c.status === 'planning' || c.status === 'drafting')));
+  useEffect(() => {
+    if (!writing) return;
+    const t = window.setInterval(() => void ws.refresh(), 8000);
+    return () => window.clearInterval(t);
+  }, [writing, ws]);
+  if (!clientId) return null;
+  async function go() {
+    setState('busy');
+    setMsg('');
+    try {
+      await bil.nextPost(clientId!);
+      await ws.refresh();
+      setState('idle');
+    } catch (e) {
+      setState('error');
+      setMsg(e instanceof Error ? e.message : 'Bil could not start it.');
+    }
+  }
+  return (
+    <>
+      <button type="button" className="bl-btn" disabled={state === 'busy' || writing} onClick={() => void go()} title="Bil reads their latest X posts and goals and writes one post for the next good hour. About 3 to 6 cents.">
+        {writing || state === 'busy' ? 'Bil is writing' : label}
+      </button>
+      {msg && (
+        <span className="bl-error" role="alert">
+          {msg}
+        </span>
+      )}
+    </>
+  );
 }
 
 /** The live plans as thin bands: what it is, how far Bil has got, and what needs you. */

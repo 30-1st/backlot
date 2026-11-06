@@ -22,7 +22,12 @@ type Item = {
   title: string;
   body?: string;
   action?: { label: string; path: string; primary: boolean };
+  /** Bil's next post (Nov 6, 2026): always first in the list. */
+  first?: boolean;
 };
+
+/** A campaign that is Bil's single next post in line. */
+export const isNextPost = (c: { plan: Record<string, unknown> | null }) => Boolean((c.plan as { nextPost?: unknown } | null)?.nextPost);
 
 export function campaignTitle(c: { plan: Record<string, unknown> | null; request: Record<string, unknown> | null }): string {
   const t = (c.plan as { title?: string } | null)?.title ?? (c.request as { goal?: string } | null)?.goal;
@@ -43,6 +48,15 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
     const pending = posts.filter((p) => p.status === 'ok' && p.review === 'pending');
     const changes = posts.filter((p) => p.review === 'changes');
     const open = `campaigns.${c.id}`;
+
+    // Bil's next post: one clear line, first on Today, opening on the Schedule where it sits first in line.
+    if (isNextPost(c)) {
+      const nlabel = `@${handle(c.clientId)} · Next post`;
+      if (blocked.length) items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: true, first: true, label: nlabel, title: 'The next post needs a detail', body: 'Bil wrote it from the latest posts and goals; one fact only you know is missing.', action: { label: 'Add it', path: 'campaigns', primary: true } });
+      else if (pending.length) items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: true, first: true, label: nlabel, title: isTeam ? 'The next post is ready to approve' : 'Your next post is ready for your OK', body: 'Written from the latest posts and the goals. It goes out first.', action: { label: 'See it', path: 'campaigns', primary: true } });
+      else if (c.status === 'planning' || c.status === 'drafting') items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: false, first: true, label: nlabel, title: 'Bil is writing the next post', body: 'Reading the latest posts and goals. About a minute.', action: { label: 'Watch for it', path: 'campaigns', primary: false } });
+      continue;
+    }
 
     if (blocked.length) {
       const reasons = [...new Set(blocked.flatMap((p) => (Array.isArray(p.post.blockedReasons) ? p.post.blockedReasons : [])))]
@@ -160,7 +174,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
     });
   }
 
-  return items.sort((a, b) => Number(b.needs) - Number(a.needs) || b.at.localeCompare(a.at));
+  return items.sort((a, b) => Number(Boolean(b.first)) - Number(Boolean(a.first)) || Number(b.needs) - Number(a.needs) || b.at.localeCompare(a.at));
 }
 
 // ---------- what is new ----------
