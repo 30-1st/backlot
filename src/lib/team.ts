@@ -228,8 +228,13 @@ export const bil = {
   winLog: (clientId: string, w: { kind: 'sale' | 'call' | 'subscriber' | 'other'; amountUsd?: number; note?: string }) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'win_log', { requestId: crypto.randomUUID(), clientId, ...w }),
   /** Bil reads the client's latest X posts and goals and writes the next post in line. */
-  nextPost: (clientId: string) =>
-    call<{ campaignId: string; status: string; repeated: boolean }>('bil', 'next_post', { requestId: crypto.randomUUID(), clientId }),
+  nextPost: (clientId: string, goalIndex: number, mediaId: string | null, note?: string) =>
+    call<{ campaignId: string; status: string; repeated: boolean }>('bil', 'next_post', { requestId: crypto.randomUUID(), clientId, goalIndex, mediaId, ...(note ? { note } : {}) }),
+  nextAllowance: (clientId: string) => call<{ used: number; allowed: number }>('bil', 'next_allowance', { clientId }),
+  /** Green, yellow or red for each tagged file against one goal; cached on the server. */
+  mediaFit: (clientId: string, goalIndex: number) =>
+    call<{ goal: string; fits: Record<string, { fit: 'green' | 'yellow' | 'red'; why: string }>; untagged: number; costUsd: number }>('bil', 'media_fit', { requestId: crypto.randomUUID(), clientId, goalIndex }),
+  goalsSave: (clientId: string, goals: Array<{ goal: string; detail: string; target?: string }>) => call<{ goals: unknown[] }>('bil', 'goals_save', { clientId, goals }),
   /** The HQ chat: the executive's or a team member's own chat with the four agents, over every client they may see. */
   deskSend: (text: string) =>
     call<{ messages: DeskMessage[]; turn: number; lead: string | null; chime: boolean; costUsd: number }>('bil', 'desk_send', { requestId: crypto.randomUUID(), text }),

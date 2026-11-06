@@ -239,7 +239,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
                   {m.kind === 'read' && m.data ? <XevCard body={m.body} data={m.data} clientId={client.id} /> : <p className="bl-gc-bub">{m.body}</p>}
                   {m.link && (
                     <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => go(m.link!)}>
-                      Open it
+                      {m.link === 'next' ? 'Open Up next' : 'Open it'}
                     </button>
                   )}
                   {m.cards?.map((c) => (

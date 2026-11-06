@@ -19,8 +19,10 @@
 //   learn          { requestId, clientId }    re-measures what performs on their page (about $0.25) team
 //   estimate       { clientId, posts, useTrends }   upper-bound campaign cost (free)                 team
 //   campaign       CampaignRequest            queues a campaign and returns at once                  team
-//   next_post      { requestId, clientId }  Bil reads their latest X posts and goals and writes the next post in line (about 5 to 15 cents, 3 a day)  team
-//                  (a client asks for it in the team chat: "@Bil write my next post")
+//   next_post      { requestId, clientId, goalIndex, mediaId, note? }  Up next: Bil writes the next post for the picked goal and file (about 5 to 15 cents; 5 a day; clients 40 a month)  team, client
+//   next_allowance { clientId }              how many of this month's next posts the client has used (free)  team, client
+//   media_fit      { requestId, clientId, goalIndex }  green, yellow or red for each tagged file against one goal (about a third of a cent, cached)  team, client
+//   goals_save     { clientId, goals }       the client's goals, saved at once from Up next (free)            team, client
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
 //   ways_copy      { requestId, clientId }  Kris writes bio, pinned post and reply text for the ways in (about half a cent)  team, client
@@ -76,6 +78,7 @@ import {
   reviewBrand,
   reviewPost,
   nextPost,
+  nextPostAllowance,
   NextPostRequest,
   startCampaign,
   CampaignActionRequest,
@@ -97,6 +100,7 @@ import { xevFeedback, XevFeedbackRequest, xevGrant, XevGrantRequest, xevRead, Xe
 import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared/kris.ts';
 import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest, winLog, WinLogRequest } from '../_shared/team-chat.ts';
 import { deskChime, DeskChimeRequest, deskSend, DeskSendRequest } from '../_shared/desk.ts';
+import { goalsSave, GoalsSaveRequest, mediaFit, MediaFitRequest } from '../_shared/up-next.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
 import { XConnectRequest, xConnectStart, xDisconnect, xevInbox } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
@@ -215,8 +219,16 @@ async function handle(req: Request): Promise<Response> {
       case 'chat_send':
         return reply(200, await chatSend(member, parse(ChatSendRequest, input)));
       case 'next_post':
-        requireTeam(member);
         return reply(202, await nextPost(member, parse(NextPostRequest, input)));
+      case 'next_allowance': {
+        const r = parse(z.object({ clientId: id }), input);
+        requireClientAccess(member, r.clientId);
+        return reply(200, await nextPostAllowance(r.clientId, workspaceId));
+      }
+      case 'media_fit':
+        return reply(200, await mediaFit(member, parse(MediaFitRequest, input)));
+      case 'goals_save':
+        return reply(200, await goalsSave(member, parse(GoalsSaveRequest, input)));
       case 'desk_send':
         return reply(200, await deskSend(member, parse(DeskSendRequest, input)));
       case 'desk_chime':

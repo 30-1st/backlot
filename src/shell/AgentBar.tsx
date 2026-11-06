@@ -22,7 +22,7 @@ function offerText(a: AskAction, reinFree: boolean | null, postsPerWeek: number)
   const who = `@${a.handle}`;
   switch (a.type) {
     case 'next':
-      return { title: `Write the next post for ${who}`, price: 'About 5 to 15 cents: their latest posts plus one Bil call. It lands first on the Schedule.', button: 'Write it' };
+      return { title: `Make the next post for ${who}`, price: 'Pick the goal and the photo or video; then about 5 to 15 cents.', button: 'Open Up next' };
     case 'trends':
       return { title: `Check what is rising for ${who}`, price: reinFree === null ? 'Checking the price' : reinFree ? 'Free: Rein checked this niche in the last 6 hours.' : 'Up to $1.10 from this month’s AI budget.', button: 'Check now' };
     case 'report': {
@@ -91,9 +91,8 @@ export function AgentBar({ clientId, clients, go, pick }: { clientId: string | n
     try {
       switch (a.type) {
         case 'next':
-          await bil.nextPost(a.clientId);
           pick?.(a.clientId);
-          return open('campaigns');
+          return open('next');
         case 'trends':
           await team.reinClientUpdate(a.clientId, a.region);
           return open('insights');

@@ -50,6 +50,7 @@ import { AGENT_MODELS, grokBilled, grokCost, grokEstimate, MODELS, X_PRICES } fr
 import { grokOptions, privateTelemetry, type Reasoning, xaiClient } from './grok.ts';
 import { Budget, serviceClient, SpendLimitError } from './spend.ts';
 import { impl, xGet } from './toolbox.ts';
+import { goalLine, SELLING_GOALS, XEV_CAPTION_RULES, xevTips } from './up-next.ts';
 import { algorithmParams, algorithmSearch, PARAMS_FILE } from './algorithm.ts';
 import { callRein, REIN_ESTIMATE_USD } from './rein-client.ts';
 import { checkDraft, type CheckContext, looksLikeRefusal } from './bil-checks.ts';
@@ -1056,7 +1057,7 @@ type LogLine = {
  * Adds one line to the client's approvals log, after the decision itself is saved.
  * A failure here is reported in the function logs and never undoes the decision.
  */
-async function logApproval(db: SupabaseClient, l: LogLine) {
+export async function logApproval(db: SupabaseClient, l: LogLine) {
   const role = 'workspaceId' in l.actor ? (isTeam(l.actor) ? 'team' : 'client') : l.actor.role;
   const { error } = await db.from('approval_log').insert({
     workspace_id: l.workspaceId,
@@ -1640,18 +1641,25 @@ export async function startCampaign(ownerId: string, req: CampaignRequest) {
   return { campaignId, status: 'planning', posts, estimate, repeated: false };
 }
 
-// ---------- next post (approved Nov 6, 2026) ----------
+// ---------- next post (Up next, approved Nov 6, 2026) ----------
 //
-// From anywhere Bil works (Ask Bil, the Schedule, the team chat), anyone on the team, or the
-// client in their chat, can ask for the next post. Bil reads the client's latest posts on X,
-// their goals, Rein's newest trends and fresh media, and writes one post for the next good
-// hour. It goes through the same checks as every campaign post (voice, rules, dials), lands
-// first in line on the Schedule and on Today, and Bil says so in the chat. About 5 to 15
-// cents: 5 post reads (once), one drafting call and the dial check, a second try if the
-// check sends it back. At most 3 a day per client.
+// The client, or their team, picks one of the client's goals and one of their photos or videos
+// (marked green, yellow or red for that goal; see up-next.ts), and Bil writes the post for it.
+// Bil reads their 5 latest posts on X (once) and Rein's newest trends; for a money goal Xev's
+// selling rules shape the caption and she adds tips after. It goes through the same checks as
+// every campaign post, sits first on Today and the Schedule, and waits for the client's yes.
+// About 5 to 15 cents. Clients start it themselves: up to 40 a month each, which the
+// subscription covers many times over; everyone: up to 5 a day per client.
 
-export const NextPostRequest = z.object({ requestId: id, clientId: id });
-const NEXT_PER_DAY = 3;
+export const NextPostRequest = z.object({
+  requestId: id,
+  clientId: id,
+  goalIndex: z.number().int().min(0).max(4),
+  mediaId: id.nullable(),
+  note: z.string().trim().max(240).optional(),
+});
+const NEXT_PER_DAY = 5;
+const NEXT_PER_MONTH_CLIENT = 40;
 const NEXT_FEED_POSTS = 5;
 const X_API = 'https://api.x.com/2';
 
@@ -1659,6 +1667,20 @@ function localParts(tz: string, at = new Date()): { day: string; hour: number } 
   const f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
   const parts = Object.fromEntries(f.formatToParts(at).map((p) => [p.type, p.value]));
   return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) % 24 };
+}
+
+/** How many next posts this client started this month, of how many. */
+export async function nextPostAllowance(clientId: string, ownerId: string) {
+  const month = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
+  const { count } = await serviceClient()
+    .from('campaigns')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .eq('owner_id', ownerId)
+    .eq('request->>kind', 'next')
+    .eq('request->>by', 'client')
+    .gte('created_at', month);
+  return { used: count ?? 0, allowed: NEXT_PER_MONTH_CLIENT };
 }
 
 export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) {
@@ -1681,7 +1703,12 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
     .order('created_at', { ascending: false });
   const writing = (recent ?? []).find((c: any) => c.status === 'planning' || c.status === 'drafting');
   if (writing) return { campaignId: writing.id, status: writing.status, repeated: true };
-  if ((recent ?? []).length >= NEXT_PER_DAY) throw new BilInputError(`Bil already wrote ${NEXT_PER_DAY} next posts for this client today. Approve those, or plan a week.`, 429);
+  if ((recent ?? []).length >= NEXT_PER_DAY) throw new BilInputError(`Bil already wrote ${NEXT_PER_DAY} next posts today. Approve those, or plan a week.`, 429);
+  const byClient = m.role === 'client';
+  if (byClient) {
+    const a = await nextPostAllowance(req.clientId, owner);
+    if (a.used >= a.allowed) throw new BilInputError(`That is all ${a.allowed} of this month's next posts. Your team can still make more for you.`, 429);
+  }
 
   const kit = await loadKit(db, req.clientId, owner);
   if (!kit.card || !kit.library) throw new BilInputError('Onboard this client first.', 409);
@@ -1700,7 +1727,14 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
     .order('created_at', { ascending: false })
     .limit(5);
   const livePlan = (live ?? []).map((r: any) => CampaignPlan.safeParse(r.plan)).find((p) => p.success && !p.data.nextPost)?.data;
-  const goals = (livePlan?.goals?.length ? livePlan.goals : kit.profile.goals.map((g) => g.detail || String(g.goal))).slice(0, 3).map((g) => g.slice(0, 200));
+  const picked = kit.profile.goals[req.goalIndex];
+  if (!picked) throw new BilInputError('That goal is not saved any more. Pick another.', 404);
+  const goalText = goalLine(picked).slice(0, 200);
+  const goals = [goalText];
+  if (req.mediaId) {
+    const { data: file } = await db.from('library_items').select('id').eq('id', req.mediaId).eq('client_id', req.clientId).eq('workspace_id', owner).is('removed_at', null).maybeSingle();
+    if (!file) throw new BilInputError('That photo or video is not in their Media any more.', 404);
+  }
   const algorithm = livePlan?.algorithm ?? (await algorithmContext());
 
   // The next good hour in their time zone: an hour from now, or tomorrow morning after 10 PM.
@@ -1713,7 +1747,7 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
   const postType = kit.library.types[0].slug;
   const plan: CampaignPlan = {
     title: 'Next post',
-    goal: goals[0] ?? 'Grow the account',
+    goal: goalText,
     kpis: ['Replies, profile visits and follows from this post'],
     startDate: now.day,
     lengthDays: late ? 2 : 1,
@@ -1725,10 +1759,10 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
         postWindow,
         postType,
         pillar: 'next',
-        stage: 'discover',
-        idea: 'Open: choose the strongest next post from their latest posts, their goals, the newest trends and fresh media.',
-        open: true,
-        goal: goals[0],
+        stage: SELLING_GOALS.has(picked.goal) ? 'convert' : picked.goal === 'community' ? 'retain' : 'discover',
+        idea: `For the goal "${goalText}": ${req.note ? req.note.replace(/—/g, ', ') : req.mediaId ? 'a post built around this photo or video.' : 'a text post.'}`.slice(0, 300),
+        ...(req.mediaId ? { mediaId: req.mediaId } : {}),
+        goal: goalText,
       },
     ],
     notes: 'One post, next in line.',
@@ -1745,7 +1779,7 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
     client_id: req.clientId,
     owner_id: owner,
     status: 'drafting',
-    request: { kind: 'next', requestId: req.requestId, clientId: req.clientId, startDate: now.day, lengthDays: plan.lengthDays, posts: 1, rolling: true, goals },
+    request: { kind: 'next', by: byClient ? 'client' : 'team', requestId: req.requestId, clientId: req.clientId, startDate: now.day, lengthDays: plan.lengthDays, posts: 1, rolling: true, goals, goalKind: picked.goal, mediaId: req.mediaId },
     request_id: req.requestId,
     plan,
     posts_total: 1,
@@ -2631,7 +2665,8 @@ async function batchStep(db: SupabaseClient, c: Campaign, kit: Kit, step: Step, 
         await latestFeed(db, kit, budget),
         `- This is their next post, going out next. Their goals: ${(plan.goals ?? [plan.goal]).map((g) => JSON.stringify(g)).join(', ')}.`,
         '- Read the posts above first: continue what is getting replies and views, never repeat a topic or opening they just used, and pick the one post that moves a goal forward most right now.',
-        '- Put the goal it serves in the slot\'s idea, in a few words, before the idea itself.',
+        '- The client picked this goal and this photo or video themselves: write the post for exactly that file and that goal.',
+        ...(plan.slots[0]?.stage === 'convert' ? ['', XEV_CAPTION_RULES] : []),
       ].join('\n');
     }
   }
@@ -2770,6 +2805,18 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string) 
     : null;
   if (status !== 'failed' && plan.success && plan.data.nextPost) {
     const first = all[0] as any;
+    // A money goal: Xev reads Bil's caption and adds tips for turning it into the sale.
+    if (first?.status === 'ok' && plan.data.slots[0]?.stage === 'convert' && !first.post?.xevTips) {
+      try {
+        const { tips } = await xevTips(plan.data.goal, String(first.post?.draft ?? ''));
+        if (tips.length) {
+          await db.from('campaign_posts').update({ post: { ...first.post, xevTips: tips } }).eq('campaign_id', c.id).eq('slot', first.slot);
+          await db.from('kris_messages').insert({ workspace_id: c.owner_id, client_id: c.client_id, role: 'xev', kind: 'note', body: `I read Bil's caption for "${plan.data.goal}". To turn it into the sale: ${tips.join(' ')}`.replace(/\s*—\s*/g, ', ').slice(0, 2000), link: 'campaigns', ref: `tips:${c.id}` });
+        }
+      } catch (err) {
+        console.warn('bil: Xev tips skipped', err instanceof Error ? err.message : err);
+      }
+    }
     const h = Number(String(plan.data.slots[0]?.postWindow ?? '').slice(0, 2));
     const at = Number.isFinite(h) ? `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}` : 'the next good hour';
     const when = `${plan.data.slots[0]?.dayOffset ? 'tomorrow' : 'today'} at ${at}`;

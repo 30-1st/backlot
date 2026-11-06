@@ -461,6 +461,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   return (
     <main className={`bl-today${setup ? "" : " bl-fit"}`}>
       <h1 className="bl-sr">Today</h1>
+      <MakeNext go={go} />
       {setup && (
         <section className="bl-glass-card bl-in" aria-labelledby="setup-title">
           <h2 id="setup-title" className="bl-section-title" style={{ margin: 0 }}>
@@ -549,7 +550,12 @@ export function TeamToday({ me, ws, go, focus, firstSeen, top, inClient = false 
   return (
     <div className="bl-cmd">
       <main className="bl-cmd-main">
-        {inClient ? <h1 className="bl-sr">@{clients[0]?.handle ?? ''} overview</h1> : <h1 className="bl-h1 bl-rise">{focus ? `@${clients[0]?.handle ?? ''}` : 'Today'}</h1>}
+        <div className="bl-sched-top">
+          {inClient ? <h1 className="bl-sr">@{clients[0]?.handle ?? ''} overview</h1> : <h1 className="bl-h1 bl-rise">{focus ? `@${clients[0]?.handle ?? ''}` : 'Today'}</h1>}
+          <button type="button" className="bl-btn" onClick={() => go('next')}>
+            Up next
+          </button>
+        </div>
         {top}
 
         <dl className="bl-cmd-stats">
@@ -681,5 +687,27 @@ export function TeamToday({ me, ws, go, focus, firstSeen, top, inClient = false 
         <HqScreen me={me} ws={ws} go={go} focus={focus} single={null} isTeam compact />
       </aside>
     </div>
+  );
+}
+
+/** The client's way into Up next, first on their Today. */
+function MakeNext({ go }: { go: (p: string) => void }) {
+  return (
+    <a
+      href="#next"
+      className="bl-makenext bl-in"
+      onClick={(e) => {
+        e.preventDefault();
+        go('next');
+      }}
+    >
+      <span>
+        <b>Up next</b>
+        <small>Pick a photo and a goal. Bil writes your next post with Xev.</small>
+      </span>
+      <span className="bl-btn" aria-hidden="true">
+        Make it
+      </span>
+    </a>
   );
 }

@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { Check, Chevron } from './icons';
 import type { ScreenProps } from './Shell';
 import { AgentBar } from './AgentBar';
-import { NextPostButton } from './Campaigns';
 import { isNextPost } from './Notifications';
 import { clock, timedPosts, when } from './timing';
 
@@ -197,14 +196,16 @@ function UpNext({ ws, go, single, pick }: Pick<ScreenProps, 'ws' | 'go' | 'singl
         </p>
       )}
       <div className="bl-row-actions">
-        <NextPostButton clientId={client.id} ws={ws} label="Write the next post" />
+        <button type="button" className="bl-btn" onClick={() => go('next')}>
+          Make the next post
+        </button>
         {list.length > 1 && (
           <button type="button" className="bl-ghost" onClick={() => go('campaigns')}>
             {list.length - 1} more on the Schedule
           </button>
         )}
       </div>
-      <span className="bl-small">Bil reads their latest posts on X and their goals, then writes one post for the next good hour. About 5 to 15 cents.</span>
+      <span className="bl-small">Pick the goal and the photo or video; Bil writes it with Xev from their latest posts. About 5 to 15 cents.</span>
     </section>
   );
 }

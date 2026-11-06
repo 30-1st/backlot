@@ -25,7 +25,7 @@ import { riskyDials } from './schemas/client.ts';
 import { MODELS, grokBilled, grokCost, grokEstimate } from './models.ts';
 import { KNOWLEDGE_VERSION, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient } from './spend.ts';
-import { BilInputError, type Kit, loadKit, nextPost, snapshotText } from './bil.ts';
+import { BilInputError, type Kit, loadKit, snapshotText } from './bil.ts';
 import { cleanReply, insert, type KrisMessage, recent, waitingDrafts, type Waiting } from './kris.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
 import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
@@ -286,17 +286,11 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
     }
   }
 
-  // "@Bil write my next post" (or "next post" to Bil): he reads their latest X posts and goals
-  // and writes the next post in line. The note when it is ready lands here too.
+  // "@Bil write my next post": Bil points to Up next, where the client picks the goal and the
+  // photo or video. He never writes one without their pick.
   if ((!tagged || tagged === 'bil') && NEXT_POST.test(req.text)) {
-    let said: string;
-    try {
-      const r = await nextPost(m, { requestId: req.requestId, clientId: req.clientId });
-      said = r.repeated ? "I'm already on your next post. It'll show up first on your Schedule in a minute or two." : "On it. I'm reading your latest posts and your goals, and I'll write your next post. It'll be first on your Schedule in a minute or two.";
-    } catch (e) {
-      said = e instanceof BilInputError ? e.message : "I couldn't start your next post just now. Try me again in a minute.";
-    }
-    const his = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'bil', kind: 'chat', body: said.slice(0, 2000), turn: mine.id });
+    const said = "Let's do it. Open Up next, pick the goal and the photo or video you want, and I'll write it with Xev. It goes first on your Schedule.";
+    const his = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'bil', kind: 'chat', body: said, link: 'next', turn: mine.id });
     return { messages: [mine, his].filter(Boolean), turn: mine.id, lead: 'bil' as Agent, chime: false, costUsd: 0 };
   }
 

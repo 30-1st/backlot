@@ -9,6 +9,7 @@ import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
 import { HqScreen } from './Hq';
+import { UpNextScreen } from './UpNext';
 import { CLIENT_HEADS, ClientNav, ClientsScreen } from './Clients';
 import { Back, Bubble, Chevron, Gear, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
 import { QualityScreen } from './Quality';
@@ -39,7 +40,7 @@ import { XevScreen } from './Xev';
 //   Account (from the avatar) #account
 // The house button always goes Home; inside a tool, the back arrow goes up one level.
 
-const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities', 'quality', 'hq'];
+const SHELL_HEADS = ['', 'home', 'today', 'campaigns', 'clients', 'insights', 'library', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'create', 'account', 'team', 'client', 'playground', 'narrate', 'rein', 'xev', 'opportunities', 'quality', 'hq', 'next'];
 
 export function isShellPath(path: string): boolean {
   return SHELL_HEADS.includes(path.split('.')[0]);
@@ -180,6 +181,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       screen = <DeskScreen {...props} />;
       break;
     // The team chat; #kris still opens it, for older links and Kris's notes.
+    case 'next':
+      screen = <UpNextScreen {...props} pick={setPicked} />;
+      break;
     case 'hq':
       screen = isTeam ? <HqScreen {...props} /> : null;
       break;

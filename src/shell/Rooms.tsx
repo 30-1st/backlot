@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { isTeamRole, type Me } from '../lib/team';
 import { Logo } from '../components/ui';
-import { Bubble, Clapper, Gear, Reel, StarDoor } from './icons';
+import { Bubble, Clapper, Gear, Reel, Rise, StarDoor } from './icons';
 import { ModeSwitch } from './ModeSwitch';
 
 // Home: three rooms (two for a client) on a lit stage. A warm key light falls from the
@@ -99,11 +99,13 @@ export function HomeRooms({ me, go, needs }: { me: Me; go: (p: string) => void; 
     ? [
         { key: 'team', name: 'Team', path: 'today', icon: <Clapper /> },
         { key: 'hq', name: me.role === 'owner' ? 'HQ' : 'Chat', path: 'hq', icon: <Bubble /> },
+        { key: 'next', name: 'Up next', path: 'next', icon: <Rise /> },
         { key: 'client', name: 'Client', path: 'client', icon: <StarDoor /> },
         { key: 'play', name: 'Playground', path: 'playground', icon: <Reel /> },
       ]
     : [
         { key: 'posts', name: 'Your posts', path: 'today', icon: <StarDoor /> },
+        { key: 'next', name: 'Up next', path: 'next', icon: <Rise /> },
         { key: 'play', name: 'Playground', path: 'playground', icon: <Reel /> },
       ];
   const foot = needs > 0 ? `${needs} ${needs === 1 ? 'thing needs' : 'things need'} you` : 'All caught up';
