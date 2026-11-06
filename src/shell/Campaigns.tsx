@@ -4,7 +4,7 @@ import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
 import { DayView, DetailBox, MonthView } from './Schedule';
 import { timedPosts } from './timing';
-import type { Campaign, Post } from './data';
+import { loadHistory, type Campaign, type Post } from './data';
 import { Back } from './icons';
 import { listAccounts } from '../lib/library';
 import { rememberLayer, setXIntent } from '../components/CampaignLayer';
@@ -34,179 +34,213 @@ function dayOf(c: Campaign, p: Post): string {
 }
 
 export function CampaignsScreen(props: ScreenProps & { campaignId: string | null; listOnly?: boolean }) {
-  const { ws, go, focus, campaignId, listOnly } = props;
-  const [view, setView] = useState<'day' | 'month' | 'list'>('day');
+  const { ws, go, focus, campaignId, isTeam } = props;
+  const [view, setView] = useState<'week' | 'month'>('week');
   const [day, setDay] = useState<string | null>(null);
   if (!ws.data) return <main aria-busy="true" />;
   const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
   if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
-  const thrown = campaignId ? ws.data.discarded.find((c) => c.id === campaignId) : null;
-  if (campaignId && thrown) return <DiscardedView {...props} campaign={thrown} />;
+
+  // Schedule (reworked Nov 5, 2026): one screen. The live plans sit on top as bands, the
+  // posts below as a week list or a month; older and discarded plans load only in History.
+  const live = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
   const timed = timedPosts(ws.data, focus).length > 0;
-  // One bar on every view, so campaigns are always one tap from the schedule.
   const bar = (
-    <div className="bl-seg bl-view-bar" role="group" aria-label="Schedule view">
-      {timed && (
-        <button type="button" aria-pressed={view === 'day'} onClick={() => setView('day')}>
-          Schedule
-        </button>
-      )}
-      <button type="button" aria-pressed={view === 'list' || !timed} onClick={() => setView('list')}>
-        Campaigns
-      </button>
-      {timed && (
-        <button type="button" aria-pressed={view === 'month'} onClick={() => setView('month')}>
-          Month
-        </button>
-      )}
-    </div>
-  );
-  if (!listOnly && !campaignId && view === 'month' && timed) {
-    return (
-      <MonthView
-        {...props}
-        bar={bar}
-        onDayView={() => setView('day')}
-        onDay={(d) => {
-          setDay(d);
-          setView('day');
-        }}
-      />
-    );
-  }
-  if (!listOnly && !campaignId && view === 'day' && timed) return <DayView key={day ?? ''} {...props} bar={bar} startDay={day} />;
-
-  const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
-  const list = ws.data.campaigns.filter((c) => !focus || c.clientId === focus);
-
-  return (
-    <main style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {!listOnly && bar}
-      <h1 className="bl-h1 bl-rise">Campaigns</h1>
-      {campaignId && !campaign && <p className="bl-error">That campaign is not in your workspace.</p>}
-      {list.length === 0 ? (
-        <div className="bl-empty bl-rise bl-d1">
-          <b style={{ fontSize: 17 }}>No campaigns yet.</b>
-          <span className="bl-small">
-            {props.isTeam ? 'Plan one with Bil. Tag media in your Library first so he plans around what you have.' : 'Your team will send your first campaign here for your OK.'}
-          </span>
-          {props.isTeam && (
-            <button type="button" className="bl-btn" onClick={() => go('create')}>
-              Plan a campaign
+    <>
+      <div className="bl-sched-top">
+        <h1 className="bl-h1 bl-rise">Schedule</h1>
+        <span className="bl-row-actions">
+          {timed && (
+            <span className="bl-seg" role="group" aria-label="Schedule view">
+              <button type="button" aria-pressed={view === 'week'} onClick={() => setView('week')}>
+                Week
+              </button>
+              <button type="button" aria-pressed={view === 'month'} onClick={() => setView('month')}>
+                Month
+              </button>
+            </span>
+          )}
+          {isTeam && (
+            <button type="button" className="bl-ghost" onClick={() => go('create')}>
+              Plan with Bil
             </button>
           )}
-        </div>
-      ) : (
-        list.map((c, i) => {
-          const posts = ws.data!.posts.filter((p) => p.campaignId === c.id);
-          const done = posts.filter((p) => p.review === 'approved' || p.review === 'posted').length;
-          const needs = posts.length - done;
-          const pct = c.postsTotal ? Math.round((done / c.postsTotal) * 100) : 0;
-          return (
-            <a
-              key={c.id}
-              href={`#campaigns.${c.id}`}
-              className={`bl-card bl-rise bl-d${Math.min(4, i + 1)}`}
-              onClick={(e) => {
-                e.preventDefault();
-                go(`campaigns.${c.id}`);
-              }}
-            >
-              <span className="bl-label">
-                @{handle(c.clientId)}, {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              </span>
-              <div className="bl-card-title">{campaignTitle(c)}</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {needs > 0 && <span className="bl-chip needs">{needs} need you</span>}
-                {done > 0 && <span className="bl-chip approved">{done} approved</span>}
-                {(c.status === 'planning' || c.status === 'drafting') && !c.hold && <span className="bl-chip draft">Bil is writing</span>}
-                {c.hold && <span className="bl-chip changes">Paused at budget</span>}
-              </div>
-              <span className="bl-meter" role="img" aria-label={`${pct} percent approved`}>
-                <span style={{ width: `${pct}%` }} />
-              </span>
-            </a>
-          );
-        })
-      )}
-      <DiscardedList {...props} />
-    </main>
+        </span>
+      </div>
+      {campaignId && !campaign && <p className="bl-error">That plan is not live any more. Look for it in History.</p>}
+      {live.length > 0 && <PlanBands {...props} live={live} />}
+    </>
   );
+  const history = <History {...props} />;
+
+  if (!timed) {
+    return (
+      <main className="bl-flow bl-wide">
+        {bar}
+        {live.length === 0 && (
+          <div className="bl-empty bl-rise bl-d1">
+            <b style={{ fontSize: 17 }}>Nothing is planned right now.</b>
+            <span className="bl-small">{isTeam ? 'Plan a week with Bil. Tag media first so he plans around what you have.' : 'Your team will send your next plan here for your OK.'}</span>
+          </div>
+        )}
+        {history}
+      </main>
+    );
+  }
+  if (view === 'month') {
+    return (
+        <MonthView
+          {...props}
+          bar={bar}
+          footer={history}
+          onDayView={() => setView('week')}
+          onDay={(d) => {
+            setDay(d);
+            setView('week');
+          }}
+        />
+    );
+  }
+  return <DayView key={day ?? ''} {...props} bar={bar} footer={history} startDay={day} />;
 }
 
-/** Discarded campaigns for the clients in view, each one tap from coming back. */
-function DiscardedList({ ws, go, focus }: ScreenProps) {
-  const gone = (ws.data?.discarded ?? []).filter((c) => !focus || c.clientId === focus);
-  if (!gone.length) return null;
+/** The live plans as thin bands: what it is, how far Bil has got, and what needs you. */
+function PlanBands({ ws, go, focus, live }: ScreenProps & { live: Campaign[] }) {
+  const handle = (id: string) => ws.data!.clients.find((c) => c.id === id)?.handle ?? '';
   return (
-    <details className="bl-discarded">
-      <summary>Discarded ({gone.length})</summary>
-      <ul className="bl-rows">
-        {gone.map((c) => (
+    <ul className="bl-bands" aria-label="Live plans">
+      {live.map((c) => {
+        const posts = ws.data!.posts.filter((p) => p.campaignId === c.id);
+        const needs = posts.filter((p) => p.status === 'ok' && (p.review === 'pending' || p.review === 'changes')).length;
+        const held = posts.filter((p) => p.status === 'blocked').length;
+        const open = posts.filter((p) => (p.post as { open?: unknown }).open === true).length;
+        const rolling = Boolean((c.plan as { rolling?: unknown } | null)?.rolling);
+        const start = (c.request as { startDate?: string } | null)?.startDate;
+        const writing = (c.status === 'planning' || c.status === 'drafting') && !c.hold;
+        return (
           <li key={c.id}>
             <a
               href={`#campaigns.${c.id}`}
-              className="bl-linkish"
+              className="bl-band"
               onClick={(e) => {
                 e.preventDefault();
                 go(`campaigns.${c.id}`);
               }}
             >
-              {campaignTitle(c)}
+              <span className="bl-band-main">
+                <b>
+                  {!focus && <span className="bl-band-handle">@{handle(c.clientId)} · </span>}
+                  {rolling ? `Rolling week${start ? ` from ${new Date(`${start}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}` : campaignTitle(c)}
+                </b>
+                <span className="bl-small">
+                  {c.postsDone ?? posts.length} of {c.postsTotal ?? posts.length} written{open ? ` · ${open} open slots` : ''}
+                  {rolling && campaignTitle(c) !== 'Campaign' ? ` · ${campaignTitle(c)}` : ''}
+                </span>
+              </span>
+              <span className="bl-band-chips">
+                {needs > 0 && <span className="bl-chip needs">{needs} need you</span>}
+                {held > 0 && <span className="bl-chip changes">{held} need a detail</span>}
+                {writing && <span className="bl-chip draft">Bil is writing</span>}
+                {c.hold && <span className="bl-chip changes">Paused at budget</span>}
+                <span className="bl-band-go" aria-hidden="true">
+                  Open plan ›
+                </span>
+              </span>
             </a>
-            <span className="bl-small"> discarded {new Date(c.discardedAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
           </li>
-        ))}
-      </ul>
-    </details>
+        );
+      })}
+    </ul>
   );
 }
 
-/** A discarded campaign: what that means, and the way back. */
-function DiscardedView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Campaign }) {
-  const [busy, setBusy] = useState(false);
+/** Older and discarded plans. Nothing loads until it is opened. */
+function History({ ws, focus, isTeam }: ScreenProps) {
+  const [data, setData] = useState<{ older: Campaign[]; discarded: Campaign[] } | null>(null);
   const [error, setError] = useState('');
-  async function restore() {
-    setBusy(true);
-    setError('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const handle = (id: string) => ws.data?.clients.find((c) => c.id === id)?.handle ?? '';
+  const mine = (list: Campaign[]) => list.filter((c) => !focus || c.clientId === focus);
+  async function open(e: React.SyntheticEvent<HTMLDetailsElement>) {
+    if (!(e.currentTarget as HTMLDetailsElement).open || data) return;
     try {
-      await bil.restore(campaign.id);
-      await ws.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not restore it.');
-      setBusy(false);
+      setData(await loadHistory());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load History.');
     }
   }
+  async function restore(c: Campaign) {
+    setBusy(c.id);
+    setError('');
+    try {
+      await bil.restore(c.id);
+      setData((d) => (d ? { ...d, discarded: d.discarded.filter((x) => x.id !== c.id) } : d));
+      await ws.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not bring it back.');
+    } finally {
+      setBusy(null);
+    }
+  }
+  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return (
-    <main className="bl-flow">
-      <a
-        href="#campaigns"
-        className="bl-ghost bl-round"
-        aria-label="All campaigns"
-        onClick={(e) => {
-          e.preventDefault();
-          go(isTeam ? 'campaigns.all' : 'campaigns');
-        }}
-      >
-        <Back />
-      </a>
-      <h1 className="bl-h1">{campaignTitle(campaign)}</h1>
-      <div className="bl-wash" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <b>This campaign is discarded.</b>
-        <span className="bl-small">
-          It is off the schedule, Today and Kris&rsquo;s drafts, and Bil writes nothing more for it. Its posts are kept, so restoring brings everything back
-          {campaign.status === 'planning' || campaign.status === 'drafting' ? ' and Bil picks up where he stopped' : ''}.
-        </span>
-        <button type="button" className="bl-btn bl-start" disabled={busy} onClick={() => void restore()}>
-          {busy ? 'Restoring' : 'Restore it'}
-        </button>
-      </div>
+    <details className="bl-discarded bl-history" onToggle={(e) => void open(e)}>
+      <summary>History</summary>
+      {!data && !error && (
+        <p className="bl-small" aria-busy="true">
+          Loading.
+        </p>
+      )}
       {error && (
         <p className="bl-error" role="alert">
           {error}
         </p>
       )}
-    </main>
+      {data && (
+        <>
+          <h3 className="bl-label">Earlier plans</h3>
+          {mine(data.older).length === 0 ? (
+            <p className="bl-small">None older than 45 days.</p>
+          ) : (
+            <ul className="bl-rows">
+              {mine(data.older).map((c) => (
+                <li key={c.id}>
+                  <b>{campaignTitle(c)}</b>
+                  <span className="bl-small">
+                    {' '}
+                    {!focus && `@${handle(c.clientId)} · `}
+                    {day(c.createdAt)} · {c.postsDone ?? 0} of {c.postsTotal ?? 0} written
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 className="bl-label">Discarded in the last 30 days</h3>
+          {mine(data.discarded).length === 0 ? (
+            <p className="bl-small">None.</p>
+          ) : (
+            <ul className="bl-rows">
+              {mine(data.discarded).map((c) => (
+                <li key={c.id} className="bl-history-row">
+                  <span>
+                    <b>{campaignTitle(c)}</b>
+                    <span className="bl-small">
+                      {' '}
+                      {!focus && `@${handle(c.clientId)} · `}discarded {day(c.discardedAt!)}
+                    </span>
+                  </span>
+                  {isTeam && (
+                    <button type="button" className="bl-ghost" disabled={busy !== null} onClick={() => void restore(c)}>
+                      {busy === c.id ? 'Bringing back' : 'Bring back'}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </details>
   );
 }
 

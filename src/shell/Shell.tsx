@@ -9,7 +9,8 @@ import { DeskScreen } from './Desk';
 import { KrisScreen } from './Kris';
 import { RoomScreen } from './Room';
 import { HqScreen } from './Hq';
-import { Back, Bubble, Chevron, Clapper, Gear, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
+import { CLIENT_HEADS, ClientNav, ClientsScreen } from './Clients';
+import { Back, Bubble, Chevron, Gear, House, Page, People, Rise, Sequence, Signal, Vault } from './icons';
 import { QualityScreen } from './Quality';
 import { useTheme } from './theme';
 import { Notifications, needsYouCount } from './Notifications';
@@ -20,7 +21,6 @@ import { InsightsScreen } from './Insights';
 import { TeamScreen } from './Team';
 import { ChangePassword } from './ChangePassword';
 import { HomeRooms } from './Rooms';
-import { ClientsScreen } from './Clients';
 import { PlaygroundScreen } from './Playground';
 import { MeasureFlow, PlanFlow } from './PlanFlow';
 import { AddClientFlow } from './AddClientFlow';
@@ -156,7 +156,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
       screen = sub === 'all' ? <CampaignsScreen {...props} campaignId={null} listOnly /> : <CampaignsScreen {...props} campaignId={sub || null} />;
       break;
     case 'clients':
-      screen = isTeam ? <ClientsScreen {...props} pick={setPicked} /> : <Notifications {...props} />;
+      screen = isTeam ? <ClientsScreen {...props} pick={setPicked} openId={sub || null} /> : <Notifications {...props} />;
       break;
     case 'insights':
       screen = <InsightsScreen {...props} />;
@@ -269,7 +269,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
         {icon}
         {count > 0 && !current && <span className="bl-badge">{count}</span>}
       </span>
-      {current && <span className="bl-tab-label">{label}</span>}
+      <span className="bl-tab-label">{label}</span>
     </a>
   );
 
@@ -278,9 +278,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
     dock = (
       <nav aria-label="Team" className="bl-dock">
         {tab('today', 'Today', <Signal size={22} />, head === 'today', badge)}
-        {tab('campaigns', 'Schedule', <Sequence size={22} />, (head === 'campaigns' && !sub) || head === 'approvals')}
-        {tab('campaigns.all', 'Campaigns', <Clapper size={22} />, head === 'campaigns' && Boolean(sub))}
+        {tab('campaigns', 'Schedule', <Sequence size={22} />, head === 'campaigns' || head === 'approvals')}
         {tab('clients', 'Clients', <People size={22} />, ['clients', 'insights', 'library', 'brand', 'board', 'reports', 'desk', 'kris', 'chat', 'room', 'xev'].includes(head))}
+        {tab('hq', me.role === 'owner' ? 'HQ' : 'Chat', <Bubble size={22} />, head === 'hq')}
         {tab('create', 'Ask Bil', <Rise size={22} />, head === 'create')}
       </nav>
     );
@@ -405,6 +405,9 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
             </p>
           )}
         </header>
+        {room === 'team' && focus && CLIENT_HEADS.includes(head) && !(head === 'clients' && !sub) && (
+          <ClientNav handle={clients.find((c) => c.id === focus)?.handle ?? ''} clientId={focus} head={head} go={go} />
+        )}
         {screen}
       </div>
       {dock}

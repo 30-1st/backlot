@@ -59,8 +59,6 @@ export type Workspace = {
   clients: Client[];
   voices: Voice[];
   campaigns: Campaign[];
-  /** Discarded campaigns, newest first. They stay out of everything else until restored. */
-  discarded: Campaign[];
   posts: Post[];
   /** Onboarding steps a person ticked. The rest are worked out from the data. */
   steps: StepDone[];
@@ -74,21 +72,55 @@ export type Workspace = {
   done: string[];
 };
 
-const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], discarded: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null, done: [] };
+const EMPTY: Workspace = { clients: [], voices: [], campaigns: [], posts: [], steps: [], mediaCounts: {}, activity: [], seenAt: null, done: [] };
 const ACTIVITY_DAYS = 14;
+/**
+ * The schedule loads live work only (approved Nov 5, 2026): campaigns that are not discarded
+ * and were made in the last 45 days, with their posts. Older and discarded ones load only
+ * when someone opens History (loadHistory), without their posts.
+ */
+const LIVE_DAYS = 45;
+const CAMPAIGN_COLUMNS = 'id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at, discarded_at';
+const toCampaign = (r: Json): Campaign => ({
+  id: r.id,
+  clientId: r.client_id,
+  status: r.status,
+  hold: r.hold ?? null,
+  request: r.request,
+  plan: r.plan,
+  postsTotal: r.posts_total,
+  postsDone: r.posts_done,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  discardedAt: r.discarded_at ?? null,
+});
+
+/** History: older campaigns and the last 30 days of discarded ones, newest first, without posts. */
+export async function loadHistory(): Promise<{ older: Campaign[]; discarded: Campaign[] }> {
+  if (!supabase) return { older: [], discarded: [] };
+  const liveFrom = new Date(Date.now() - LIVE_DAYS * 86_400_000).toISOString();
+  const [o, d] = await Promise.all([
+    supabase.from('campaigns').select(CAMPAIGN_COLUMNS).is('discarded_at', null).lte('created_at', liveFrom).order('created_at', { ascending: false }).limit(30),
+    supabase
+      .from('campaigns')
+      .select(CAMPAIGN_COLUMNS)
+      .not('discarded_at', 'is', null)
+      .gt('discarded_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+      .order('discarded_at', { ascending: false })
+      .limit(30),
+  ]);
+  if (o.error ?? d.error) throw new Error((o.error ?? d.error)!.message);
+  return { older: (o.data ?? []).map(toCampaign), discarded: (d.data ?? []).map(toCampaign) };
+}
 
 async function load(): Promise<Workspace> {
   if (!supabase) return EMPTY;
   const since = new Date(Date.now() - ACTIVITY_DAYS * 86_400_000).toISOString();
-  const [c, v, k, p, s, m, lg, md, bd, sn, dn] = await Promise.all([
+  const liveFrom = new Date(Date.now() - LIVE_DAYS * 86_400_000).toISOString();
+  const [c, v, k, s, m, lg, md, bd, sn, dn] = await Promise.all([
     supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at, stage, stage_note').order('created_at'),
     supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
-    supabase
-      .from('campaigns')
-      .select('id, client_id, status, hold, request, plan, posts_total, posts_done, created_at, updated_at, discarded_at')
-      .order('created_at', { ascending: false })
-      .limit(50),
-    supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id, posted_as').order('slot').limit(1000),
+    supabase.from('campaigns').select(CAMPAIGN_COLUMNS).is('discarded_at', null).gt('created_at', liveFrom).order('created_at', { ascending: false }).limit(50),
     supabase.from('onboarding_steps').select('client_id, step, done_at'),
     supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
     supabase
@@ -102,27 +134,17 @@ async function load(): Promise<Workspace> {
     supabase.from('notice_seen').select('seen_at').maybeSingle(),
     supabase.from('inbox_done').select('item_key').limit(1000),
   ]);
+  const liveIds = (k.data ?? []).map((r: Json) => r.id as string);
+  const p = liveIds.length
+    ? await supabase.from('campaign_posts').select('campaign_id, slot, status, post, review, review_note, reviewed_at, x_post_id, posted_as').in('campaign_id', liveIds).order('slot').limit(1000)
+    : { data: [] as Json[], error: null };
   const error = c.error ?? v.error ?? k.error ?? p.error ?? s.error ?? m.error ?? lg.error ?? md.error ?? bd.error ?? sn.error;
   if (error) throw new Error(error.message);
-  const campaigns: Campaign[] = (k.data ?? []).map((r: Json) => ({
-    id: r.id,
-    clientId: r.client_id,
-    status: r.status,
-    hold: r.hold ?? null,
-    request: r.request,
-    plan: r.plan,
-    postsTotal: r.posts_total,
-    postsDone: r.posts_done,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    discardedAt: r.discarded_at ?? null,
-  }));
-  const gone = new Set(campaigns.filter((x) => x.discardedAt).map((x) => x.id));
+  const campaigns: Campaign[] = (k.data ?? []).map(toCampaign);
   return {
     clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null, stage: r.stage ?? 'active', stageNote: r.stage_note ?? null })),
     voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at })),
-    campaigns: campaigns.filter((x) => !x.discardedAt),
-    discarded: campaigns.filter((x) => x.discardedAt),
+    campaigns,
     steps: (s.data ?? []).map((r: Json) => ({ clientId: r.client_id, step: r.step, doneAt: r.done_at })),
     activity: [
       ...(lg.data ?? []).map(
@@ -147,7 +169,7 @@ async function load(): Promise<Workspace> {
       acc[r.client_id] = (acc[r.client_id] ?? 0) + 1;
       return acc;
     }, {}),
-    posts: (p.data ?? []).filter((r: Json) => !gone.has(r.campaign_id)).map((r: Json) => ({
+    posts: (p.data ?? []).map((r: Json) => ({
       campaignId: r.campaign_id,
       slot: r.slot,
       status: r.status,

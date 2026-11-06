@@ -1,13 +1,14 @@
 import { isTeamRole, type Me } from '../lib/team';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Activity, Workspace } from './data';
+import type { Activity, Client, Workspace } from './data';
 import { Checklist, setupLeft } from './Checklist';
 import { shotsWanted } from './gaps';
 import { PostMedia, ShotFrame } from './PostMedia';
-import { clock, nextPost, wantsMedia, when, type Timed } from './timing';
+import { clock, nextPost, timedPosts, todayIn, wantsMedia, when, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
+import { HqScreen } from './Hq';
 
 // Home: notifications on a signal rail, newest first, with the ones that need you on top.
 // Everything is worked out from the workspace data, so nothing here can drift out of step
@@ -427,6 +428,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   }, [loaded]);
 
   if (!ws.data) return <main aria-busy="true" />;
+  if (isTeam) return <TeamToday me={me} ws={ws} go={go} focus={focus} firstSeen={firstSeen.current ?? null} />;
   const news = buildNews(me, ws.data, focus, firstSeen.current ?? null);
   const items = build(me, ws.data, focus);
   const done = new Set(ws.data.done);
@@ -476,5 +478,194 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Today for the executive and the team (reworked Nov 5, 2026): a command center. Four real
+ * numbers, everything that needs you as one list to clear, a health board with one row per
+ * client, and on a wide screen the HQ chat beside it. Every number is counted from the
+ * workspace data or the wins people logged; nothing is estimated.
+ */
+export function TeamToday({ me, ws, go, focus, firstSeen, top, inClient = false }: Pick<ScreenProps, 'me' | 'ws' | 'go' | 'focus'> & { firstSeen: string | null; top?: React.ReactNode; inClient?: boolean }) {
+  const data = ws.data!;
+  const [wins, setWins] = useState<Array<{ client_id: string; amount_usd: number | null; created_at: string }> | null>(null);
+  useEffect(() => {
+    if (!supabase) return;
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    void supabase
+      .from('client_wins')
+      .select('client_id, amount_usd, created_at')
+      .gte('created_at', since)
+      .limit(500)
+      .then(({ data: rows }) => setWins((rows ?? []) as Array<{ client_id: string; amount_usd: number | null; created_at: string }>));
+  }, []);
+
+  const items = build(me, data, focus);
+  const news = buildNews(me, data, focus, firstSeen);
+  const done = new Set(data.done);
+  const needs = items.filter((i) => i.needs && !done.has(i.key));
+  const fresh = news.filter((x) => x.fresh && !done.has(x.key)).slice(0, 6);
+  const now = Date.now();
+  const timed = timedPosts(data, focus);
+  const today = (t: (typeof timed)[number]) => t.day === todayIn(t.tz);
+  const outToday = timed.filter((t) => today(t) && t.post.review !== 'not_posted').length;
+  const waiting = data.posts.filter((p) => p.status === 'ok' && (p.review === 'pending' || p.review === 'changes') && (!focus || data.campaigns.find((c) => c.id === p.campaignId)?.clientId === focus)).length;
+  const inScope = (id: string) => !focus || id === focus;
+  const winsWeek = (wins ?? []).filter((w) => inScope(w.client_id));
+  const winsUsd = winsWeek.reduce((a, w) => a + Number(w.amount_usd ?? 0), 0);
+  const clients = data.clients.filter((c) => inScope(c.id));
+
+  const row = (c: Client) => {
+    const camps = data.campaigns.filter((x) => x.clientId === c.id);
+    const posts = data.posts.filter((p) => camps.some((x) => x.id === p.campaignId));
+    const wait = posts.filter((p) => p.status === 'ok' && (p.review === 'pending' || p.review === 'changes')).length;
+    const held = posts.filter((p) => p.status === 'blocked').length;
+    const next = timed.find((t) => t.client?.id === c.id && t.end.getTime() > now && t.post.review !== 'posted' && t.post.review !== 'not_posted');
+    const last = data.activity.find((a) => a.clientId === c.id);
+    const quietDays = last ? Math.floor((now - Date.parse(last.at)) / 86_400_000) : null;
+    const status: 'needs' | 'quiet' | 'ok' =
+      wait + held > 0 || needs.some((i) => i.label.startsWith(`@${c.handle} `)) ? 'needs' : !camps.length || quietDays === null || quietDays >= 5 ? 'quiet' : 'ok';
+    const w = winsWeek.filter((x) => x.client_id === c.id).length;
+    return { c, camps, wait, held, next, quietDays, status, w };
+  };
+  const board = clients.map(row).sort((a, b) => ['needs', 'quiet', 'ok'].indexOf(a.status) - ['needs', 'quiet', 'ok'].indexOf(b.status));
+  const word = { needs: 'Needs you', quiet: 'Gone quiet', ok: 'On track' } as const;
+
+  return (
+    <div className="bl-cmd">
+      <main className="bl-cmd-main">
+        {inClient ? <h1 className="bl-sr">@{clients[0]?.handle ?? ''} overview</h1> : <h1 className="bl-h1 bl-rise">{focus ? `@${clients[0]?.handle ?? ''}` : 'Today'}</h1>}
+        {top}
+
+        <dl className="bl-cmd-stats">
+          <div className={needs.length ? 'hot' : ''}>
+            <dt>Need you</dt>
+            <dd className="num">{needs.length}</dd>
+          </div>
+          <div>
+            <dt>Going out today</dt>
+            <dd className="num">{outToday}</dd>
+          </div>
+          <div>
+            <dt>Waiting for a yes</dt>
+            <dd className="num">{waiting}</dd>
+          </div>
+          <div>
+            <dt>Wins this week</dt>
+            <dd className="num">
+              {wins === null ? '·' : winsWeek.length}
+              {winsUsd > 0 && <small> ${winsUsd.toLocaleString()}</small>}
+            </dd>
+          </div>
+        </dl>
+
+        <section className="bl-cmd-card" aria-labelledby="cmd-needs">
+          <h2 id="cmd-needs" className="bl-section-title">
+            {needs.length ? 'Needs you' : 'Nothing needs you'}
+          </h2>
+          {needs.length === 0 ? (
+            <p className="bl-small" style={{ margin: 0 }}>
+              {clients.length ? 'Every client is moving. Check the board below or ask HQ what to push next.' : 'No clients yet. Bring in your first client with Bil.'}
+            </p>
+          ) : (
+            <ul className="bl-cmd-list">
+              {needs.map((it) => (
+                <li key={it.key}>
+                  <span className="bl-cmd-dot needs" aria-hidden="true" />
+                  <span className="bl-cmd-what">
+                    <b>{it.title}</b>
+                    <span className="bl-small">{[it.label.replace(' · ', ', '), it.body].filter(Boolean).join('. ')}</span>
+                  </span>
+                  <span className="bl-row-actions">
+                    {it.action && (
+                      <a
+                        className="bl-btn"
+                        href={`#${it.action.path}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          go(it.action!.path);
+                        }}
+                      >
+                        {it.action.label}
+                      </a>
+                    )}
+                    <button type="button" className="bl-feed-mark done" aria-label={`Done: ${it.title}`} onClick={() => ws.markDone(it.key)}>
+                      <Tick />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {clients.length > 0 && !inClient && (
+          <section className="bl-cmd-card" aria-labelledby="cmd-board">
+            <h2 id="cmd-board" className="bl-section-title">
+              Clients
+            </h2>
+            <ul className="bl-cmd-board">
+              {board.map((b) => (
+                <li key={b.c.id}>
+                  <a
+                    href={`#clients.${b.c.id}`}
+                    className="bl-cmd-client"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      go(`clients.${b.c.id}`);
+                    }}
+                  >
+                    <span className={`bl-cmd-dot ${b.status}`} aria-hidden="true" />
+                    <span className="bl-cmd-what">
+                      <b>@{b.c.handle}</b>
+                      <span className="bl-small">
+                        {word[b.status]}
+                        {b.next ? ` · next post ${when(b.next).toLowerCase()}` : b.camps.length ? ' · nothing scheduled ahead' : ' · no plan running'}
+                      </span>
+                    </span>
+                    <span className="bl-cmd-nums">
+                      {b.wait > 0 && <span className="bl-chip needs">{b.wait} waiting</span>}
+                      {b.held > 0 && <span className="bl-chip changes">{b.held} need a detail</span>}
+                      {b.w > 0 && <span className="bl-chip approved">{b.w} {b.w === 1 ? 'win' : 'wins'}</span>}
+                      <span className="bl-small">{b.quietDays === null ? 'No activity yet' : b.quietDays === 0 ? 'Active today' : `Active ${b.quietDays}d ago`}</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {fresh.length > 0 && (
+          <section className="bl-cmd-card" aria-labelledby="cmd-new">
+            <h2 id="cmd-new" className="bl-section-title">
+              New since you last looked
+            </h2>
+            <ul className="bl-cmd-list">
+              {fresh.map((x) => (
+                <li key={x.key}>
+                  <span className="bl-cmd-dot new" aria-hidden="true" />
+                  <a
+                    className="bl-cmd-what bl-linkish"
+                    href={`#${x.path}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      go(x.path);
+                    }}
+                  >
+                    <b>{x.title}</b>
+                    <span className="bl-small">{ago(x.at)}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </main>
+      <aside className="bl-cmd-side" aria-label={me.role === 'owner' ? 'HQ chat' : 'Your chat'}>
+        <HqScreen me={me} ws={ws} go={go} focus={focus} single={null} isTeam compact />
+      </aside>
+    </div>
   );
 }

@@ -14,8 +14,9 @@ const PAGE = 60;
 const CHIME_GAP_MS = 900;
 const AGENT: Record<string, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
 
-export function HqScreen({ me, ws }: ScreenProps) {
+export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: boolean }) {
   const owner = me.role === 'owner';
+  const Tag = compact ? 'section' : 'main';
   const [msgs, setMsgs] = useState<DeskMessage[] | null>(null);
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
@@ -79,7 +80,7 @@ export function HqScreen({ me, ws }: ScreenProps) {
   const covers = owner ? `Every client and your whole team` : clients.length ? clients.map((c) => `@${c.handle}`).join(', ') : 'No clients granted yet';
 
   return (
-    <main className="bl-flow bl-kris bl-gc bl-fit">
+    <Tag className={`bl-flow bl-kris bl-gc ${compact ? 'bl-hq-side' : 'bl-fit'}`}>
       <header className="bl-gc-head">
         <span className="bl-gc-faces" aria-hidden="true">
           {Object.keys(AGENT).map((a) => (
@@ -89,7 +90,7 @@ export function HqScreen({ me, ws }: ScreenProps) {
           ))}
         </span>
         <div className="bl-gc-title">
-          <h1 className="bl-h1 bl-rise">{owner ? 'HQ' : 'Your clients'}</h1>
+          {compact ? <h2 className="bl-section-title" style={{ margin: 0 }}>{owner ? 'HQ' : 'Your chat'}</h2> : <h1 className="bl-h1 bl-rise">{owner ? 'HQ' : 'Your clients'}</h1>}
           <span className="bl-small">{covers}</span>
         </div>
       </header>
@@ -191,6 +192,6 @@ export function HqScreen({ me, ws }: ScreenProps) {
           </svg>
         </button>
       </form>
-    </main>
+    </Tag>
   );
 }

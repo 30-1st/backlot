@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { bil } from '../lib/team';
 import { PostMedia, ShotFrame } from './PostMedia';
-import { clock, dayParts, missingLinks, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
+import { clock, missingLinks, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
 import { NetworkLane } from './Network';
 
-// Schedule: one post at a time, the next post due first. Swipe for the next in line. A post
-// past its time turns grey with its follow-ups and the posting link. Approving is one tap.
+// Schedule (reworked Nov 5, 2026): live work only, as a list by day. The last 7 days fold
+// away above today; every row opens in place to the full post and its actions. A post past
+// its time turns grey with its follow-ups and the posting link. Approving is one tap.
 
 function statusWord(t: Timed): { word: string; cls: string } {
   if (t.post.status === 'blocked') return { word: 'Needs a detail', cls: 'bad' };
@@ -243,47 +244,25 @@ function LinkNudge({ ws, clientId }: { ws: ScreenProps['ws']; clientId: string }
 }
 
 /** Schedule: one post per card, next post due first. Swipe for the next one; past posts go grey. */
-export function DayView({ ws, go, focus, isTeam, single, bar, startDay }: ScreenProps & { bar?: React.ReactNode; startDay?: string | null }) {
-  const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
+export function DayView({ ws, go, focus, isTeam, single, bar, footer, startDay }: ScreenProps & { bar?: React.ReactNode; footer?: React.ReactNode; startDay?: string | null }) {
+  const now = Date.now();
+  // Live work only: the last 7 days and everything still to come.
+  const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus).filter((t) => t.end.getTime() >= now - 7 * 86_400_000) : []), [ws.data, focus]); // eslint-disable-line react-hooks/exhaustive-deps
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
-  const now = Date.now();
   const key = (t: Timed) => `${t.campaign.id}:${t.post.slot}`;
-  const startAt = useMemo(() => {
+  const firstDue = all.find((t) => t.end.getTime() > now && t.post.review !== 'posted' && t.post.review !== 'not_posted');
+  const [open, setOpen] = useState<string | null>(() => {
     if (startDay) {
-      const i = all.findIndex((t) => t.day >= startDay);
-      if (i >= 0) return i;
+      const t = all.find((x) => x.day >= startDay);
+      if (t) return key(t);
     }
-    const i = all.findIndex((t) => t.end.getTime() > now && t.post.review !== 'posted' && t.post.review !== 'not_posted');
-    return i >= 0 ? i : Math.max(0, all.length - 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all.length, startDay]);
-  const [index, setIndex] = useState(startAt);
+    return firstDue ? key(firstDue) : null;
+  });
   const [lane, setLane] = useState<'posts' | 'network'>('posts');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const track = useRef<HTMLOListElement>(null);
   const waiting = all.filter((t) => t.end.getTime() > now && t.post.status === 'ok' && (t.post.review === 'pending' || t.post.review === 'changes'));
-
-  // Land on the next post due, then follow the swipe.
-  useEffect(() => {
-    const el = track.current?.children[startAt] as HTMLElement | undefined;
-    if (el && track.current) track.current.scrollLeft = el.offsetLeft - track.current.offsetLeft;
-    setIndex(startAt);
-  }, [startAt]);
-  function onScroll() {
-    const tr = track.current;
-    if (!tr) return;
-    const w = (tr.children[0] as HTMLElement | undefined)?.offsetWidth ?? 1;
-    const i = Math.round(tr.scrollLeft / (w + 12));
-    if (i !== index) setIndex(Math.max(0, Math.min(all.length - 1, i)));
-  }
-  function goTo(i: number) {
-    const tr = track.current;
-    const el = tr?.children[i] as HTMLElement | undefined;
-    if (!tr || !el) return;
-    tr.scrollTo({ left: el.offsetLeft - tr.offsetLeft, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  }
 
   async function approve(list: Timed[]) {
     setError('');
@@ -300,8 +279,56 @@ export function DayView({ ws, go, focus, isTeam, single, bar, startDay }: Screen
     setBusy(null);
   }
 
-  const cur = all[index];
+  const handle = (t: Timed) => t.client?.handle ?? '';
+  const days: Array<{ day: string; posts: Timed[] }> = [];
+  for (const t of all) {
+    const last = days[days.length - 1];
+    if (last && last.day === t.day) last.posts.push(t);
+    else days.push({ day: t.day, posts: [t] });
+  }
+  const earlier = days.filter((d) => d.day < today);
+  const ahead = days.filter((d) => d.day >= today);
   const laneClient = single ?? focus ?? null;
+
+  const dayBlock = (d: { day: string; posts: Timed[] }) => (
+    <section key={d.day} className="bl-wk-day" aria-label={d.day}>
+      <h3 className="bl-wk-date">
+        {d.day === today ? 'Today' : new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })}
+        <span className="bl-small"> · {d.posts.length} {d.posts.length === 1 ? 'post' : 'posts'}</span>
+      </h3>
+      <ol className="bl-wk-list">
+        {d.posts.map((t) => {
+          const s = statusWord(t);
+          const c = clock(t.start, t.tz);
+          const past = t.end.getTime() <= now;
+          const mediaId = typeof t.post.post.mediaId === 'string' ? t.post.post.mediaId : null;
+          const text = t.post.status === 'blocked' ? String(t.post.post.idea ?? 'Waiting on a detail') : String(t.post.post.draft ?? t.post.post.hook ?? '');
+          const isOpen = open === key(t);
+          const chip = past && t.post.review !== 'posted' && t.post.review !== 'not_posted' ? 'Past' : t.post.review === 'not_posted' ? 'Not posted' : s.word;
+          return (
+            <li key={key(t)} className={`bl-wk-item${past ? ' is-past' : ''}${isOpen ? ' is-open' : ''}`}>
+              <button type="button" className="bl-wk-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key(t))}>
+                <span className="bl-wk-time num">
+                  {c.time}
+                  <small>{c.half}</small>
+                </span>
+                <span className="bl-wk-thumb" aria-hidden="true">
+                  {mediaId ? <PostMedia id={mediaId} size="thumb" /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} size="thumb" /> : <span className="bl-pm thumb text">Aa</span>}
+                </span>
+                <span className="bl-wk-text">
+                  {!focus && <b>@{handle(t)}</b>}
+                  <span>{text || 'No text yet'}</span>
+                </span>
+                <span className={`bl-chip-ink${s.cls ? ` ${s.cls}` : ''}`}>{chip}</span>
+              </button>
+              {isOpen && <PostBody t={t} ws={ws} go={go} past={past} busy={busy} onApprove={(x) => void approve([x])} />}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+
   return (
     <main className="bl-sched bl-fit">
       <h1 className="bl-sr">Schedule</h1>
@@ -319,103 +346,87 @@ export function DayView({ ws, go, focus, isTeam, single, bar, startDay }: Screen
       {lane === 'network' && laneClient && ws.data ? (
         <NetworkLane ws={ws.data} clientId={laneClient} go={go} />
       ) : (
-      <>
-      <div className="bl-sched-head">
-        <span className="bl-small num">
-          {all.length ? `${index + 1} of ${all.length}` : 'Nothing planned yet'}
-          {cur ? ` · ${cur.day === today ? 'Today' : new Date(`${cur.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}
-        </span>
-        <span className="bl-row-actions">
-          {waiting.length > 1 && (
-            <button type="button" className="bl-ghost" disabled={busy !== null} onClick={() => void approve(waiting)}>
-              Approve all {waiting.length} waiting
-            </button>
+        <>
+          <div className="bl-sched-head">
+            <span className="bl-small num">{all.length ? `${ahead.reduce((a, d) => a + d.posts.length, 0)} coming up` : 'Nothing planned this week'}</span>
+            <span className="bl-row-actions">
+              {waiting.length > 1 && (
+                <button type="button" className="bl-ghost" disabled={busy !== null} onClick={() => void approve(waiting)}>
+                  Approve all {waiting.length} waiting
+                </button>
+              )}
+            </span>
+          </div>
+          {!isTeam && single && <LinkNudge ws={ws} clientId={single} />}
+          {error && (
+            <p className="bl-error" role="alert">
+              {error}
+            </p>
           )}
-        </span>
-      </div>
-      {!isTeam && single && <LinkNudge ws={ws} clientId={single} />}
-      {error && (
-        <p className="bl-error" role="alert">
-          {error}
-        </p>
+          {earlier.length > 0 && (
+            <details className="bl-wk-earlier">
+              <summary>
+                Last 7 days ({earlier.reduce((a, d) => a + d.posts.length, 0)} {earlier.reduce((a, d) => a + d.posts.length, 0) === 1 ? 'post' : 'posts'})
+              </summary>
+              {earlier.map(dayBlock)}
+            </details>
+          )}
+          {ahead.map(dayBlock)}
+          {all.length > 0 && ahead.length === 0 && <p className="bl-small">Nothing else is scheduled. Plan the next week with Bil.</p>}
+        </>
       )}
+      {footer}
+    </main>
+  );
+}
 
-      <ol className="bl-deck-track" ref={track} onScroll={onScroll} aria-label="Posts in order. Swipe for the next one.">
-        {all.map((t) => {
-          const s = statusWord(t);
-          const c = clock(t.start, t.tz);
-          const past = t.end.getTime() <= now;
-          const mediaId = typeof t.post.post.mediaId === 'string' ? t.post.post.mediaId : null;
-          const text = t.post.status === 'blocked' ? String(t.post.post.idea ?? 'Waiting on a detail') : String(t.post.post.draft ?? t.post.post.hook ?? '');
-          const canApprove = !past && t.post.status === 'ok' && (t.post.review === 'pending' || t.post.review === 'changes');
-          const steps = followUps(t.post.post);
-          return (
-            <li key={key(t)} className={`bl-glass-card bl-postcard${past ? ' is-past' : ''}`} aria-label={`${c.time} ${c.half}, ${t.day}`}>
-              <div className="bl-slot-row">
-                <b className="num">
-                  {t.day === today ? 'Today' : dayParts(t.day).name} {c.time} {c.half}
-                </b>
-                <span className={`bl-chip-ink${s.cls ? ` ${s.cls}` : ''}`}>{past && t.post.review !== 'posted' && t.post.review !== 'not_posted' ? 'Past' : t.post.review === 'not_posted' ? 'Not posted' : s.word}</span>
-              </div>
-              <div className="bl-postcard-media">
-                {mediaId ? <PostMedia id={mediaId} size="hero" /> : wantsMedia(t.post.post.mediaIdea) ? <ShotFrame idea={String(t.post.post.mediaIdea)} size="hero" /> : null}
-              </div>
-              {t.post.status === 'ok' && Boolean((t.post.post.compliance as { adultContent?: unknown } | undefined)?.adultContent) && (
-                <p className="bl-adult-note">18+ · Mark the media sensitive when you post. Never use it as a profile photo or header.</p>
-              )}
-              <p className="bl-postcard-text">{text}</p>
-              {!past && steps.length > 0 && (
-                <div className="bl-postcard-after">
-                  <span className="bl-label">After you post</span>
-                  {steps.map((x, i) => (
-                    <span key={i}>{x}</span>
-                  ))}
-                </div>
-              )}
-              {past ? (
-                <PastPost t={t} ws={ws} />
-              ) : (
-                <div className="bl-row-actions">
-                  {canApprove && (
-                    <>
-                      <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
-                        Change
-                      </button>
-                      <button type="button" className="bl-btn" disabled={busy !== null} onClick={() => void approve([t])}>
-                        {busy === key(t) ? 'Approving' : 'Approve'}
-                      </button>
-                    </>
-                  )}
-                  {t.post.status === 'blocked' && <DetailBox campaignId={t.campaign.id} slot={t.post.slot} post={t.post.post} onDone={ws.refresh} />}
-                  {!canApprove && t.post.status !== 'blocked' && (
-                    <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
-                      Open the post
-                    </button>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-
-      {all.length > 1 && (
-        <div className="bl-deck-nav">
-          <button type="button" className="bl-ghost bl-round" aria-label="Previous post" disabled={index === 0} onClick={() => goTo(index - 1)}>
-            &#8249;
-          </button>
-          <span className="bl-small num" aria-live="polite">
-            {index + 1} / {all.length}
-          </span>
-          <button type="button" className="bl-ghost bl-round" aria-label="Next post" disabled={index >= all.length - 1} onClick={() => goTo(index + 1)}>
-            &#8250;
-          </button>
+/** One post opened in the list: media, text, what to do after, and the actions. */
+function PostBody({ t, ws, go, past, busy, onApprove }: { t: Timed; ws: ScreenProps['ws']; go: (p: string) => void; past: boolean; busy: string | null; onApprove: (t: Timed) => void }) {
+  const mediaId = typeof t.post.post.mediaId === 'string' ? t.post.post.mediaId : null;
+  const text = t.post.status === 'blocked' ? String(t.post.post.idea ?? 'Waiting on a detail') : String(t.post.post.draft ?? t.post.post.hook ?? '');
+  const canApprove = !past && t.post.status === 'ok' && (t.post.review === 'pending' || t.post.review === 'changes');
+  const steps = followUps(t.post.post);
+  const k = `${t.campaign.id}:${t.post.slot}`;
+  return (
+    <div className="bl-wk-body">
+      {(mediaId || wantsMedia(t.post.post.mediaIdea)) && (
+        <div className="bl-postcard-media">{mediaId ? <PostMedia id={mediaId} size="hero" /> : <ShotFrame idea={String(t.post.post.mediaIdea)} size="hero" />}</div>
+      )}
+      {t.post.status === 'ok' && Boolean((t.post.post.compliance as { adultContent?: unknown } | undefined)?.adultContent) && (
+        <p className="bl-adult-note">18+ · Mark the media sensitive when you post. Never use it as a profile photo or header.</p>
+      )}
+      <p className="bl-postcard-text">{text}</p>
+      {!past && steps.length > 0 && (
+        <div className="bl-postcard-after">
+          <span className="bl-label">After you post</span>
+          {steps.map((x, i) => (
+            <span key={i}>{x}</span>
+          ))}
         </div>
       )}
-
-      </>
+      {past ? (
+        <PastPost t={t} ws={ws} />
+      ) : (
+        <div className="bl-row-actions">
+          {canApprove && (
+            <>
+              <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
+                Change
+              </button>
+              <button type="button" className="bl-btn" disabled={busy !== null} onClick={() => onApprove(t)}>
+                {busy === k ? 'Approving' : 'Approve'}
+              </button>
+            </>
+          )}
+          {t.post.status === 'blocked' && <DetailBox campaignId={t.campaign.id} slot={t.post.slot} post={t.post.post} onDone={ws.refresh} />}
+          {!canApprove && t.post.status !== 'blocked' && (
+            <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
+              Open in the plan
+            </button>
+          )}
+        </div>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -431,7 +442,7 @@ function markOf(t: Timed): Mark {
 const MARK_WORDS: Record<Mark, string> = { needs: 'waiting for OK', approved: 'approved', posted: 'posted', held: 'needs a detail' };
 
 /** Month view: every day of one month, with a dot per post coloured by where it stands. */
-export function MonthView({ ws, focus, isTeam, go, onDay, bar }: ScreenProps & { onDay: (day: string) => void; onDayView: () => void; bar?: React.ReactNode }) {
+export function MonthView({ ws, focus, isTeam, go, onDay, bar, footer }: ScreenProps & { onDay: (day: string) => void; onDayView: () => void; bar?: React.ReactNode; footer?: React.ReactNode }) {
   const all = useMemo(() => (ws.data ? timedPosts(ws.data, focus) : []), [ws.data, focus]);
   const tz = all[0]?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const today = todayIn(tz);
@@ -522,6 +533,7 @@ export function MonthView({ ws, focus, isTeam, go, onDay, bar }: ScreenProps & {
           Engagement desk
         </button>
       </div>
+      {footer}
     </main>
   );
 }
