@@ -23,6 +23,8 @@
 //   next_allowance { clientId }              how many of this month's next posts the client has used (free)  team, client
 //   media_fit      { requestId, clientId, goalIndex }  green, yellow or red for each tagged file against one goal (about a third of a cent, cached)  team, client
 //   goals_save     { clientId, goals }       the client's goals, saved at once from Up next (free)            team, client
+//   products_parse { requestId, clientId, text }  Bil turns a pasted list into products to check, nothing saved (about a third of a cent)  team, client
+//   products_save  { clientId, products }    the whole product list, saved at once and logged (free)          team, client
 //   resume         { campaignId }             resumes a campaign paused at the month's budget        team
 //   review_post    { campaignId, slot, decision, note? }  approve, ask for changes, mark posted (free)  team, client
 //   ways_copy      { requestId, clientId }  Kris writes bio, pinned post and reply text for the ways in (about half a cent)  team, client
@@ -101,6 +103,7 @@ import { krisChat, KrisChatRequest, waysCopy, WaysCopyRequest } from '../_shared
 import { chatChime, ChatChimeRequest, chatSend, ChatSendRequest, winLog, WinLogRequest } from '../_shared/team-chat.ts';
 import { deskChime, DeskChimeRequest, deskSend, DeskSendRequest } from '../_shared/desk.ts';
 import { goalsSave, GoalsSaveRequest, mediaFit, MediaFitRequest } from '../_shared/up-next.ts';
+import { productsParse, ProductsParseRequest, productsSave, ProductsSaveRequest } from '../_shared/products.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
 import { XConnectRequest, xConnectStart, xDisconnect, xevInbox } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
@@ -227,6 +230,10 @@ async function handle(req: Request): Promise<Response> {
       }
       case 'media_fit':
         return reply(200, await mediaFit(member, parse(MediaFitRequest, input)));
+      case 'products_parse':
+        return reply(200, await productsParse(member, parse(ProductsParseRequest, input)));
+      case 'products_save':
+        return reply(200, await productsSave(member, parse(ProductsSaveRequest, input)));
       case 'goals_save':
         return reply(200, await goalsSave(member, parse(GoalsSaveRequest, input)));
       case 'desk_send':

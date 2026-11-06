@@ -43,6 +43,8 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
   const [scoring, setScoring] = useState(false);
   const [mediaId, setMediaId] = useState<string | 'text' | null>(null);
   const [note, setNote] = useState('');
+  const [product, setProduct] = useState<string | null>(null);
+  const products: Array<{ name: string; price?: string }> = Array.isArray(client?.profile?.offers) ? (client!.profile.offers as Array<{ name: string; price?: string }>) : [];
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState('');
   const [busy, setBusy] = useState(false);
@@ -158,7 +160,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
     setBusy(true);
     setError('');
     try {
-      const r = await bil.nextPost(client.id, goalIndex, mediaId === 'text' ? null : mediaId, note.trim() || undefined);
+      const r = await bil.nextPost(client.id, goalIndex, mediaId === 'text' ? null : mediaId, note.trim() || undefined, product ?? undefined);
       setStarted(r.campaignId);
       await ws.refresh();
     } catch (e) {
@@ -315,9 +317,27 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
       </section>
 
       <section className="bl-cmd-card" aria-labelledby="upn-note">
-        <h2 id="upn-note" className="bl-section-title">
-          3. Anything Bil should know? <span className="bl-small">(optional)</span>
-        </h2>
+        <div className="bl-sched-top">
+          <h2 id="upn-note" className="bl-section-title">
+            3. Feature a product? <span className="bl-small">(optional)</span>
+          </h2>
+          <button type="button" className="bl-linkish" onClick={() => go('products')}>
+            {products.length ? 'Edit products' : 'Add products'}
+          </button>
+        </div>
+        {products.length > 0 && (
+          <div className="bl-upn-chips" role="radiogroup" aria-label="Product">
+            {products.map((p) => (
+              <button key={p.name} type="button" role="radio" aria-checked={product === p.name} className={`bl-chip-pick${product === p.name ? ' on' : ''}`} onClick={() => setProduct(product === p.name ? null : p.name)}>
+                {p.name}
+                {p.price ? ` · ${p.price}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
+        <h3 className="bl-label" style={{ margin: '6px 0 0' }}>
+          Anything Bil should know? (optional)
+        </h3>
         <textarea className="bl-input" rows={2} maxLength={240} value={note} onChange={(e) => setNote(e.target.value)} placeholder="For example: a small coffee send, playful, mention the new set" />
       </section>
 

@@ -164,6 +164,37 @@ async function xUserGet(budget: Budget, kind: string, url: URL, token: string, e
   );
 }
 
+// ---------- the client's own posts, read with their login ----------
+
+/**
+ * Their own original posts, newest first, read with their X login (X bills owned reads at
+ * $0.001 a post, a fifth of app access). For Bil's Up next; nothing is saved.
+ */
+export async function ownTimeline(clientId: string, budget: Budget, max = 50): Promise<Array<{ createdAt?: string; text: string; media: string | null; m?: Record<string, number> }>> {
+  const { data: conn } = await serviceClient().from('x_connections').select('x_user_id, status').eq('client_id', clientId).maybeSingle();
+  if (!conn || conn.status !== 'active' || !X_ID.test(String(conn.x_user_id))) throw new Error('X is not connected');
+  const token = await accessToken(clientId);
+  const n = Math.max(5, Math.min(100, max));
+  const url = new URL(`${X_API}/users/${conn.x_user_id}/tweets`);
+  url.searchParams.set('max_results', String(n));
+  url.searchParams.set('exclude', 'replies,retweets');
+  url.searchParams.set('tweet.fields', 'created_at,note_tweet,public_metrics,attachments');
+  url.searchParams.set('expansions', 'attachments.media_keys');
+  url.searchParams.set('media.fields', 'type');
+  const body = await xUserGet(budget, 'x_own_posts', url, token, X_PRICES.ownedPostRead * n, (b) => X_PRICES.ownedPostRead * (Array.isArray(b?.data) ? b.data.length : 0));
+  const types = new Map<string, string>(((body?.includes?.media ?? []) as Array<{ media_key: string; type: string }>).map((x) => [x.media_key, x.type]));
+  return ((body?.data ?? []) as any[]).map((p) => {
+    const keys: string[] = Array.isArray(p.attachments?.media_keys) ? p.attachments.media_keys : [];
+    const kinds = [...new Set(keys.map((k) => types.get(k) === 'photo' ? 'a photo' : types.get(k) ? 'a video' : 'media'))];
+    return {
+      createdAt: p.created_at,
+      text: String(typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text ?? ''),
+      media: kinds.length ? kinds.join(' and ') : null,
+      m: p.public_metrics,
+    };
+  });
+}
+
 // ---------- connect ----------
 
 export const XConnectRequest = z.object({ clientId: id });

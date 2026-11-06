@@ -217,6 +217,19 @@ export type XevInbox = {
 /** One line in a person's HQ chat. "me" is the person; the rest are the agents. */
 export type DeskMessage = { id: number; role: 'me' | 'rein' | 'bil' | 'kris' | 'xev'; body: string; turn: number | null; created_at: string };
 
+/** One thing a client sells, as every agent reads it (Nov 6, 2026). */
+export type ProductKind = 'product' | 'digital' | 'subscription' | 'service' | 'booking' | 'tip' | 'bundle' | 'other';
+export type Product = {
+  name: string;
+  kind?: ProductKind;
+  what: string;
+  price?: string;
+  forWho?: string;
+  link?: string;
+  deal?: { code?: string; note?: string; ends?: string };
+  mediaId?: string;
+};
+
 export const bil = {
   review: (campaignId: string, slot: number, decision: Decision, note?: string, postUrl?: string, changed?: boolean) =>
     call<{ review: Decision; xPostId?: string | null }>('bil', 'review_post', { campaignId, slot, decision, note, ...(postUrl ? { postUrl } : {}), ...(changed ? { changed: true } : {}) }),
@@ -228,8 +241,11 @@ export const bil = {
   winLog: (clientId: string, w: { kind: 'sale' | 'call' | 'subscriber' | 'other'; amountUsd?: number; note?: string }) =>
     call<{ messages: KrisMessage[]; costUsd: number }>('bil', 'win_log', { requestId: crypto.randomUUID(), clientId, ...w }),
   /** Bil reads the client's latest X posts and goals and writes the next post in line. */
-  nextPost: (clientId: string, goalIndex: number, mediaId: string | null, note?: string) =>
-    call<{ campaignId: string; status: string; repeated: boolean }>('bil', 'next_post', { requestId: crypto.randomUUID(), clientId, goalIndex, mediaId, ...(note ? { note } : {}) }),
+  nextPost: (clientId: string, goalIndex: number, mediaId: string | null, note?: string, product?: string) =>
+    call<{ campaignId: string; status: string; repeated: boolean }>('bil', 'next_post', { requestId: crypto.randomUUID(), clientId, goalIndex, mediaId, ...(note ? { note } : {}), ...(product ? { product } : {}) }),
+  /** Bil turns a pasted list into products to check; nothing is saved. */
+  productsParse: (clientId: string, text: string) => call<{ products: Product[]; unclear: string[]; costUsd: number }>('bil', 'products_parse', { requestId: crypto.randomUUID(), clientId, text }),
+  productsSave: (clientId: string, products: Product[]) => call<{ products: Product[]; links: Array<{ label: string; url: string }>; leftOff: string[] }>('bil', 'products_save', { clientId, products }),
   nextAllowance: (clientId: string) => call<{ used: number; allowed: number }>('bil', 'next_allowance', { clientId }),
   /** Green, yellow or red for each tagged file against one goal; cached on the server. */
   mediaFit: (clientId: string, goalIndex: number) =>

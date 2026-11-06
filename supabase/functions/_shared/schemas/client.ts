@@ -105,8 +105,12 @@ export const HumorStyle = z.enum(['warm', 'self_deprecating', 'at_ideas', 'hard_
  * and Bil can name prices and deals without inventing any. The link must be one of the
  * client's approved links; a deal code is shared only while its end date has not passed.
  */
+/** What kind of thing an offer is, so the agents talk about it the right way. */
+export const OfferKind = z.enum(['product', 'digital', 'subscription', 'service', 'booking', 'tip', 'bundle', 'other']);
+
 export const Offer = z.object({
   name: shortText(60),
+  kind: OfferKind.optional().describe('product (a physical thing), digital (a file, video or set), subscription, service, booking (a call or session), tip (a send or tribute), bundle, other.'),
   what: text(300).describe('What is included, in plain words.'),
   price: shortText(40).optional().describe('As the client writes it, e.g. "$15 a month" or "from $40".'),
   forWho: shortText(120).optional().describe('Who it suits, e.g. "first-timers" or "regulars who want more".'),
@@ -119,6 +123,8 @@ export const Offer = z.object({
     })
     .refine((d) => d.code || d.note, 'A deal needs a code or a short note')
     .optional(),
+  /** A photo or video from their Media that shows it (Nov 6, 2026). */
+  mediaId: z.string().uuid().optional(),
 });
 export type Offer = z.infer<typeof Offer>;
 
@@ -172,7 +178,7 @@ export const ClientProfileBase = z.object({
       .describe('The only links Bil and Kris may point people to.'),
     offers: z
       .array(Offer)
-      .max(8)
+      .max(30)
       .optional()
       .describe('What the client sells, one entry per offer. Kris matches visitors to these and Bil names them in posts; neither invents offers, prices or deals.'),
     readConsentAt: isoDateTime

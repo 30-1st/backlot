@@ -69,7 +69,7 @@ export async function loadRoomKit(db: SupabaseClient, clientId: string, workspac
   const links = Array.isArray(p.links) ? p.links.slice(0, 12).map((l: any) => ({ label: str(l.label, 60), url: str(l.url, 500) })).filter((l: any) => /^https:\/\//.test(l.url)) : [];
   const today = dayIn(str(p.timezone, 64));
   const offers = Array.isArray(p.offers)
-    ? p.offers.slice(0, 8).flatMap((o: any) => {
+    ? p.offers.slice(0, 20).flatMap((o: any) => {
       const name = str(o?.name, 60);
       const what = str(o?.what, 300);
       if (!name || !what) return [];

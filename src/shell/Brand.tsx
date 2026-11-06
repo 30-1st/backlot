@@ -107,7 +107,6 @@ function kitOf(p: Record<string, unknown>): Kit {
   };
 }
 
-const EMPTY_OFFER: Offer = { name: '', what: '', price: '', forWho: '', link: '', deal: { code: '', note: '', ends: '' } };
 
 /** The offer as the server stores it: blank optional fields left out. */
 function cleanOffer(o: Offer): Record<string, unknown> {
@@ -133,7 +132,7 @@ const cleanWord = (w: string) => w.replace(/\s+/g, ' ').slice(0, 40);
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
+export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
   const client = ws.data?.clients.find((c) => c.id === single);
   const saved = useMemo(() => (client ? kitOf(client.profile) : null), [client]);
   const pending = client?.pending ?? null;
@@ -172,11 +171,10 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
     links: kit.links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.label && l.url),
     offers: kit.offers.filter((o) => o.name.trim() && o.what.trim()),
   };
-  const badCode = current.offers.find((o) => o.deal.code.trim() && !/^[A-Za-z0-9_-]{3,24}$/.test(o.deal.code.trim()));
-  const halfOffer = kit.offers.find((o) => (o.name.trim() || o.what.trim()) && !(o.name.trim() && o.what.trim()));
   const badLink = current.links.find((l) => !/^https:\/\/[^\s/]+\.[^\s]+$/.test(l.url));
   const base = isTeam ? saved : startFrom!;
-  const changed = (Object.keys(current) as Array<keyof Kit>).filter((k) => !same(current[k], base[k]));
+  // Products live on their own page now (Nov 6, 2026); the brand kit never saves them.
+  const changed = (Object.keys(current) as Array<keyof Kit>).filter((k) => k !== 'offers' && !same(current[k], base[k]));
   const pendingKeys = pending ? (Object.keys(pending) as Array<keyof Kit>).filter((k) => k in LABELS && !same(pending[k], saved[k])) : [];
 
   async function save() {
@@ -238,9 +236,6 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
     const old = kit.links[i]?.url ?? '';
     set({ links: kit.links.filter((_, j) => j !== i), offers: kit.offers.map((o) => (o.link === old ? { ...o, link: '' } : o)) });
   };
-  const setOffer = (i: number, patch: Partial<Offer>) => set({ offers: kit.offers.map((o, j) => (j === i ? { ...o, ...patch } : o)) });
-  const setDeal = (i: number, patch: Partial<Deal>) => setOffer(i, { deal: { ...kit.offers[i].deal, ...patch } });
-  const linkChoices = current.links.filter((l) => /^https:\/\/[^\s/]+\.[^\s]+$/.test(l.url));
 
   const goals = kit.goals.length ? kit.goals : [{ goal: 'sales', detail: '', target: '' }];
   const setGoal = (i: number, patch: Partial<Goal>) => set({ goals: goals.map((g, j) => (j === i ? { ...g, ...patch } : g)) });
@@ -413,56 +408,14 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
         )}
       </>
     ) },
-    { id: 'offers', title: 'Offers', hint: 'What they sell. Kris points visitors to the one that fits, and Bil names them in posts. Neither makes up an offer, a price or a deal.', done: current.offers.length > 0, summary: current.offers.length ? current.offers.map((o) => o.name).join(', ') : 'None yet', body: () => (
+    { id: 'offers', title: 'Products', hint: 'What they sell, with prices, deals and a photo each. The agents name only these, exactly as written.', done: current.offers.length > 0, summary: current.offers.length ? `${current.offers.length} ${current.offers.length === 1 ? 'product' : 'products'}: ${current.offers.slice(0, 4).map((o) => o.name).join(', ')}${current.offers.length > 4 ? '…' : ''}` : 'None yet', body: () => (
       <>
-        {kit.offers.map((o, i) => (
-          <div key={i} className="bl-brand-goal bl-offer">
-            <input className="bl-input" aria-label={`Offer ${i + 1} name`} value={o.name} maxLength={60} placeholder="Name, like Monthly subscription" onChange={(e) => setOffer(i, { name: e.target.value })} />
-            <textarea className="bl-input" aria-label={`Offer ${i + 1}, what is included`} rows={2} value={o.what} maxLength={300} placeholder="What is included" onChange={(e) => setOffer(i, { what: e.target.value })} />
-            <div className="bl-brand-row">
-              <input className="bl-input" aria-label={`Offer ${i + 1} price`} value={o.price} maxLength={40} placeholder="Price, like $15 a month (optional)" onChange={(e) => setOffer(i, { price: e.target.value })} />
-              <input className="bl-input" aria-label={`Offer ${i + 1}, who it suits`} value={o.forWho} maxLength={120} placeholder="Who it suits (optional)" onChange={(e) => setOffer(i, { forWho: e.target.value })} />
-            </div>
-            <label className="bl-field">
-              <span className="bl-label">Where to get it</span>
-              <select className="bl-input" value={linkChoices.some((l) => l.url === o.link) ? o.link : ''} onChange={(e) => setOffer(i, { link: e.target.value })}>
-                <option value="">{linkChoices.length ? 'Pick one of their links' : 'Add a link above first'}</option>
-                {linkChoices.map((l) => (
-                  <option key={l.url} value={l.url}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <details className="bl-offer-deal" open={Boolean(o.deal.code || o.deal.note)}>
-              <summary>Deal or code (optional)</summary>
-              <div className="bl-brand-row">
-                <input className="bl-input" aria-label={`Offer ${i + 1} deal code`} value={o.deal.code} maxLength={24} placeholder="Code, like WELCOME20" onChange={(e) => setDeal(i, { code: e.target.value.replace(/\s/g, '') })} />
-                <input className="bl-input" aria-label={`Offer ${i + 1} deal ends`} type="date" value={o.deal.ends} onChange={(e) => setDeal(i, { ends: e.target.value })} />
-              </div>
-              <input className="bl-input" aria-label={`Offer ${i + 1} deal note`} value={o.deal.note} maxLength={80} placeholder="What it is, like 20% off the first month" onChange={(e) => setDeal(i, { note: e.target.value })} />
-              <span className="bl-small">Kris shares a code only until its end date. No end date means until you remove it.</span>
-            </details>
-            <button type="button" className="bl-linkish" onClick={() => set({ offers: kit.offers.filter((_, j) => j !== i) })}>
-              Remove
-            </button>
-          </div>
-        ))}
-        {kit.offers.length < 8 && (
-          <button type="button" className="bl-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => set({ offers: [...kit.offers, { ...EMPTY_OFFER, deal: { ...EMPTY_OFFER.deal } }] })}>
-            Add an offer
-          </button>
-        )}
-        {halfOffer && (
-          <p className="bl-small" role="status">
-            An offer needs both a name and what is included before it saves.
-          </p>
-        )}
-        {badCode && (
-          <p className="bl-error" role="alert">
-            {badCode.name}: codes use letters, numbers, - or _, 3 to 24 long.
-          </p>
-        )}
+        <p className="bl-small" style={{ margin: 0 }}>
+          Products have their own page now: add them one by one or import a whole list at once.
+        </p>
+        <button type="button" className="bl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => go('products')}>
+          Open Products
+        </button>
       </>
     ) },
     { id: 'posting', title: 'Posting', done: true, summary: `${kit.postsPerWeek} a week · ${kit.language || 'en'} · ${kit.timezone || 'time zone not set'}${kit.xPremium ? ' · X Premium' : ''}`, body: () => (
@@ -504,7 +457,7 @@ export function BrandScreen({ ws, single, isTeam }: ScreenProps) {
   ];
   const doneCount = sections.filter((x) => x.done).length;
   const saveLabel = busy ? 'Saving' : changed.length === 0 ? 'No changes' : isTeam ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Send to your team';
-  const canSave = !busy && changed.length > 0 && !badLink && !badCode;
+  const canSave = !busy && changed.length > 0 && !badLink;
 
   return (
     <main className="bl-flow bl-brand">

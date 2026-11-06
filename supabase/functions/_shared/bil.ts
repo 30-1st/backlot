@@ -1109,7 +1109,13 @@ function changedFields(edits: Record<string, unknown>): string {
 }
 
 function mergeProfile(current: unknown, edits: Record<string, unknown>) {
-  const merged = ClientProfile.safeParse({ ...(current as object), ...edits, updatedAt: new Date().toISOString() });
+  const next: Record<string, any> = { ...(current as object), ...edits, updatedAt: new Date().toISOString() };
+  // A link taken off the approved list comes off any product that pointed to it.
+  if (edits.links && Array.isArray(next.offers)) {
+    const urls = new Set((next.links ?? []).map((l: { url: string }) => l.url));
+    next.offers = next.offers.map((o: Record<string, unknown>) => (o.link && !urls.has(o.link) ? (({ link: _l, ...rest }) => rest)(o) : o));
+  }
+  const merged = ClientProfile.safeParse(next);
   if (!merged.success) throw new BilInputError(issues(merged.error));
   return merged.data;
 }
@@ -1657,6 +1663,8 @@ export const NextPostRequest = z.object({
   goalIndex: z.number().int().min(0).max(4),
   mediaId: id.nullable(),
   note: z.string().trim().max(240).optional(),
+  /** One of their products to feature, by name exactly as saved. */
+  product: z.string().trim().max(60).optional(),
 });
 const NEXT_PER_DAY = 5;
 const NEXT_PER_MONTH_CLIENT = 40;
@@ -1730,6 +1738,8 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
   const picked = kit.profile.goals[req.goalIndex];
   if (!picked) throw new BilInputError('That goal is not saved any more. Pick another.', 404);
   const goalText = goalLine(picked).slice(0, 200);
+  const product = req.product ? (kit.profile.offers ?? []).find((o) => o.name === req.product) : undefined;
+  if (req.product && !product) throw new BilInputError('That product is not saved any more. Pick another.', 404);
   const goals = [goalText];
   if (req.mediaId) {
     const { data: file } = await db.from('library_items').select('id').eq('id', req.mediaId).eq('client_id', req.clientId).eq('workspace_id', owner).is('removed_at', null).maybeSingle();
@@ -1760,7 +1770,7 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
         postType,
         pillar: 'next',
         stage: SELLING_GOALS.has(picked.goal) ? 'convert' : picked.goal === 'community' ? 'retain' : 'discover',
-        idea: `For the goal "${goalText}": ${req.note ? req.note.replace(/—/g, ', ') : req.mediaId ? 'a post built around this photo or video.' : 'a text post.'}`.slice(0, 300),
+        idea: `For the goal "${goalText}"${product ? `, featuring their product "${product.name}" exactly as their offers list has it` : ''}: ${req.note ? req.note.replace(/—/g, ', ') : req.mediaId ? 'a post built around this photo or video.' : 'a text post.'}`.slice(0, 300),
         ...(req.mediaId ? { mediaId: req.mediaId } : {}),
         goal: goalText,
       },
@@ -1800,8 +1810,28 @@ export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) 
   return { campaignId, status: 'drafting', repeated: false, at: { day: now.day, dayOffset: late ? 1 : 0, postWindow } };
 }
 
-/** Their latest original posts on X, for the next post. Read at drafting time and never saved. */
+/**
+ * Their posts on X, for the next post. Read at drafting time and never saved.
+ * Connected clients (Connect X): read deeper with their own login, which X bills at a fifth
+ * of the price, keeping up to 20 posts with media plus the 5 newest (approved Nov 6, 2026).
+ * Everyone else: the 5 newest with Backlot's app access.
+ */
 async function latestFeed(db: SupabaseClient, kit: Kit, budget: Budget): Promise<string> {
+  const line = (p: { createdAt?: string; text: string; media?: string | null; m?: Record<string, number> }) =>
+    `- ${String(p.createdAt ?? '').slice(0, 16)}${p.media ? `, with ${p.media}` : ''}: ${JSON.stringify(p.text.replace(/\s+/g, ' ').slice(0, 280))} (${p.m?.impression_count ?? 0} views, ${p.m?.like_count ?? 0} likes, ${p.m?.reply_count ?? 0} replies, ${p.m?.retweet_count ?? 0} reposts)`;
+  const { data: conn } = await db.from('x_connections').select('status').eq('client_id', kit.clientId).maybeSingle();
+  if (conn?.status === 'active') {
+    try {
+      const { ownTimeline } = await import('./x-connect.ts');
+      const posts = await ownTimeline(kit.clientId, budget, 50);
+      const withMedia = posts.filter((p) => p.media).slice(0, 20);
+      const newest = posts.filter((p) => !withMedia.includes(p)).slice(0, 5);
+      const keep = [...newest, ...withMedia].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      if (keep.length) return `(read with their X connection: ${withMedia.length} posts with media and the ${newest.length} newest others)\n${keep.map(line).join('\n')}`;
+    } catch (err) {
+      console.warn('bil: the deeper read failed, using the short one', err instanceof Error ? err.message : err);
+    }
+  }
   const userId = kit.xUserId;
   if (!userId) return '(their X user id is not saved yet, so their latest posts could not be read)';
   const url = new URL(`${X_API}/users/${userId}/tweets`);
@@ -1810,12 +1840,14 @@ async function latestFeed(db: SupabaseClient, kit: Kit, budget: Budget): Promise
   url.searchParams.set('tweet.fields', 'created_at,note_tweet,public_metrics,attachments');
   try {
     const body = await xGet(budget, 'x_client_posts', url, NEXT_FEED_POSTS * X_PRICES.postRead, (b) => (Array.isArray(b?.data) ? b.data.length : 0) * X_PRICES.postRead, `x_timeline:${userId}`);
-    const lines = (body.data ?? []).slice(0, NEXT_FEED_POSTS).map((p: any) => {
-      const t = String(typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text ?? '').replace(/\s+/g, ' ').slice(0, 280);
-      const mm = p.public_metrics ?? {};
-      const media = Array.isArray(p.attachments?.media_keys) && p.attachments.media_keys.length ? ', with media' : '';
-      return `- ${String(p.created_at ?? '').slice(0, 16)}${media}: ${JSON.stringify(t)} (${mm.impression_count ?? 0} views, ${mm.like_count ?? 0} likes, ${mm.reply_count ?? 0} replies, ${mm.retweet_count ?? 0} reposts)`;
-    });
+    const lines = (body.data ?? []).slice(0, NEXT_FEED_POSTS).map((p: any) =>
+      line({
+        createdAt: p.created_at,
+        text: String(typeof p.note_tweet?.text === 'string' && p.note_tweet.text.trim() ? p.note_tweet.text : p.text ?? ''),
+        media: Array.isArray(p.attachments?.media_keys) && p.attachments.media_keys.length ? 'media' : null,
+        m: p.public_metrics,
+      }),
+    );
     return lines.length ? lines.join('\n') : '(no recent original posts)';
   } catch (err) {
     console.warn('bil: could not read the latest posts', err instanceof Error ? err.message : err);
@@ -2808,7 +2840,8 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string) 
     // A money goal: Xev reads Bil's caption and adds tips for turning it into the sale.
     if (first?.status === 'ok' && plan.data.slots[0]?.stage === 'convert' && !first.post?.xevTips) {
       try {
-        const { tips } = await xevTips(plan.data.goal, String(first.post?.draft ?? ''));
+        const offers = (await loadKit(db, c.client_id, c.owner_id)).profile.offers ?? [];
+        const { tips } = await xevTips(plan.data.goal, String(first.post?.draft ?? ''), offers);
         if (tips.length) {
           await db.from('campaign_posts').update({ post: { ...first.post, xevTips: tips } }).eq('campaign_id', c.id).eq('slot', first.slot);
           await db.from('kris_messages').insert({ workspace_id: c.owner_id, client_id: c.client_id, role: 'xev', kind: 'note', body: `I read Bil's caption for "${plan.data.goal}". To turn it into the sale: ${tips.join(' ')}`.replace(/\s*—\s*/g, ', ').slice(0, 2000), link: 'campaigns', ref: `tips:${c.id}` });

@@ -106,6 +106,7 @@ export function HomeRooms({ me, go, needs }: { me: Me; go: (p: string) => void; 
     : [
         { key: 'posts', name: 'Your posts', path: 'today', icon: <StarDoor /> },
         { key: 'next', name: 'Up next', path: 'next', icon: <Rise /> },
+        { key: 'products', name: 'Products', path: 'products', icon: <Clapper /> },
         { key: 'play', name: 'Playground', path: 'playground', icon: <Reel /> },
       ];
   const foot = needs > 0 ? `${needs} ${needs === 1 ? 'thing needs' : 'things need'} you` : 'All caught up';

@@ -14,6 +14,7 @@ const SECTIONS: Array<{ path: string; label: string; more?: boolean }> = [
   { path: 'clients', label: 'Overview' },
   { path: 'campaigns', label: 'Schedule' },
   { path: 'library', label: 'Media' },
+  { path: 'products', label: 'Products' },
   { path: 'chat', label: 'Chat' },
   { path: 'xev', label: 'Xev' },
   { path: 'reports', label: 'Reports' },
@@ -24,7 +25,7 @@ const SECTIONS: Array<{ path: string; label: string; more?: boolean }> = [
   { path: 'desk', label: 'Desk', more: true },
   { path: 'room', label: 'Page', more: true },
 ];
-export const CLIENT_HEADS = ['clients', 'campaigns', 'library', 'chat', 'kris', 'xev', 'reports', 'brand', 'insights', 'board', 'approvals', 'desk', 'room'];
+export const CLIENT_HEADS = ['clients', 'campaigns', 'library', 'products', 'chat', 'kris', 'xev', 'reports', 'brand', 'insights', 'board', 'approvals', 'desk', 'room'];
 
 /** The menu for one client's pages, shown under the top bar while a client is picked. */
 export function ClientNav({ handle, clientId, head, go }: { handle: string; clientId: string; head: string; go: (p: string) => void }) {
