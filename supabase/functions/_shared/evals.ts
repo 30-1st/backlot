@@ -18,7 +18,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { z } from './schemas/common.ts';
 import { grokBilled, grokCost, grokEstimate, MODELS } from './models.ts';
 import { KNOWLEDGE_VERSION, privateTelemetry, xaiClient } from './grok.ts';
-import { Budget, serviceClient } from './spend.ts';
+import { Budget, serviceClient, SpendLimitError } from './spend.ts';
 import { AGENTS, type Agent, type Context, context, pickLead, speak } from './team-chat.ts';
 
 const NAME: Record<string, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev', plan: "Bil's plan" };
@@ -214,7 +214,13 @@ async function gate(db: SupabaseClient, run: Run, budget: Budget, deadline: numb
     const text = String(c.input.text ?? '');
     const lead: Agent = (AGENTS as readonly string[]).includes(c.input.lead) ? c.input.lead : await pickLead(budget, ctx, text);
     const who = c.input.role === 'client' ? `the client (@${ctx.kit.xHandle})` : 'a Backlot team member';
-    const said = await speak(budget, ctx, lead, `Answer ${who}'s new message as ${NAME[lead]}: "${text}". If they want to see or approve drafts, put up to three keys in "drafts".`, []).catch(() => null);
+    // A spending refusal is not the agent failing: stop here and continue next tick.
+    let refused = false;
+    const said = await speak(budget, ctx, lead, `Answer ${who}'s new message as ${NAME[lead]}: "${text}". If they want to see or approve drafts, put up to three keys in "drafts".`, []).catch((err) => {
+      if (err instanceof SpendLimitError) refused = true;
+      return null;
+    });
+    if (refused) return false;
     const body = said?.body ?? '';
     const rules = body ? chatRules(lead, body, [], JSON.stringify(ctx) + text) : ['No answer'];
     const verdict = body ? await judge(budget, lead, briefOf(ctx), text, body) : null;

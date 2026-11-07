@@ -138,7 +138,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
 
   if (editing) return <GoalsEditor clientId={client.id} goals={goals} onDone={async () => { await ws.refresh(); setEditing(false); setGoalIndex(null); setFits({}); }} onBack={() => setEditing(false)} />;
 
-  async function upload(list: FileList) {
+  async function upload(list: File[]) {
     if (!client) return;
     setError('');
     const added: Array<{ id: string; file: File }> = [];
@@ -221,7 +221,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
           {!done ? (
             <>
               <b>Bil and Xev are writing it.</b>
-              <span className="bl-small">About a minute. You can leave this screen; it lands first on Today and the Schedule.</span>
+              <span className="bl-small">Usually a few seconds. You can leave this screen; it lands first on Today and the Schedule.</span>
             </>
           ) : job?.status === 'failed' ? (
             <>
@@ -238,7 +238,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
             <button type="button" className="bl-btn" onClick={() => go('campaigns')}>
               See it on the Schedule
             </button>
-            <button type="button" className="bl-ghost" onClick={() => { setStarted(null); setMediaId(null); setNote(''); }}>
+            <button type="button" className="bl-ghost" onClick={() => { setStarted(null); setMediaId('auto'); setNote(''); setProduct(null); }}>
               Make another
             </button>
           </div>
@@ -301,7 +301,12 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
           <button type="button" className="bl-ghost" disabled={Boolean(uploading)} onClick={() => picker.current?.click()}>
             {uploading || 'Add photos or videos'}
           </button>
-          <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple hidden onChange={(e) => e.target.files && void upload(e.target.files)} />
+          <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" multiple hidden onChange={(e) => {
+              const picked = e.target.files ? [...e.target.files] : [];
+              if (picked.length) void upload(picked);
+              // Cleared, so the same file can be picked again.
+              e.target.value = '';
+            }} />
         </div>
         {goalIndex !== null && (
           <ul className="bl-upn-legend" aria-label="What the colors mean">

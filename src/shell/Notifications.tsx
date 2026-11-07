@@ -55,7 +55,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
       const nlabel = `@${handle(c.clientId)} · Next post`;
       if (blocked.length) items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: true, first: true, label: nlabel, title: 'The next post needs a detail', body: 'Bil wrote it from the latest posts and goals; one fact only you know is missing.', action: { label: 'Add it', path: 'campaigns', primary: true } });
       else if (pending.length) items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: true, first: true, label: nlabel, title: isTeam ? 'The next post is ready to approve' : 'Your next post is ready for your OK', body: 'Written from the latest posts and the goals. It goes out first.', action: { label: 'See it', path: 'campaigns', primary: true } });
-      else if (c.status === 'planning' || c.status === 'drafting') items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: false, first: true, label: nlabel, title: 'Bil is writing the next post', body: 'Reading the latest posts and goals. About a minute.', action: { label: 'Watch for it', path: 'campaigns', primary: false } });
+      else if (c.status === 'planning' || c.status === 'drafting') items.push({ key: `${c.id}:next`, at: c.updatedAt, needs: false, first: true, label: nlabel, title: 'Bil is writing the next post', body: 'Reading the latest posts and goals. Usually a few seconds.', action: { label: 'Watch for it', path: 'campaigns', primary: false } });
       continue;
     }
 

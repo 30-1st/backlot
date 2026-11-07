@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.1 (Nov 7, 2026): bug sweep fixes
+
+- The quality check (eval gate) had a $0.04 cap for the whole run, so after 2 or 3 test chats the rest were refused and scored "No answer". The run cap is now $0.40, and a refusal pauses the run instead of failing an agent. The false warning was re-run.
+- A team chat turn that mentions a plan no longer risks going over the turn's 4-cent cap: the plan check has its own run, and the "must answer" retry can never sink the turn.
+- Up next: "Make another" goes back to "Bil picks the best fit", the same file can be picked again after an upload, and the wait text says a few seconds.
+
 ## v0.9.0 (Nov 7, 2026): before the waitlist
 
 The first versioned release. The app, the Edge Functions and the database ship together under this tag.
