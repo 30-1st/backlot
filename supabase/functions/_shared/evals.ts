@@ -99,7 +99,7 @@ const RUBRIC: Record<string, string> = {
  * Judge the reply against what was asked (Nov 7, 2026: the judge was scoring friendly small talk
  * 1 out of 5 for not being a publicity pitch, and Kris for not talking like the client's persona).
  */
-const FAIR = `Judge the message against what was asked. Small talk ("sup", "hanging") gets a short, warm reply that may steer toward the work: that scores 4 or 5 when it does that well. A question gets a direct answer. A request gets the thing itself (the words of a post, a plan built), not a description of it; describing instead of delivering scores 2 at most. The teammate speaks TO the client as part of their team, never in the client's own persona or voice, so do not mark it down for not sounding like the client. Inventing a plan, a day, a number or a fact scores 1.`;
+const FAIR = `Judge the message against what was asked. Small talk ("sup", "hanging") gets a short, warm reply that may steer toward the work: that scores 4 or 5 when it does that well. A question (\"what would you change?\", \"why is reach low?\") gets a direct answer, and naming the changes is the answer. A request to make something (\"write it\", \"build the plan\", \"give me the line\", or yes to an offer) gets the thing itself, not a description of it; describing instead of delivering a request scores 2 at most. The teammate speaks TO the client as part of their team, never in the client's own persona or voice, so do not mark it down for not sounding like the client. Inventing a plan, a day, a number or a fact scores 1.`;
 
 const Verdict = z.object({ score: z.number().int().min(1).max(5), why: z.string().describe('One short sentence on the score.') });
 
