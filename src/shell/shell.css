@@ -3207,3 +3207,9 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-dm-list small { color: var(--ink-3); font-size: 11px; padding: 0 6px; }
 .bl-dm-replies { display: flex; flex-direction: column; gap: 8px; }
 .bl-xev-check { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.bl-credits { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+.bl-credits ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bl-credits li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bl-credits li > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bl-credits-in { display: flex; align-items: center; gap: 6px; flex: none; }
+.bl-credits-in .bl-input { width: 84px; }

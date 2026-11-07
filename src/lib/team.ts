@@ -208,6 +208,9 @@ export function useCanLookup(enabled = true): boolean {
 export type Decision = 'approved' | 'changes' | 'posted' | 'not_posted' | 'pending';
 
 /** Xev's inbox: the X connection and the open DM leads. Never any message text. */
+export type Credit = { used: number; allowed: number; extra: number; base: number; per: string };
+export type Credits = { xev: Credit; next: Credit; plans: Credit };
+
 export type XevInbox = {
   ready: boolean;
   connection: { username: string; connectedAt: string; checkedAt: string | null; nextCheckAt: string | null; status: 'active' | 'error' | 'revoked'; error: string | null } | null;
@@ -296,6 +299,10 @@ export const bil = {
     call<{ readId: string; threadId: string | null; answer: Record<string, unknown>; costUsd: number; left: number | null; chat: { messages: KrisMessage[]; turn: number | null } | null }>('bil', 'xev_read', { requestId: crypto.randomUUID(), clientId, images, ...o }),
   xevFeedback: (clientId: string, f: { readId?: string; threadId?: string; used?: boolean; outcome?: 'closed' | 'not_closed' }) => call<{ ok: boolean }>('bil', 'xev_feedback', { clientId, ...f }),
   xevGrant: (clientId: string, extra: number) => call<{ extra: number }>('bil', 'xev_grant', { clientId, extra }),
+  /** A client's credits (Xev reads, Up next posts, chat plans): used, allowed, and the executive's extra. */
+  credits: (clientId: string) => call<Credits>('bil', 'credits', { clientId }),
+  /** The executive sets a client's extra credits, until payments open. */
+  creditsGrant: (clientId: string, extra: { xev?: number; next?: number; plans?: number }) => call<Credits>('bil', 'credits_grant', { clientId, ...extra }),
   /** Starts X's sign-in for the client's own account; the app then opens the returned URL. */
   xConnect: (clientId: string) => call<{ url: string }>('bil', 'x_connect', { clientId }),
   xDisconnect: (clientId: string) => call<{ connected: false }>('bil', 'x_disconnect', { clientId }),

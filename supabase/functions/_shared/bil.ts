@@ -1670,7 +1670,6 @@ export const NextPostRequest = z.object({
   product: z.string().trim().max(60).optional(),
 });
 const NEXT_PER_DAY = 5;
-const NEXT_PER_MONTH_CLIENT = 40;
 const NEXT_FEED_POSTS = 5;
 const X_API = 'https://api.x.com/2';
 
@@ -1682,16 +1681,9 @@ function localParts(tz: string, at = new Date()): { day: string; hour: number } 
 
 /** How many next posts this client started this month, of how many. */
 export async function nextPostAllowance(clientId: string, ownerId: string) {
-  const month = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
-  const { count } = await serviceClient()
-    .from('campaigns')
-    .select('id', { count: 'exact', head: true })
-    .eq('client_id', clientId)
-    .eq('owner_id', ownerId)
-    .eq('request->>kind', 'next')
-    .eq('request->>by', 'client')
-    .gte('created_at', month);
-  return { used: count ?? 0, allowed: NEXT_PER_MONTH_CLIENT };
+  // 40 a month, plus any credits the executive granted (credits.ts).
+  const { nextAllowanceOf } = await import('./credits.ts');
+  return await nextAllowanceOf(clientId, ownerId);
 }
 
 export async function nextPost(m: Member, req: z.infer<typeof NextPostRequest>) {

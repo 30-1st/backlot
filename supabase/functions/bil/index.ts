@@ -43,6 +43,8 @@
 //   network_set / quotes_find / quote_decide the Network list (free), Find quotes now (about $0.15), quote outcomes  team, client
 //   xev_status / xev_read / xev_feedback      Xev reads up to 3 screenshots (about 1 to 3 cents; 3 free)  team, client
 //   xev_grant      { clientId, extra }       extra Xev reads, until payments open                       owner
+//   credits        { clientId }              a client's credits: Xev reads, Up next posts, chat plans, used and allowed   owner, team
+//   credits_grant  { clientId, xev?, next?, plans? }  extra credits for a client, until payments open       owner
 //   x_connect      { clientId }              starts X's sign-in to connect the client's own X account (free)  team, client
 //   x_disconnect   { clientId }              revokes at X, deletes the tokens and every lead (free)           team, client
 //   desk_send      { requestId, text }       the person's own desk chat with the four agents, over every client they may see  owner, team
@@ -110,6 +112,7 @@ import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
 import { XConnectRequest, xConnectStart, xDisconnect, xevInbox, xevLeadView, XevLeadViewRequest, xevRefresh, XevRefreshRequest } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
+import { creditsGet, creditsGrant, CreditsGrantRequest, CreditsRequest } from '../_shared/credits.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
 import { id, z } from '../_shared/schemas/common.ts';
 import { withCors } from '../_shared/cors.ts';
@@ -172,6 +175,10 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await xevRead(member, parse(XevReadRequest, input)));
       case 'xev_feedback':
         return reply(200, await xevFeedback(member, parse(XevFeedbackRequest, input)));
+      case 'credits':
+        return reply(200, await creditsGet(member, parse(CreditsRequest, input)));
+      case 'credits_grant':
+        return reply(200, await creditsGrant(member, parse(CreditsGrantRequest, input)));
       case 'xev_grant':
         return reply(200, await xevGrant(member, parse(XevGrantRequest, input)));
       case 'x_connect':

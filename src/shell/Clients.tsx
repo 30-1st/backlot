@@ -3,6 +3,7 @@ import { Checklist, setupLeft, stepsFor } from './Checklist';
 import { TeamToday } from './Notifications';
 import { timedPosts, when } from './timing';
 import type { ScreenProps } from './Shell';
+import { bil, type Credits } from '../lib/team';
 
 // Clients (reworked Nov 5, 2026): one row per client, the ones that need you first, with
 // search once there are more than 10. A row opens the client's workspace: their overview
@@ -88,7 +89,102 @@ function ClientOverview(props: ScreenProps & { clientId: string }) {
         <Checklist ws={ws.data!} client={c} isTeam go={go} onChanged={() => void ws.refresh()} />
       </details>
     ) : null;
-  return <TeamToday me={props.me} ws={ws} go={go} focus={clientId} firstSeen={null} top={setup} inClient />;
+  return (
+    <TeamToday
+      me={props.me}
+      ws={ws}
+      go={go}
+      focus={clientId}
+      firstSeen={null}
+      top={
+        <>
+          {setup}
+          <CreditsCard clientId={clientId} handle={c.handle} owner={props.me.role === 'owner'} />
+        </>
+      }
+      inClient
+    />
+  );
+}
+
+const CREDIT_ROWS: Array<{ key: keyof Credits; name: string }> = [
+  { key: 'next', name: 'Up next posts' },
+  { key: 'plans', name: 'Plans from the chat' },
+  { key: 'xev', name: 'Xev reads' },
+];
+
+/** What the client may start on their own, and the executive's extra credits until payments open. */
+function CreditsCard({ clientId, handle, owner }: { clientId: string; handle: string; owner: boolean }) {
+  const [cr, setCr] = useState<Credits | null>(null);
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    let live = true;
+    bil.credits(clientId).then((r) => live && setCr(r), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [clientId]);
+  if (!cr) return null;
+  const changed = CREDIT_ROWS.some((r) => edit[r.key] !== undefined && edit[r.key] !== '' && Number(edit[r.key]) !== cr[r.key].extra);
+
+  async function save() {
+    setBusy(true);
+    setMsg('');
+    const val = (k: keyof Credits) => (edit[k] !== undefined && edit[k] !== '' ? Math.max(0, Math.min(1000, Math.round(Number(edit[k]) || 0))) : undefined);
+    try {
+      setCr(await bil.creditsGrant(clientId, { xev: val('xev'), next: val('next'), plans: val('plans') }));
+      setEdit({});
+      setMsg('Saved.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not save that.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="bl-cmd-card bl-setup-fold">
+      <summary>Credits for @{handle}</summary>
+      <div className="bl-credits">
+        <span className="bl-small">What the client can start on their own. Your team is never limited.{owner ? ' Until payments open, add more here.' : ''}</span>
+        <ul>
+          {CREDIT_ROWS.map((r) => {
+            const x = cr[r.key];
+            return (
+              <li key={r.key}>
+                <span>
+                  <b>{r.name}</b>
+                  <span className="bl-small num">
+                    {x.used} of {x.allowed} used {x.per} · {x.base} included{x.extra ? ` + ${x.extra} extra` : ''}
+                  </span>
+                </span>
+                {owner && (
+                  <label className="bl-credits-in">
+                    <span className="bl-small">Extra</span>
+                    <input className="bl-input" type="number" min={0} max={1000} inputMode="numeric" value={edit[r.key] ?? String(x.extra)} aria-label={`Extra ${r.name}`} onChange={(e) => setEdit({ ...edit, [r.key]: e.target.value })} />
+                  </label>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {owner && (
+          <div className="bl-row-actions">
+            <button type="button" className="bl-btn" disabled={busy || !changed} onClick={() => void save()}>
+              {busy ? 'Saving' : 'Save credits'}
+            </button>
+            {msg && (
+              <span className="bl-small" role="status">
+                {msg}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </details>
+  );
 }
 
 function ClientList({ ws, go }: ScreenProps) {

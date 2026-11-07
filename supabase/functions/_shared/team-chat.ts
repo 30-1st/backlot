@@ -27,6 +27,7 @@ import { KNOWLEDGE_VERSION, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient } from './spend.ts';
 import { BilInputError, type Kit, loadKit, logApproval, requireInGoodStanding, snapshotText, startCampaign } from './bil.ts';
 import { kickWorker } from './worker-token.ts';
+import { CHAT_MARK, chatPlanAllowanceOf } from './credits.ts';
 import { cleanReply, insert, type KrisMessage, recent, waitingDrafts, type Waiting } from './kris.ts';
 import { BIL_KNOWLEDGE } from './knowledge/bil.ts';
 import { KRIS_KNOWLEDGE } from './knowledge/kris.ts';
@@ -451,9 +452,7 @@ const PlanAsk = z.object({
 });
 
 const CHAT_PLANS_CLIENT_DAY = 3;
-const CHAT_PLANS_CLIENT_MONTH = 8;
 const CHAT_PLANS_TEAM_DAY = 5;
-const CHAT_MARK = 'Built from the team chat.';
 
 async function planFromChat(m: Member, db: SupabaseClient, ctx: Context, req: z.infer<typeof ChatSendRequest>, turn: number, role: 'team' | 'client') {
   const budget = new Budget('kris', { runId: req.requestId, perCallCap: PER_CALL_CAP, clientId: req.clientId });
@@ -471,11 +470,12 @@ async function planFromChat(m: Member, db: SupabaseClient, ctx: Context, req: z.
   });
 
   const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
-  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const mine = (since: string) =>
-    db.from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', req.clientId).eq('owner_id', m.workspaceId).like('request->>notes', `${CHAT_MARK}%`).gte('created_at', since);
-  const [{ count: today }, { count: month }] = await Promise.all([mine(dayAgo), mine(monthAgo)]);
-  if (role === 'client' && (month ?? 0) >= CHAT_PLANS_CLIENT_MONTH) return say(`That is all ${CHAT_PLANS_CLIENT_MONTH} chat plans for this month. Your team can build more for you, and Up next still works.`);
+  const [{ count: today }, month] = await Promise.all([
+    db.from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', req.clientId).eq('owner_id', m.workspaceId).like('request->>notes', `${CHAT_MARK}%`).gte('created_at', dayAgo),
+    chatPlanAllowanceOf(req.clientId, m.workspaceId),
+  ]);
+  // A month of chat plans: 8, plus any credits the executive granted (credits.ts).
+  if (role === 'client' && month.used >= month.allowed) return say(`That is all ${month.allowed} chat plans for this month. Ask your Backlot team for more, and Up next still works.`);
   if ((today ?? 0) >= (role === 'client' ? CHAT_PLANS_CLIENT_DAY : CHAT_PLANS_TEAM_DAY)) return say('That is enough new plans for one day. Approve what is waiting and I will build the next one tomorrow.');
 
   try {
