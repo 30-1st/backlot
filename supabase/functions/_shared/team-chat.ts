@@ -91,7 +91,7 @@ const DM_CRAFT = `# Writing the client's DM
 - Use the facts you have: what he picked, what he asked, what he has sent. Name the specific thing he chose, never "the one you like".
 - Never tell him what he already knows about himself ("you already sent 400"). Make him feel remembered instead.
 - Fit the moment. After a quiet gap: warm and easy before any ask. A buyer who already spends is a regular: treat him like one, not like a stranger.
-- One ask per message, and only for something in their Offers or what the client said she is selling. Never invent an upsell. If you see a product worth adding, put it in product, not in the message.
+- One ask per message, and only for something in their Offers or what the client herself said she is selling. An upsell a teammate (or you) floated earlier in the chat is not an offer until the client says yes to it. Never invent an upsell. If you see a product worth adding, put it in product, not in the message, and only once: if you already suggested it in this chat, leave product empty.
 - next is the message to send now. alt is a different approach to the same moment (softer or bolder), not a reword. ifYes is what to send when he says yes or pays; ifQuiet is one light follow-up if he goes quiet for a few hours.`;
 
 // ---------- requests ----------
@@ -256,7 +256,7 @@ Lanes (lead):
 - bil: strategy. Plans and the schedule, which posts to make and when, the client's numbers and results, how X ranks posts and what makes one spread.
 - kris: publicity. Stories, takes, hooks, arcs, the words of a public post.
 - rein: trends. What is rising or dying on X right now and the opportunities out there. Lead only when that is the question.
-A follow-up like "how so?" or "and then?" goes to whoever said the thing.
+A reply to what a teammate just said ("how so?", more context, a correction, pushing back) goes to that teammate.
 
 ask:
 - dm_words: they want words to send a buyer in a DM ("what do I say", "give me the exact message", "my next few messages").
@@ -544,17 +544,23 @@ export async function answerTurn(m: Member | null, budget: Budget, ctx: Context,
       : `${who} just said "${text}". Answer in a few words, or pass if nothing is needed.`;
     const dmFollow = yesToOffer && lead === 'xev';
     const spoken = await speak(budget, ctx, lead, dmFollow ? taskFor('xev', 'dm_words', who, text) : task, [], yesToOffer, { ask: dmFollow ? 'dm_words' : 'smalltalk' });
-    return { lead, spoken, data: spoken?.dm ? { dm: spoken.dm } : null };
+    return { lead, spoken, data: spoken?.dm ? { dm: spoken.dm } : null, read: '' };
   }
 
   const plan = await planTurn(budget, ctx, text, called);
   const g = await ground(m, ctx, plan);
-  const spoken = await speak(budget, ctx, plan.lead, taskFor(plan.lead, plan.ask, who, text, called), [], true, { ask: plan.ask, grounding: g });
+  // A failed call (a timeout, a broken answer) gets one more try, so the client is never left without a reply.
+  const say = () => speak(budget, ctx, plan.lead, taskFor(plan.lead, plan.ask, who, text, called), [], true, { ask: plan.ask, grounding: g });
+  const spoken = await say().catch((err) => {
+    if (err instanceof SpendLimitError) throw err;
+    console.warn(`chat: ${plan.lead} failed once`, err instanceof Error ? err.message : err);
+    return null;
+  }) ?? await say();
   const data: Record<string, unknown> = {};
   if (spoken?.dm) data.dm = spoken.dm;
   if (spoken?.dm && g.leadId) data.leadId = g.leadId;
   if (plan.second !== 'none') data.next = { agent: plan.second, why: plan.secondWhy.slice(0, 200), ask: plan.ask, trends: plan.trends, ranking: plan.ranking.slice(0, 120) };
-  return { lead: plan.lead, spoken, data: Object.keys(data).length ? data : null };
+  return { lead: plan.lead, spoken, data: Object.keys(data).length ? data : null, read: [g.ranking, g.thread].filter(Boolean).join('\n') };
 }
 
 /** The one teammate the plan named adds their point, seeing the lead's answer. Once per turn. */

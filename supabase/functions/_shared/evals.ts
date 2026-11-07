@@ -237,6 +237,7 @@ async function gate(db: SupabaseClient, run: Run, budget: Budget, deadline: numb
     let refused = false;
     const turn = await answerTurn(null, budget, ctx, text, who).catch((err) => {
       if (err instanceof SpendLimitError) refused = true;
+      else console.error('eval: the turn failed', err instanceof Error ? err.message : err);
       return null;
     });
     if (refused) return false;
@@ -244,7 +245,7 @@ async function gate(db: SupabaseClient, run: Run, budget: Budget, deadline: numb
     const dm = turn?.spoken?.dm;
     const body = turn?.spoken ? `${turn.spoken.body}${dm ? `\nThe DM to send: ${dm.next}${dm.alt ? `\nOr: ${dm.alt}` : ''}` : ''}` : '';
     const wrongLane = c.input.expectLead && c.input.expectLead !== lead ? [`${NAME[lead]} answered; this was ${NAME[c.input.expectLead] ?? c.input.expectLead}'s job`] : [];
-    const rules = body ? [...wrongLane, ...chatRules(lead, turn!.spoken!.body, [], JSON.stringify(ctx) + text)] : ['No answer'];
+    const rules = body ? [...wrongLane, ...chatRules(lead, turn!.spoken!.body, [], JSON.stringify(ctx) + text + (turn!.read ?? ''))] : ['No answer'];
     const verdict = body ? await judge(budget, lead, briefOf(ctx), text, body, typeof c.input.expect === 'string' ? c.input.expect : undefined) : null;
     await saveScore(db, { run_id: run.id, case_id: c.id, agent: lead, label: `@${ctx.kit.xHandle}, ${NAME[lead]}: "${text.slice(0, 80)}"`, rule_fails: rules, judge_score: verdict?.score ?? null, judge_why: verdict?.why ?? null, output: body });
     done.add(c.id);
