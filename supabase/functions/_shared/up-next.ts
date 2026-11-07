@@ -15,7 +15,7 @@ import { Goal } from './schemas/client.ts';
 import { AGENT_MODELS, grokBilled, grokCost, grokEstimate } from './models.ts';
 import { privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient } from './spend.ts';
-import { BilInputError, loadKit, logApproval } from './bil.ts';
+import { BilInputError, type Kit, loadKit, logApproval } from './bil.ts';
 import { type Member, requireClientAccess } from './workspace.ts';
 import { XEV_KNOWLEDGE } from './knowledge/xev.ts';
 
@@ -76,11 +76,17 @@ const FitAnswer = z.object({
 /** Scores the client's tagged files against one goal. Cached per file and goal; untagged files are left gray. */
 export async function mediaFit(m: Member, req: z.infer<typeof MediaFitRequest>) {
   requireClientAccess(m, req.clientId);
-  const db = serviceClient();
   const { kit, goals } = await clientGoals(req.clientId, m.workspaceId);
   const goal = goals[req.goalIndex];
   if (!goal) throw new BilInputError('That goal is not saved any more. Pick another.', 404);
-  const line = goalLine(goal);
+  return await scoreFiles(kit, m.workspaceId, goalLine(goal), req.requestId);
+}
+
+/** Scores the client's tagged files against one goal line, cached per file and goal. */
+export async function scoreFiles(kit: Kit, ownerId: string, line: string, requestId: string) {
+  const db = serviceClient();
+  const req = { clientId: kit.clientId, requestId };
+  const m = { workspaceId: ownerId };
   const goalKey = await sha(`${req.clientId}|${line}`);
 
   const { data: files } = await db

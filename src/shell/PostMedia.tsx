@@ -13,6 +13,12 @@ export function useFile(id: string | null): File | 'gone' | null {
   const [file, setFile] = useState<File | 'gone' | null>(id ? cache.get(id) ?? null : null);
   useEffect(() => {
     if (!id || !supabase) return;
+    // Already fetched this visit: no new requests (grids of many files stay light).
+    const have = cache.get(id);
+    if (have) {
+      setFile(have);
+      return;
+    }
     let alive = true;
     void (async () => {
       const { data } = await supabase!.from('library_items').select('path, kind, mime, removed_at').eq('id', id).maybeSingle();
@@ -42,9 +48,9 @@ export function PostMedia({ id, size = 'full', saveAs }: { id: string; size?: 'f
   const frame = (
     <div className={`bl-pm ${size}`}>
       {file.kind === 'video' ? (
-        <video src={`${file.url}#t=0.1`} controls={size !== 'thumb'} muted={size === 'thumb'} playsInline preload="metadata" />
+        <video src={`${file.url}#t=0.1`} controls={size !== 'thumb'} muted={size === 'thumb'} playsInline preload={size === 'thumb' ? 'none' : 'metadata'} />
       ) : (
-        <img src={file.url} alt="The photo for this post" />
+        <img src={file.url} alt="The photo for this post" loading="lazy" decoding="async" />
       )}
     </div>
   );

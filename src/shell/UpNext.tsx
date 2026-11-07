@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bil } from '../lib/team';
-import { addFile, listLibrary, refuse, smallCopy, type LibraryItem } from '../lib/clientMedia';
+import { addFile, BASE_TAGS, listLibrary, refuse, setTags, smallCopy, type LibraryItem } from '../lib/clientMedia';
 import { PostMedia } from './PostMedia';
 import { isNextPost } from './Notifications';
 import type { ScreenProps } from './Shell';
@@ -41,9 +41,11 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
   const [files, setFiles] = useState<LibraryItem[] | null>(null);
   const [fits, setFits] = useState<Record<string, Fit>>({});
   const [scoring, setScoring] = useState(false);
-  const [mediaId, setMediaId] = useState<string | 'text' | null>(null);
+  const [mediaId, setMediaId] = useState<string | 'auto' | null>('auto');
   const [note, setNote] = useState('');
   const [product, setProduct] = useState<string | null>(null);
+  const [tagNow, setTagNow] = useState<string[]>([]);
+  const [tagPick, setTagPick] = useState<Set<string>>(new Set());
   const products: Array<{ name: string; price?: string }> = Array.isArray(client?.profile?.offers) ? (client!.profile.offers as Array<{ name: string; price?: string }>) : [];
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState('');
@@ -80,7 +82,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
   useEffect(() => {
     setGoalIndex(null);
     setFits({});
-    setMediaId(null);
+    setMediaId('auto');
     setStarted(null);
     void loadFiles();
     if (client && !isTeam) bil.nextAllowance(client.id).then((a) => setAllowance(typeof a?.allowed === 'number' ? a : null), () => setAllowance(null));
@@ -138,7 +140,12 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
         setError(e instanceof Error ? e.message : 'Upload failed.');
       }
     }
-    // Bil tags new files from a small copy made here (not for adult accounts: tag those by hand in Media).
+    // Bil tags new files from a small copy made here. Adult accounts' pictures are never sent to
+    // the model, so the client taps a few words instead, right here.
+    if (adult && added.length) {
+      setTagNow(added.map((a) => a.id));
+      setTagPick(new Set());
+    }
     if (!adult) {
       for (const a of added) {
         setUploading('Bil is tagging it');
@@ -155,12 +162,25 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
     if (goalIndex !== null) await score(goalIndex);
   }
 
+  async function saveQuickTags() {
+    const tags = [...tagPick];
+    if (!tags.length) return;
+    try {
+      for (const id of tagNow) await setTags(id, tags, null);
+      setTagNow([]);
+      await loadFiles();
+      if (goalIndex !== null) await score(goalIndex);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the tags.');
+    }
+  }
+
   async function write() {
     if (!client || goalIndex === null || !mediaId) return;
     setBusy(true);
     setError('');
     try {
-      const r = await bil.nextPost(client.id, goalIndex, mediaId === 'text' ? null : mediaId, note.trim() || undefined, product ?? undefined);
+      const r = await bil.nextPost(client.id, goalIndex, mediaId === 'auto' ? null : mediaId, note.trim() || undefined, product ?? undefined);
       setStarted(r.campaignId);
       await ws.refresh();
     } catch (e) {
@@ -171,7 +191,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
   }
 
   const live = (files ?? []).slice().sort((a, b) => rank(fits[a.id]) - rank(fits[b.id]));
-  const chosen = mediaId && mediaId !== 'text' ? live.find((f) => f.id === mediaId) : null;
+  const chosen = mediaId && mediaId !== 'auto' ? live.find((f) => f.id === mediaId) : null;
   const writingNow = ws.data.campaigns.some((c) => c.clientId === client.id && isNextPost(c) && (c.status === 'planning' || c.status === 'drafting'));
 
   if (started) {
@@ -282,9 +302,9 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
         ) : (
           <ul className="bl-upn-grid" aria-label="Your Media">
             <li>
-              <button type="button" className={`bl-upn-tile text${mediaId === 'text' ? ' on' : ''}`} aria-pressed={mediaId === 'text'} onClick={() => setMediaId('text')}>
-                <span>Aa</span>
-                <small>Text only</small>
+              <button type="button" className={`bl-upn-tile text${mediaId === 'auto' ? ' on' : ''}`} aria-pressed={mediaId === 'auto'} onClick={() => setMediaId('auto')}>
+                <span>B</span>
+                <small>Bil picks the best fit</small>
               </button>
             </li>
             {live.map((f) => {
@@ -308,6 +328,38 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
             })}
           </ul>
         )}
+        {tagNow.length > 0 && (
+          <div className="bl-upn-tagnow" role="group" aria-label="What is in the new file">
+            <b>What's in {tagNow.length === 1 ? 'it' : 'them'}?</b>
+            <span className="bl-small">Tap a few so Bil can score and use {tagNow.length === 1 ? 'it' : 'them'}. Adult files are never shown to the AI, so your words are what Bil reads.</span>
+            <div className="bl-upn-chips">
+              {BASE_TAGS.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`bl-chip-pick${tagPick.has(t) ? ' on' : ''}`}
+                  aria-pressed={tagPick.has(t)}
+                  onClick={() => {
+                    const n = new Set(tagPick);
+                    if (n.has(t)) n.delete(t);
+                    else n.add(t);
+                    setTagPick(n);
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="bl-row-actions">
+              <button type="button" className="bl-btn" disabled={tagPick.size === 0} onClick={() => void saveQuickTags()}>
+                Save tags
+              </button>
+              <button type="button" className="bl-ghost" onClick={() => setTagNow([])}>
+                Later
+              </button>
+            </div>
+          </div>
+        )}
         {chosen && (
           <p className="bl-small" style={{ margin: 0 }}>
             {chosen.tags.length ? chosen.tags.join(', ') : 'Not tagged yet'}
@@ -319,7 +371,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
       <section className="bl-cmd-card" aria-labelledby="upn-note">
         <div className="bl-sched-top">
           <h2 id="upn-note" className="bl-section-title">
-            3. Feature a product? <span className="bl-small">(optional)</span>
+            3. Feature a product?{" "}<span className="bl-small">(optional)</span>
           </h2>
           <button type="button" className="bl-linkish" onClick={() => go('products')}>
             {products.length ? 'Edit products' : 'Add products'}
@@ -348,7 +400,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
       )}
       <div className="bl-row-actions">
         <button type="button" className="bl-btn" disabled={busy || writingNow || goalIndex === null || !mediaId} onClick={() => void write()}>
-          {busy || writingNow ? 'Bil is writing' : 'Write it with Bil and Xev'}
+          {busy ? 'Bil and Xev are writing it' : writingNow ? 'Bil is writing' : 'Write it with Bil and Xev'}
         </button>
         <span className="bl-small">{isTeam ? 'About 5 to 15 cents.' : 'Included in your plan.'}</span>
       </div>

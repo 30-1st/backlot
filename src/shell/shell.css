@@ -3188,3 +3188,5 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-chip-pick { padding: 8px 12px; min-height: 40px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: inherit; font: 600 13px/1.2 var(--ui); cursor: pointer; }
 .bl-chip-pick.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .bl-chip-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.bl-upn-tagnow { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--accent-edge); background: var(--accent-wash); }
