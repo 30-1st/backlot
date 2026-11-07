@@ -288,7 +288,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
           <ul className="bl-upn-legend" aria-label="What the colors mean">
             {LEGEND.map(([k, w]) => (
               <li key={k}>
-                <span className={`bl-fit ${k}`} aria-hidden="true" />
+                <span className={`bl-fitdot ${k}`} aria-hidden="true" />
                 {w}
               </li>
             ))}
@@ -320,7 +320,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
                     onClick={() => setMediaId(f.id)}
                   >
                     <PostMedia id={f.id} size="thumb" />
-                    {k && <span className={`bl-fit ${k}`} aria-hidden="true" />}
+                    {k && <span className={`bl-fitdot ${k}`} aria-hidden="true" />}
                     {f.kind === 'video' && <small className="bl-upn-vid">Video</small>}
                   </button>
                 </li>
