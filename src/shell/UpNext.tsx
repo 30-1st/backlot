@@ -34,7 +34,6 @@ const LEGEND: Array<[Fit['fit'] | 'none', string]> = [
 export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps & { pick?: (id: string) => void }) {
   const clients = ws.data?.clients ?? [];
   const client = clients.find((c) => c.id === single) ?? null;
-  const adult = Boolean((client?.profile as { adultContent?: boolean } | undefined)?.adultContent);
   const goals: Goal[] = Array.isArray(client?.profile?.goals) ? (client!.profile.goals as Goal[]) : [];
 
   const [goalIndex, setGoalIndex] = useState<number | null>(null);
@@ -46,6 +45,9 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
   const [product, setProduct] = useState<string | null>(null);
   const [tagNow, setTagNow] = useState<string[]>([]);
   const [tagPick, setTagPick] = useState<Set<string>>(new Set());
+  const [tagExtra, setTagExtra] = useState<string[]>([]);
+  const [tagNote, setTagNote] = useState('');
+  const [tagSaid, setTagSaid] = useState('');
   const products: Array<{ name: string; price?: string }> = Array.isArray(client?.profile?.offers) ? (client!.profile.offers as Array<{ name: string; price?: string }>) : [];
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState('');
@@ -140,21 +142,25 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
         setError(e instanceof Error ? e.message : 'Upload failed.');
       }
     }
-    // Bil tags new files from a small copy made here. Adult accounts' pictures are never sent to
-    // the model, so the client taps a few words instead, right here.
-    if (adult && added.length) {
-      setTagNow(added.map((a) => a.id));
-      setTagPick(new Set());
-    }
-    if (!adult) {
-      for (const a of added) {
-        setUploading('Bil is tagging it');
-        try {
-          await bil.mediaTag(client.id, a.id, await smallCopy({ file: a.file }, a.file.type.startsWith('video/') ? 'video' : 'photo'));
-        } catch {
-          // Untagged files stay gray; they can be tagged in Media.
-        }
+    // Bil tags every new file from a small copy made here (adult accounts too, once confirmed
+    // adults only). Then his tags show right here so the client can fix them or add their words.
+    const got = new Set<string>();
+    let said = '';
+    for (const a of added) {
+      setUploading('Bil is tagging it');
+      try {
+        const r = await bil.mediaTag(client.id, a.id, await smallCopy({ file: a.file }, a.file.type.startsWith('video/') ? 'video' : 'photo'));
+        r.tags.forEach((t) => got.add(t));
+      } catch (e) {
+        said = e instanceof Error ? e.message : 'Bil could not tag it.';
       }
+    }
+    if (added.length) {
+      setTagNow(added.map((a) => a.id));
+      setTagPick(got);
+      setTagExtra([...got].filter((t) => !BASE_TAGS.includes(t)));
+      setTagNote('');
+      setTagSaid(got.size ? '' : said);
     }
     setUploading('');
     await loadFiles();
@@ -166,7 +172,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
     const tags = [...tagPick];
     if (!tags.length) return;
     try {
-      for (const id of tagNow) await setTags(id, tags, null);
+      for (const id of tagNow) await setTags(id, tags, tagNote.trim() ? tagNote.trim().slice(0, 200) : null);
       setTagNow([]);
       await loadFiles();
       if (goalIndex !== null) await score(goalIndex);
@@ -330,10 +336,10 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
         )}
         {tagNow.length > 0 && (
           <div className="bl-upn-tagnow" role="group" aria-label="What is in the new file">
-            <b>What's in {tagNow.length === 1 ? 'it' : 'them'}?</b>
-            <span className="bl-small">Tap a few so Bil can score and use {tagNow.length === 1 ? 'it' : 'them'}. Adult files are never shown to the AI, so your words are what Bil reads.</span>
+            <b>{tagPick.size && !tagSaid ? 'Bil tagged it. Anything wrong?' : `What's in ${tagNow.length === 1 ? 'it' : 'them'}?`}</b>
+            <span className="bl-small">{tagSaid || 'Tap to add or remove tags. Bil writes and scores from these and your words below.'}</span>
             <div className="bl-upn-chips">
-              {BASE_TAGS.map((t) => (
+              {[...tagExtra, ...BASE_TAGS].map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -350,6 +356,8 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
                 </button>
               ))}
             </div>
+            <label className="bl-small" htmlFor="upn-tagnote">In your words (optional)</label>
+            <input id="upn-tagnote" className="bl-input" maxLength={200} value={tagNote} placeholder="e.g. new red set, shot at golden hour" onChange={(e) => setTagNote(e.target.value)} />
             <div className="bl-row-actions">
               <button type="button" className="bl-btn" disabled={tagPick.size === 0} onClick={() => void saveQuickTags()}>
                 Save tags

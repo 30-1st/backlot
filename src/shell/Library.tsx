@@ -25,7 +25,7 @@ import { PageHead } from './Present';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
 // campaign around what is really here. Bil tags new files himself from a small copy made on
-// the phone (non-adult clients, Nov 4, 2026); adult accounts tag by hand and he never sees them.
+// the phone (Nov 4, 2026); adult accounts too once confirmed adults only (Nov 6, 2026).
 
 type Upload = { key: string; name: string; state: 'waiting' | 'sending' | 'done' | 'failed'; error?: string };
 
@@ -71,8 +71,10 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [showRemoved, setShowRemoved] = useState(false);
   const [order, setOrder] = useState<'high' | 'low'>('high');
   const [tagging, setTagging] = useState<{ done: number; total: number; failed: number } | null>(null);
-  // Bil tags media himself for non-adult clients (Nov 4, 2026); adult accounts tag by hand.
-  const adult = Boolean((client?.profile as { adultContent?: boolean } | undefined)?.adultContent);
+  // Bil tags media himself (Nov 4, 2026); adult accounts too once confirmed adults only (Nov 6, 2026).
+  const prof = client?.profile as { adultContent?: boolean; adultsOnlyConfirmed?: boolean } | undefined;
+  // Adult accounts are tagged by Bil only once the team confirmed the account is adults only.
+  const canTag = !prof?.adultContent || Boolean(prof?.adultsOnlyConfirmed);
   const [ranked, setRanked] = useState<{ tags: Array<{ tag: string; posts: number; score: number }>; measured: number } | null>(null);
   const [niche, setNiche] = useState<Array<{ pattern: string; why: string }> | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -173,7 +175,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
 
   /** Bil tags these one at a time from small copies made here; a person's tags always win. */
   async function bilTag(list: Array<{ id: string; kind: 'photo' | 'video'; file?: File; url?: string }>) {
-    if (!clientId || adult || !list.length) return;
+    if (!clientId || !canTag || !list.length) return;
     let done = 0;
     let failed = 0;
     setTagging({ done, total: list.length, failed });
@@ -209,7 +211,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
       }
     }
     await load();
-    if (adult) setFilter('untagged');
+    if (!canTag) setFilter('untagged');
     else await bilTag(added);
   }
 
@@ -258,8 +260,8 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
           </>
         }
         how={
-          adult ? (
-            <p>Bil plans posts around the tags on each photo and video. On adult accounts he never sees the pictures, so tag each file by hand.</p>
+          !canTag ? (
+            <p>Bil plans posts around the tags on each photo and video. This adult account is not confirmed adults only yet, so tag each file by hand until it is.</p>
           ) : (
             <p>Bil tags new photos and videos himself from a small copy, and plans posts around the tags. You can change any tag; yours always win.</p>
           )
@@ -338,7 +340,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
             {untagged.length > 0 && (
               <li>
                 {untagged.length} {plural(untagged.length, 'file needs', 'files need')} tags. Bil can only plan around tagged files.{' '}
-                {!adult && !tagging && (
+                {canTag && !tagging && (
                   <button type="button" className="bl-linkish" onClick={() => void bilTag(untagged.map((i) => ({ id: i.id, kind: i.kind, url: urls[i.path] })))}>
                     Let Bil tag {untagged.length === 1 ? 'it' : 'them'}
                   </button>
