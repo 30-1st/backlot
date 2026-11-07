@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** The release from package.json, set at build time (vite.config.ts). */
+declare const __BACKLOT_VERSION__: string;

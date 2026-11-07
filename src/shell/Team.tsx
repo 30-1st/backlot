@@ -80,6 +80,9 @@ export function TeamScreen({
           </button>
         </div>
       </section>
+      <p className="bl-small num" style={{ textAlign: 'center', margin: 0 }}>
+        Backlot v{__BACKLOT_VERSION__}
+      </p>
     </main>
   );
 }
