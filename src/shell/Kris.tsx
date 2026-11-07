@@ -63,7 +63,8 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
       if (!prev) return fresh;
       const seen = new Set(prev.map((x) => x.id));
       const add = fresh.filter((x) => !seen.has(x.id));
-      return add.length ? [...prev, ...add].sort((a, b) => a.id - b.id) : prev;
+      // Saved messages in order; one still sending stays at the bottom.
+      return add.length ? [...[...prev, ...add].filter((x) => x.id >= 0).sort((a, b) => a.id - b.id), ...prev.filter((x) => x.id < 0)] : prev;
     });
     if (p.data) setPrefs({ plain: Boolean(p.data.plain), quietFrom: Number(p.data.quiet_from), quietTo: Number(p.data.quiet_to) });
   }, [client]);

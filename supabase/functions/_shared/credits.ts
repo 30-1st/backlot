@@ -33,10 +33,10 @@ export async function nextAllowanceOf(clientId: string, ownerId: string) {
   return { used: count ?? 0, allowed: NEXT_PER_MONTH + x.next };
 }
 
-/** Plans built from the team chat this month (anyone's ask), and how many the client may ask for. */
+/** Plans the client asked for in the team chat this month (their team's asks do not count), and how many they may ask for. */
 export async function chatPlanAllowanceOf(clientId: string, ownerId: string) {
   const [{ count }, x] = await Promise.all([
-    serviceClient().from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('owner_id', ownerId).like('request->>notes', `${CHAT_MARK}%`).gte('created_at', monthStart()),
+    serviceClient().from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('owner_id', ownerId).like('request->>notes', `${CHAT_MARK} By client.%`).gte('created_at', monthStart()),
     extras(clientId, ownerId),
   ]);
   return { used: count ?? 0, allowed: CHAT_PLANS_PER_MONTH + x.plans };

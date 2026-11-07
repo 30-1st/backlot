@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { team, type People, type Person } from '../lib/team';
 import { ChangePassword } from './ChangePassword';
 import { Rings } from './icons';
@@ -109,7 +109,7 @@ function TeamPanel({ isOwner, clientStages, onStage }: { isOwner: boolean; clien
     void load();
   }, []);
 
-  const open = data?.clients.filter((c) => !c.hasLogin) ?? [];
+  const open = useMemo(() => data?.clients.filter((c) => !c.hasLogin) ?? [], [data]);
   useEffect(() => {
     if (kind === 'client' && !open.some((c) => c.clientId === clientId)) setClientId(open[0]?.clientId ?? '');
   }, [kind, open, clientId]);

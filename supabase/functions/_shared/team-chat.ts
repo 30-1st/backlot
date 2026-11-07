@@ -293,36 +293,42 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
     }
   }
 
+  // A team member talking to the client (they @ the client): the agents stay out of it
+  // unless one of them is named too.
+  const toClient = new RegExp(`@(client|${ctx.kit.xHandle.replace(/[^A-Za-z0-9_]/g, '')})\\b`, 'i').test(req.text);
+  const toTeam = !(role === 'team' && toClient && !tagged);
+
   // "Can we get this in a 2 day plan, Bil?": Bil builds the posts from this conversation.
   const lastBil = [...ctx.history].reverse().find((h) => h.role === 'bil' && h.id !== mine.id);
   const yesToBuild = YES.test(req.text.trim()) && !!lastBil && /want me to build/i.test(lastBil.body) && ctx.history[ctx.history.length - 1]?.id === lastBil.id;
-  if ((!tagged || tagged === 'bil') && (PLAN_ASK.test(req.text) || yesToBuild)) {
+  if (toTeam && (!tagged || tagged === 'bil') && (PLAN_ASK.test(req.text) || yesToBuild)) {
     const built = await planFromChat(m, db, ctx, req, mine.id, role);
     if (built) return { messages: [mine, built.msg].filter(Boolean), turn: mine.id, lead: 'bil' as Agent, chime: false, costUsd: built.costUsd };
   }
 
   // "@Bil write my next post": Bil points to Up next, where the client picks the goal and the
   // photo or video. He never writes one without their pick.
-  if ((!tagged || tagged === 'bil') && NEXT_POST.test(req.text)) {
+  if (toTeam && (!tagged || tagged === 'bil') && NEXT_POST.test(req.text)) {
     const said = "Let's do it. Open Up next, pick the goal and the photo or video you want, and I'll write it with Xev. It goes first on your Schedule.";
     const his = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'bil', kind: 'chat', body: said, link: 'next', turn: mine.id });
     return { messages: [mine, his].filter(Boolean), turn: mine.id, lead: 'bil' as Agent, chime: false, costUsd: 0 };
   }
 
   const named = req.text.match(MENTION)?.[1]?.toLowerCase() as Agent | undefined;
-  // A team member talking to the client (they @ the client): the agents stay out of it
-  // unless one of them is named too.
-  const toClient = new RegExp(`@(client|${ctx.kit.xHandle.replace(/[^A-Za-z0-9_]/g, '')})\\b`, 'i').test(req.text);
-  if (role === 'team' && toClient && !named) return { messages: [mine], turn: mine.id, lead: null, chime: false, costUsd: 0 };
+  if (!toTeam) return { messages: [mine], turn: mine.id, lead: null, chime: false, costUsd: 0 };
 
   const budget = new Budget('kris', { runId: req.requestId, perCallCap: PER_CALL_CAP, clientId: req.clientId });
   const lastAgent = [...ctx.history].reverse().find((h) => (AGENTS as readonly string[]).includes(h.role))?.role as Agent | undefined;
   const ack = ACK.test(req.text.trim());
-  const lead: Agent = named ?? (ack && lastAgent ? lastAgent : await pickLead(budget, ctx, req.text));
+  // A name without the @ ("Kris are you there?") still picks who answers.
+  const called = req.text.match(/\b(rein|bil|kris|xev)\b/i)?.[1]?.toLowerCase() as Agent | undefined;
+  const lastSaidAny = [...ctx.history].reverse().find((h) => (AGENTS as readonly string[]).includes(h.role));
+  const shortYes = !ack && YES.test(req.text.trim()) && req.text.trim().length <= 80 && !!lastSaidAny && /\?\s*$/.test(lastSaidAny.body);
+  const lead: Agent = named ?? (shortYes ? (called ?? lastAgent!) : ack && lastAgent ? lastAgent : called ?? (await pickLead(budget, ctx, req.text)));
   const who = role === 'client' ? `the client (@${ctx.kit.xHandle})` : 'a Backlot team member';
   // A "yes" to something an agent just offered ("Want the opening line?") gets the thing itself.
-  const lastSaid = [...ctx.history].reverse().find((h) => h.role === lastAgent)?.body ?? '';
-  const yesToOffer = ack && YES.test(req.text.trim()) && /\?\s*$/.test(lastSaid);
+  const lastSaid = [...ctx.history].reverse().find((h) => h.role === lead)?.body ?? '';
+  const yesToOffer = ((ack && YES.test(req.text.trim())) || shortYes) && /\?\s*$/.test(lastSaid);
   const task = yesToOffer
     ? `${who} just said "${req.text}" to what you asked: "${lastSaid.slice(0, 300)}". Deliver it now, in full: if you offered words (a line, a hook, a post, an arc), write the actual words in their voice, ready to post. Do not ask again.`
     : ack
@@ -334,8 +340,8 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
     messages: [mine, theirs].filter(Boolean),
     turn: mine.id,
     lead,
-    // Short acknowledgements and named questions get one voice; open ones may get chime-ins.
-    chime: Boolean(theirs) && !ack && !named,
+    // Short acknowledgements, a yes to an offer and named questions get one voice; open ones may get chime-ins.
+    chime: Boolean(theirs) && !ack && !named && !yesToOffer,
     costUsd: Math.round(budget.spentUsd * 1e4) / 1e4,
   };
 }
@@ -499,7 +505,7 @@ async function planFromChat(m: Member, db: SupabaseClient, ctx: Context, req: z.
       video: false,
       reward: 'none',
       rolling: false,
-      notes: `${CHAT_MARK} Title: ${cleanReply(ask.title).slice(0, 50)}. Build exactly what the team and client agreed in the chat: ${cleanReply(ask.brief).slice(0, 860)}`.slice(0, 1000),
+      notes: `${CHAT_MARK} By ${role}. Title: ${cleanReply(ask.title).slice(0, 50)}. Build exactly what the team and client agreed in the chat: ${cleanReply(ask.brief).slice(0, 860)}`.slice(0, 1000),
     });
     if (!started.repeated) (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(kickWorker());
     await logApproval(db, { workspaceId: m.workspaceId, clientId: req.clientId, kind: 'campaign', decision: 'saved', campaignId: started.campaignId, subject: `Started from the chat: ${goal.slice(0, 80)}`, actor: m }).catch(() => undefined);

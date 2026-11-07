@@ -46,7 +46,7 @@ const STATE_TTL_MS = 10 * 60_000;
 const FIRST_LOOKBACK_MS = 3 * 86_400_000;
 const EVENTS_PER_CHECK = 20;
 const LEAD_EVENTS = 20;
-/** Per run: one DM read (up to 20 events) plus one light triage call. Matches spend scope "inbox". */
+/** Per call: one page of DMs (up to 20 events) or one light triage call. A run (a check or a refresh) is capped at $0.75 by spend scope "inbox". */
 const RUN_CAP = 0.25;
 const MAX_TRIAGE = 8;
 const INBOX_MODEL = AGENT_MODELS.xev;

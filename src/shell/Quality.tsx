@@ -22,7 +22,10 @@ export function QualityScreen({ me }: ScreenProps) {
 
   const load = useCallback(async () => {
     try {
-      setQ(await team.quality());
+      const r = await team.quality();
+      // An answer in the wrong shape shows as an error instead of breaking the screen.
+      if (!r || !Array.isArray(r.runs) || !r.spend) throw new Error('Quality came back incomplete. Try again in a minute.');
+      setQ(r);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load Quality.');
@@ -116,13 +119,13 @@ export function QualityScreen({ me }: ScreenProps) {
             <h2 id="q-agents" className="bl-section-title">
               Daily scores by agent
             </h2>
-            {Object.keys(q.trend).length === 0 ? (
+            {Object.keys(q.trend ?? {}).length === 0 ? (
               <p className="bl-small" style={{ margin: 0 }}>
                 The first daily sample runs within the hour and scores the last day&rsquo;s replies.
               </p>
             ) : (
               <div className="bl-q-agents">
-                {Object.entries(q.trend).map(([agent, days]) => {
+                {Object.entries(q.trend ?? {}).map(([agent, days]) => {
                   const last = days[days.length - 1];
                   return (
                     <div key={agent} className="bl-q-agent">
@@ -187,7 +190,7 @@ export function QualityScreen({ me }: ScreenProps) {
             {q.spend && (
               <p className="bl-p" style={{ margin: 0 }}>
                 ${q.spend.used.toFixed(2)} of ${q.spend.cap.toFixed(0)} this month.{' '}
-                {Object.entries(q.spend.byAgent)
+                {Object.entries(q.spend?.byAgent ?? {})
                   .sort((a, b) => b[1] - a[1])
                   .map(([a, v]) => `${a} $${Number(v).toFixed(2)}`)
                   .join(' · ')}
