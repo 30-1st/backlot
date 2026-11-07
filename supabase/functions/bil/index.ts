@@ -49,6 +49,7 @@
 //   desk_chime     { requestId, turn }       up to two teammates add to a desk turn, once                       owner, team
 //   xev_inbox      { clientId }              the connection and Xev's open DM leads (free)                    team, client
 //                  (Xev offers her take on a lead in the team chat; a yes there runs it, see chat_send)
+//   xev_refresh    { clientId }              Check messages now: the last 30 minutes of DMs and requests, once per 2 min     team, client
 //   xev_lead_view  { clientId, leadId }      one lead's DM conversation read live from X for the chat panel, never saved   team, client
 
 import {
@@ -106,7 +107,7 @@ import { deskChime, DeskChimeRequest, deskSend, DeskSendRequest } from '../_shar
 import { goalsSave, GoalsSaveRequest, mediaFit, MediaFitRequest } from '../_shared/up-next.ts';
 import { productsParse, ProductsParseRequest, productsSave, ProductsSaveRequest } from '../_shared/products.ts';
 import { mediaTag, MediaTagRequest } from '../_shared/media-tag.ts';
-import { XConnectRequest, xConnectStart, xDisconnect, xevInbox, xevLeadView, XevLeadViewRequest } from '../_shared/x-connect.ts';
+import { XConnectRequest, xConnectStart, xDisconnect, xevInbox, xevLeadView, XevLeadViewRequest, xevRefresh, XevRefreshRequest } from '../_shared/x-connect.ts';
 import { serviceClient, SpendLimitError } from '../_shared/spend.ts';
 import { kickWorker } from '../_shared/worker-token.ts';
 import { AccessError, memberOf, requireClientAccess, requireOwnPassword, requireTeam } from '../_shared/workspace.ts';
@@ -179,6 +180,8 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await xDisconnect(member, parse(XConnectRequest, input)));
       case 'xev_inbox':
         return reply(200, await xevInbox(member, parse(XConnectRequest, input)));
+      case 'xev_refresh':
+        return reply(200, await xevRefresh(member, parse(XevRefreshRequest, input)));
       case 'xev_lead_view':
         return reply(200, await xevLeadView(member, parse(XevLeadViewRequest, input)));
       case 'network_set':

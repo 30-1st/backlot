@@ -3206,3 +3206,4 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-dm-list li.you p { background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 6px; }
 .bl-dm-list small { color: var(--ink-3); font-size: 11px; padding: 0 6px; }
 .bl-dm-replies { display: flex; flex-direction: column; gap: 8px; }
+.bl-xev-check { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }

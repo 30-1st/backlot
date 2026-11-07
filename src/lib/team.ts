@@ -300,6 +300,8 @@ export const bil = {
   xConnect: (clientId: string) => call<{ url: string }>('bil', 'x_connect', { clientId }),
   xDisconnect: (clientId: string) => call<{ connected: false }>('bil', 'x_disconnect', { clientId }),
   xevInbox: (clientId: string) => call<XevInbox>('bil', 'xev_inbox', { clientId }),
+  /** Check messages now: the last 30 minutes of DMs and message requests. Once every 2 minutes. */
+  xevRefresh: (clientId: string) => call<{ raised: number; scanned: number; costUsd: number; waitSeconds: number }>('bil', 'xev_refresh', { clientId }),
   /** One DM conversation Xev flagged, read live from X for the chat panel. Never saved. */
   xevLeadView: (clientId: string, leadId: string) =>
     call<{ openUrl: string; messages: Array<{ you: boolean; text: string; at: string | null }> }>('bil', 'xev_lead_view', { clientId, leadId }),

@@ -132,6 +132,8 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
   const [copied, setCopied] = useState<number | null>(null);
   const [extra, setExtra] = useState('');
   const [inbox, setInbox] = useState<XevInbox | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState('');
   const [consent, setConsent] = useState(false);
   const [outcome] = useState(() => {
     const word = window.location.hash.split('.')[1] ?? '';
@@ -234,6 +236,25 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
     }
   }
 
+  async function checkNow() {
+    if (!client) return;
+    setChecking(true);
+    setChecked('');
+    try {
+      const r = await bil.xevRefresh(client.id);
+      if (r.waitSeconds) setChecked(`I just looked. Try again in ${r.waitSeconds < 60 ? `${r.waitSeconds} seconds` : `${Math.ceil(r.waitSeconds / 60)} minutes`}.`);
+      else {
+        const read = r.scanned ? `${r.scanned} ${r.scanned === 1 ? 'message' : 'messages'} in the last 30 minutes` : 'nothing new in the last 30 minutes';
+        setChecked(r.raised ? `Checked ${read}. ${r.raised === 1 ? 'Someone sounds ready' : `${r.raised} people sound ready`}: I told you in the chat.` : `Checked ${read}, requests included. No one ready to buy yet.`);
+        setInbox(await bil.xevInbox(client.id).catch(() => inbox));
+      }
+    } catch (e) {
+      setChecked(e instanceof Error ? e.message : 'Could not check just now.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
   const stageIndex = result ? STAGES.findIndex((s) => s.key === result.answer.stage) : -1;
   const canRead = shots.length > 0 && ok && !busy && (status?.unlimited || (status?.left ?? 0) > 0);
 
@@ -261,9 +282,19 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
           </h2>
           {inbox.connection?.status === 'active' ? (
             <>
-              <span className="bl-small">
-                Connected as @{inbox.connection.username} · last look {ago(inbox.connection.checkedAt)} · next {until(inbox.connection.nextCheckAt)}
-              </span>
+              <div className="bl-xev-check">
+                <span className="bl-small">
+                  Connected as @{inbox.connection.username} · last look {ago(inbox.connection.checkedAt)} · next {until(inbox.connection.nextCheckAt)}
+                </span>
+                <button type="button" className="bl-ghost" disabled={checking} onClick={() => void checkNow()}>
+                  {checking ? 'Checking' : 'Check messages now'}
+                </button>
+              </div>
+              {checked && (
+                <p className="bl-small" role="status" style={{ margin: 0 }}>
+                  {checked}
+                </p>
+              )}
               <p className="bl-small" style={{ margin: 0 }}>
                 Xev looks after each post goes up, more often when it&rsquo;s taking off. When someone sounds ready she tells you in the chat; say yes there and she gives you her take.
               </p>
