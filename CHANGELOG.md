@@ -12,4 +12,14 @@ The first versioned release. The app, the Edge Functions and the database ship t
 - **Credits:** the executive grants extra Up next posts, chat plans and Xev reads per client.
 - **HQ:** the executive and each team member get their own chat with the four agents.
 - **Look and feel:** one quiet progress line wherever something loads; the team view rebuilt (Today, Schedule, Clients).
-- **Database:** 79 migrations, the last one recording this release on the public schema.
+- **Database:** 81 migrations; the repo and the database list the same versions.
+
+### v0.9.0 bug sweep (same night)
+
+- A team member talking to the client no longer triggers Bil's plan or next-post shortcuts.
+- A short yes ("Yeah that would be nice Kris") gets what an agent offered; a bare agent name picks who answers.
+- Client chat-plan credits count only the client's own asks.
+- Check messages now could stop after one page on a busy inbox; the run cap is now $0.75.
+- A message still sending stays at the bottom when the chat refreshes.
+- The Quality screen shows an error instead of breaking on an incomplete answer.
+- Migrations: 34 older files renamed to the versions the database recorded, 3 hand-run migrations recorded, and the missing payments file added, so the repo and the database match (81 and 81).
