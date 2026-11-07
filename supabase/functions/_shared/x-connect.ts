@@ -357,7 +357,7 @@ export async function xevInbox(m: Member, req: z.infer<typeof XConnectRequest>) 
       summary: l.summary,
       status: l.status,
       lastAt: l.last_at,
-      openUrl: CONVO_ID.test(l.conversation_id) ? `https://x.com/messages/${l.conversation_id}` : null,
+      openUrl: CONVO_ID.test(l.conversation_id) ? openUrlOf(l.conversation_id) : null,
     })),
   };
 }
@@ -385,12 +385,13 @@ export async function pendingTake(clientId: string, beforeId: number): Promise<s
   return leadId;
 }
 
-/**
- * The client said yes: fetch the conversation live, Xev reads it, and her answer goes into the
- * chat as a plain message. Returns Xev's words, or a plain reason she could not.
- */
-export async function xevTake(m: Member, clientId: string, leadId: string, requestId: string): Promise<string> {
-  requireClientAccess(m, clientId);
+/** Where a DM conversation opens on X. */
+const openUrlOf = (conversationId: string) => `https://x.com/messages/${conversationId}`;
+
+type Convo = { lead: { id: string; conversation_id: string; intent: string; thread_id: string | null }; messages: Array<{ you: boolean; text: string; at: string | null }> };
+
+/** One lead's conversation, read live from X with the client's own login. Never saved. */
+async function readConvo(m: Member, clientId: string, leadId: string, requestId: string): Promise<Convo | string> {
   const db = serviceClient();
   const [{ data: lead }, { data: conn }] = await Promise.all([
     db.from('xev_leads').select('id, conversation_id, intent, thread_id').eq('id', leadId).eq('client_id', clientId).eq('workspace_id', m.workspaceId).maybeSingle(),
@@ -399,9 +400,6 @@ export async function xevTake(m: Member, clientId: string, leadId: string, reque
   if (!lead) return "That one's gone from my list (leads clear after 30 days).";
   if (!conn || conn.status !== 'active') return 'I lost the X connection. Connect X again on my page and I will look.';
   if (!CONVO_ID.test(lead.conversation_id)) return "I couldn't find that conversation.";
-  const left = await xevReadsLeft(m, clientId);
-  if (left !== null && left <= 0) return "I'm out of reads for you. Ask your Backlot team for more and I'm on it.";
-
   let token: string;
   try {
     token = await accessToken(clientId);
@@ -414,22 +412,52 @@ export async function xevTake(m: Member, clientId: string, leadId: string, reque
   url.searchParams.set('dm_event.fields', 'id,text,created_at,sender_id,event_type');
   const budget = new Budget('inbox', { runId: requestId, perCallCap: RUN_CAP });
   const body = await xUserGet(budget, 'x_dm_read', url, token, X_PRICES.dmEventRead * LEAD_EVENTS, (b) => X_PRICES.dmEventRead * (Array.isArray(b?.data) ? b.data.length : 0));
-  const events = (Array.isArray(body?.data) ? body.data : []) as Array<{ id: string; text?: string; sender_id?: string }>;
+  const events = (Array.isArray(body?.data) ? body.data : []) as Array<{ id: string; text?: string; sender_id?: string; created_at?: string }>;
   if (!events.length) return "X shows me nothing in that chat. It may be encrypted or deleted, so I can't read it.";
-  const transcript = events
+  const messages = events
     .slice()
     .sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1))
-    .map((e) => `${e.sender_id === conn.x_user_id ? 'You' : 'Buyer'}: ${clean(String(e.text ?? ''), 600)}`)
+    .map((e) => ({ you: e.sender_id === conn.x_user_id, text: clean(String(e.text ?? ''), 600), at: e.created_at ?? null }));
+  return { lead, messages };
+}
+
+export const XevLeadViewRequest = z.object({ clientId: id, leadId: id });
+
+/**
+ * The conversation Xev is talking about, for the panel in the chat: read live from X when the
+ * client taps "See the chat", shown once and never saved. Plus the link that opens it on X.
+ */
+export async function xevLeadView(m: Member, req: z.infer<typeof XevLeadViewRequest>) {
+  requireClientAccess(m, req.clientId);
+  const got = await readConvo(m, req.clientId, req.leadId, crypto.randomUUID());
+  if (typeof got === 'string') throw new BilInputError(got, 409);
+  return { openUrl: openUrlOf(got.lead.conversation_id), messages: got.messages.slice(-20) };
+}
+
+/**
+ * The client said yes: fetch the conversation live, Xev reads it, and her answer goes into the
+ * chat as a plain message, with her replies kept on it for the "Copy and open X" buttons.
+ */
+export async function xevTake(m: Member, clientId: string, leadId: string, requestId: string): Promise<{ text: string; replies: string[] }> {
+  requireClientAccess(m, clientId);
+  const left = await xevReadsLeft(m, clientId);
+  if (left !== null && left <= 0) return { text: "I'm out of reads for you. Ask your Backlot team for more and I'm on it.", replies: [] };
+  const got = await readConvo(m, clientId, leadId, requestId);
+  if (typeof got === 'string') return { text: got, replies: [] };
+  const lead = got.lead;
+  const transcript = got.messages
+    .map((e) => `${e.you ? 'You' : 'Buyer'}: ${e.text}`)
     .join('\n')
     .slice(-6000);
 
   // A fresh id for the read itself; the chat turn keeps the request id.
   const read = await xevRead(m, { requestId: crypto.randomUUID(), clientId, threadId: lead.thread_id ?? undefined, label: `DM lead (${lead.intent})`, chat: false }, { transcript });
-  await db.from('xev_leads').update({ status: 'seen', thread_id: read.threadId, updated_at: new Date().toISOString() }).eq('id', lead.id);
+  await serviceClient().from('xev_leads').update({ status: 'seen', thread_id: read.threadId, updated_at: new Date().toISOString() }).eq('id', lead.id);
   const a = read.answer;
-  if (a.stop) return clean(`${a.stopReason || a.coachNote} If you want a kind way out: "${a.moves[0]?.reply ?? ''}"`, 1500);
-  const moves = a.moves.slice(0, 2).map((x, i) => `${i === 0 ? 'Send' : 'Or'}: "${x.reply}"`);
-  return clean(`${a.coachNote} ${moves.join(' ')} It's in your X messages whenever you're ready.`, 1800);
+  if (a.stop) return { text: clean(`${a.stopReason || a.coachNote} If you want a kind way out: "${a.moves[0]?.reply ?? ''}"`, 1500), replies: a.moves[0]?.reply ? [clean(a.moves[0].reply, 500)] : [] };
+  const replies = a.moves.slice(0, 2).map((x) => clean(x.reply, 500)).filter(Boolean);
+  const moves = replies.map((r, i) => `${i === 0 ? 'Send' : 'Or'}: "${r}"`);
+  return { text: clean(`${a.coachNote} ${moves.join(' ')} Tap See the chat to read it with me, then pick one and I'll copy it and open X.`, 1800), replies };
 }
 
 // ---------- when to look ----------

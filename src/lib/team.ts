@@ -300,6 +300,9 @@ export const bil = {
   xConnect: (clientId: string) => call<{ url: string }>('bil', 'x_connect', { clientId }),
   xDisconnect: (clientId: string) => call<{ connected: false }>('bil', 'x_disconnect', { clientId }),
   xevInbox: (clientId: string) => call<XevInbox>('bil', 'xev_inbox', { clientId }),
+  /** One DM conversation Xev flagged, read live from X for the chat panel. Never saved. */
+  xevLeadView: (clientId: string, leadId: string) =>
+    call<{ openUrl: string; messages: Array<{ you: boolean; text: string; at: string | null }> }>('bil', 'xev_lead_view', { clientId, leadId }),
 
   networkSet: (clientId: string, change: { add?: { handle: string; kind: 'mutual' | 'viral' }; remove?: string }) => call<{ ok: boolean }>('bil', 'network_set', { clientId, ...change }),
   quotesFind: (clientId: string) => call<{ postsRead: number; drafts: number; costUsd: number; allowanceLeft: number }>('bil', 'quotes_find', { clientId, requestId: crypto.randomUUID() }),

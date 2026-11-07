@@ -281,7 +281,7 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
     const leadId = await pendingTake(req.clientId, mine.id);
     if (leadId) {
       const said = await xevTake(m, req.clientId, leadId, req.requestId);
-      const hers = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'xev', kind: 'chat', body: said.slice(0, 2000), turn: mine.id });
+      const hers = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role: 'xev', kind: 'chat', body: said.text.slice(0, 2000), turn: mine.id, data: { leadId, replies: said.replies } });
       return { messages: [mine, hers].filter(Boolean), turn: mine.id, lead: 'xev' as Agent, chime: false, costUsd: 0 };
     }
   }

@@ -3194,3 +3194,15 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-chip-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .bl-upn-tagnow { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--accent-edge); background: var(--accent-wash); }
+
+/* Xev's DM panel: the conversation she flagged, read live from X, and her replies. */
+.bl-dm-open { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; font-size: 14px; }
+.bl-dm-list { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; gap: 8px; max-height: 40dvh; overflow-y: auto; overscroll-behavior: contain; }
+.bl-dm-list li { max-width: 82%; display: flex; flex-direction: column; gap: 2px; }
+.bl-dm-list li p { margin: 0; padding: 9px 13px; border-radius: 18px; overflow-wrap: anywhere; }
+.bl-dm-list li.them { align-self: flex-start; }
+.bl-dm-list li.them p { background: var(--mist); color: var(--ink); border-bottom-left-radius: 6px; }
+.bl-dm-list li.you { align-self: flex-end; align-items: flex-end; }
+.bl-dm-list li.you p { background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 6px; }
+.bl-dm-list small { color: var(--ink-3); font-size: 11px; padding: 0 6px; }
+.bl-dm-replies { display: flex; flex-direction: column; gap: 8px; }

@@ -47,6 +47,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
   const [showPrefs, setShowPrefs] = useState(false);
   const [xevOpen, setXevOpen] = useState(false);
   const [winOpen, setWinOpen] = useState(false);
+  const [dmLead, setDmLead] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -237,6 +238,11 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
                     <span className="num"> {new Date(m.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                   </span>
                   {m.kind === 'read' && m.data ? <XevCard body={m.body} data={m.data} clientId={client.id} /> : <p className="bl-gc-bub">{m.body}</p>}
+                  {m.role === 'xev' && typeof m.data?.leadId === 'string' && (
+                    <button type="button" className="bl-ghost bl-dm-open" onClick={() => setDmLead(String(m.data!.leadId))}>
+                      <XMark /> See the chat
+                    </button>
+                  )}
                   {m.link && (
                     <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => go(m.link!)}>
                       {m.link === 'next' ? 'Open Up next' : 'Open it'}
@@ -321,6 +327,14 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
         />
       )}
 
+      {dmLead && (
+        <DmSheet
+          clientId={client.id}
+          leadId={dmLead}
+          replies={[...(msgs ?? [])].reverse().map((x) => (x.role === 'xev' && x.data?.leadId === dmLead && Array.isArray(x.data?.replies) ? (x.data.replies as unknown[]).filter((r): r is string => typeof r === 'string') : [])).find((r) => r.length) ?? []}
+          onClose={() => setDmLead(null)}
+        />
+      )}
       {xevOpen && (
         <XevSheet
           clientId={client.id}
@@ -601,5 +615,95 @@ function DraftCard({ ws, campaignId, slot }: { ws: ScreenProps['ws']; campaignId
         </p>
       )}
     </article>
+  );
+}
+
+function XMark() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.19L2 3h6.33l4.37 5.78L17.75 3Zm-1.08 16.18h1.7L7.4 4.73H5.58l11.09 14.45Z" />
+    </svg>
+  );
+}
+
+/**
+ * The DM Xev is talking about, read live from X with the client's login when they open this,
+ * shown once and never saved. Her replies sit under it: one tap copies a reply and opens the
+ * conversation on X, where the client pastes and sends it. Backlot never sends anything.
+ */
+function DmSheet({ clientId, leadId, replies, onClose }: { clientId: string; leadId: string; replies: string[]; onClose: () => void }) {
+  const [view, setView] = useState<{ openUrl: string; messages: Array<{ you: boolean; text: string; at: string | null }> } | null>(null);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState<number | null>(null);
+  const host = document.querySelector('.bl-root') ?? document.body;
+  const url = view?.openUrl ?? 'https://x.com/messages';
+
+  useEffect(() => {
+    let live = true;
+    bil
+      .xevLeadView(clientId, leadId)
+      .then((v) => live && setView(v))
+      .catch((e) => live && setError(e instanceof Error ? e.message : 'Could not read it from X.'));
+    return () => {
+      live = false;
+    };
+  }, [clientId, leadId]);
+
+  // Opened in the same tap as the copy, so phones do not block the new tab.
+  function copyAndOpen(t: string, i: number) {
+    void navigator.clipboard?.writeText(t).catch(() => undefined);
+    setCopied(i);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  return createPortal(
+    <div className="bl-sheet-back" onClick={onClose}>
+      <section className="bl-sheet bl-gc-sheet bl-dm" role="dialog" aria-modal="true" aria-labelledby="gc-dm-t" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+        <h2 id="gc-dm-t" className="bl-sheet-title">
+          The chat on X
+        </h2>
+        {!view && !error && <p className="bl-small">Reading it from X</p>}
+        {error && (
+          <p className="bl-error" role="alert">
+            {error}
+          </p>
+        )}
+        {view && (
+          <ol className="bl-dm-list" aria-label="Messages, oldest first">
+            {view.messages.map((x, i) => (
+              <li key={i} className={x.you ? 'you' : 'them'}>
+                <p>{x.text}</p>
+                {x.at && <small className="num">{new Date(x.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small>}
+              </li>
+            ))}
+          </ol>
+        )}
+        {replies.length > 0 && (
+          <div className="bl-dm-replies">
+            <span className="bl-label">Xev's replies. Pick one: it copies, and X opens to this chat to paste it.</span>
+            {replies.map((r, i) => (
+              <div key={i} className="bl-gc-move">
+                <p style={{ margin: 0 }}>{r}</p>
+                <button type="button" className="bl-btn" onClick={() => copyAndOpen(r, i)}>
+                  {copied === i ? 'Copied. Paste it in X' : 'Copy and open X'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="bl-small" style={{ margin: 0 }}>
+          Not in your inbox? X puts messages from people you don't follow under Message requests. Backlot never sends anything; you do.
+        </p>
+        <div className="bl-row-actions">
+          <button type="button" className="bl-ghost" onClick={onClose}>
+            Close
+          </button>
+          <a className="bl-btn" href={url} target="_blank" rel="noopener noreferrer">
+            Open in X
+          </a>
+        </div>
+      </section>
+    </div>,
+    host,
   );
 }
