@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.9.3 (Nov 7, 2026): agents that understand the chat, posts you can change with Bil
+
+**The team chat, rebuilt for quality** (from Khma's review of the @litax333 chat on Nov 7):
+- One small planning step decides who answers by job: DMs and selling are Xev's, posts and plans Bil's, stories Kris's, trends Rein's. One voice by default; a second teammate only when they add something different.
+- The agents now read what they need before answering: Xev's earlier reads and the replies she suggested (so she knows which nails he picked), the live DM thread when she is writing to a buyer she flagged (read from X, never saved), the client's Offers, Rein's latest trends when a plan or an upsell is on the table, and X's ranking code when someone asks how posts spread.
+- Xev writes DMs as real texts, not captions: the message to send now, a different approach, and what to send if he says yes or goes quiet, each with Copy and "Copy and open X". On the strong model.
+- They talk to the client in plain words, never the brand voice; do the thing instead of offering it; use the client's words instead of niche jargon like "tribute"; and never repeat themselves (a repeat is rewritten once).
+- They act as consultants: what the client says is a fact; if they disagree, they say why once and then do what the client decides.
+- Xev may suggest a product to sell when she sees a gap, and asks what the client sells when nothing is saved.
+- Each answer gets room to think (it was cut short before).
+
+**Posts are never locked:**
+- "Change it with Bil" on every written post: say what to change, keep the photo, let Bil pick, choose another from Media, or go without. Bil rewrites it in seconds and says what he changed and why. Up to 10 times a post.
+- Every new post carries Bil's reason for its angle and its photo or video.
+- Today, the Schedule and the chat open the exact post you tapped.
+
+**No more missed plans:** a plan Bil builds from the chat shows a progress card in the chat as he writes, and when it is done Bil posts the posts themselves in the chat to open, change or approve.
+
+**Spending (approved):** the monthly AI cap is $50 for November; a chat turn may use up to 15 cents (it was 4); the chat may use $8 per client and $25 in all each month.
+
+**Quality checks:** 8 test cases from the Nov 7 review, each saying what a good answer does; new rules for offering instead of doing, hashtags and jargon; the judge now rewards disagreeing once with a reason.
+
 ## v0.9.2 (Nov 7, 2026): stay on the newest version
 
 - An app left open (an installed app on a phone, or a tab) now notices a newer version and switches to it: when it comes back on screen, or every 5 minutes while nobody is typing. Before, a phone could keep running the code it loaded hours earlier, so tonight's chat fixes did not show on it.

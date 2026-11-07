@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { listLibrary, type LibraryItem } from '../lib/clientMedia';
 import { DIALS, riskyDials, type Dials } from '../lib/dials';
 import { bil, type Decision } from '../lib/team';
 import { PostMedia } from './PostMedia';
@@ -39,8 +40,11 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
   const [view, setView] = useState<'week' | 'month'>('week');
   const [day, setDay] = useState<string | null>(null);
   if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
-  const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
-  if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
+  // "#campaigns.<id>.<slot>" opens that exact post (Nov 7, 2026), not the first one waiting.
+  const [cid, slotPart] = (campaignId ?? '').split('.');
+  const startSlot = slotPart && /^\d{1,2}$/.test(slotPart) ? Number(slotPart) : null;
+  const campaign = cid ? ws.data.campaigns.find((c) => c.id === cid) : null;
+  if (cid && campaign) return <CampaignView key={`${campaign.id}.${startSlot ?? ''}`} {...props} campaign={campaign} startSlot={startSlot} />;
 
   // Schedule (reworked Nov 5, 2026): one screen. The live plans sit on top as bands, the
   // posts below as a week list or a month; older and discarded plans load only in History.
@@ -71,7 +75,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
           )}
         </span>
       </div>
-      {campaignId && !campaign && <p className="bl-error">That plan is not live any more. Look for it in History.</p>}
+      {cid && !campaign && <p className="bl-error">That plan is not live any more. Look for it in History.</p>}
       {live.length > 0 && <PlanBands {...props} live={live} />}
     </>
   );
@@ -246,17 +250,16 @@ function History({ ws, focus, isTeam }: ScreenProps) {
   );
 }
 
-function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Campaign }) {
+function CampaignView({ ws, go, isTeam, campaign, startSlot = null }: ScreenProps & { campaign: Campaign; startSlot?: number | null }) {
   const posts = useMemo(
     () => ws.data!.posts.filter((p) => p.campaignId === campaign.id).sort((a, b) => a.slot - b.slot),
     [ws.data, campaign.id],
   );
   const queue = posts.filter((p) => p.status === 'ok' && p.review === 'pending');
   const blocked = posts.filter((p) => p.status === 'blocked');
-  const [mode, setMode] = useState<'one' | 'all'>(queue.length ? 'one' : 'all');
-  const [openSlot, setOpenSlot] = useState<number | null>(null);
+  const [mode, setMode] = useState<'one' | 'all'>(queue.length || startSlot !== null ? 'one' : 'all');
+  const [openSlot, setOpenSlot] = useState<number | null>(startSlot);
   const [asking, setAsking] = useState(false);
-  const [note, setNote] = useState('');
   const [linking, setLinking] = useState(false);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
@@ -297,8 +300,9 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
       setAsking(false);
       setLinking(false);
       setLink('');
-      setNote('');
-      setOpenSlot(null);
+      // Next: the next post still waiting after this one, or stay on this one.
+      const after = posts.find((x) => x.slot > p.slot && x.status === 'ok' && x.review === 'pending') ?? posts.find((x) => x.slot !== p.slot && x.status === 'ok' && x.review === 'pending');
+      setOpenSlot(decision === 'approved' && after ? after.slot : p.slot);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save that.');
     } finally {
@@ -497,35 +501,23 @@ function CampaignView({ ws, go, isTeam, campaign }: ScreenProps & { campaign: Ca
         (current ? (
           <>
             <PostCard campaign={campaign} post={current} copied={copied === current.slot} onCopy={() => void copy(current)} />
-            {current.status === 'ok' && (current.review === 'pending' || current.review === 'changes') && (
-              <>
-                {asking && (
-                  <label className="bl-field">
-                    <span className="bl-label">What should change</span>
-                    <textarea
-                      className="bl-textarea"
-                      rows={2}
-                      maxLength={500}
-                      value={note}
-                      placeholder="Shorter, or use a different photo"
-                      onChange={(e) => setNote(e.target.value)}
-                    />
-                  </label>
-                )}
-                <div className="bl-grid2">
-                  <button
-                    type="button"
-                    className="bl-ghost big"
-                    disabled={busy || (asking && !note.trim())}
-                    onClick={() => (asking ? void decide(current, 'changes', note.trim()) : setAsking(true))}
-                  >
-                    {asking ? 'Send to the team' : 'Ask for a change'}
-                  </button>
-                  <button type="button" className="bl-btn big" disabled={busy} onClick={() => void decide(current, 'approved')}>
-                    Approve
-                  </button>
-                </div>
-              </>
+            {current.status === 'ok' && current.review !== 'posted' && current.review !== 'not_posted' && (
+              <ReworkBox key={`${campaign.id}.${current.slot}`} ws={ws} campaign={campaign} post={current} open={asking} onOpen={setAsking} />
+            )}
+            {current.status === 'ok' && (current.review === 'pending' || current.review === 'changes') && !asking && (
+              <div className="bl-grid2">
+                <button type="button" className="bl-ghost big" disabled={busy} onClick={() => setAsking(true)}>
+                  Change it with Bil
+                </button>
+                <button type="button" className="bl-btn big" disabled={busy} onClick={() => void decide(current, 'approved')}>
+                  Approve
+                </button>
+              </div>
+            )}
+            {current.status === 'ok' && current.review === 'approved' && !asking && (
+              <button type="button" className="bl-ghost bl-start" disabled={busy} onClick={() => setAsking(true)}>
+                Change it with Bil
+              </button>
             )}
             {(current.review === 'approved' || (current.review === 'posted' && !current.xPostId)) &&
               (linking ? (
@@ -659,14 +651,14 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
           <span>{String(post.post.engagementPlan)}</span>
         </div>
       )}
-      {why && (
+      {(typeof post.post.why === 'string' && post.post.why) || why ? (
         <div className="bl-why">
           <span className="bl-label accent" style={{ paddingTop: 2 }}>
             Why
           </span>
-          <span>{why}</span>
+          <span>{typeof post.post.why === 'string' && post.post.why ? post.post.why : why}</span>
         </div>
-      )}
+      ) : null}
       <BilsRead post={post.post} />
       {post.review === 'changes' && post.reviewNote && <div className="bl-error">Change asked: {post.reviewNote}</div>}
       <button type="button" className="bl-ghost bl-start" onClick={onCopy}>
@@ -777,5 +769,127 @@ function DialReadings({ dials }: { dials?: { readings?: Record<string, number>; 
         })}
       </ul>
     </div>
+  );
+}
+
+/**
+ * Change a written post with Bil (Nov 7, 2026): say what to change, keep the photo, let Bil
+ * pick another, choose one from Media, or go without. Bil rewrites it in seconds and says what
+ * he changed and why; it can go back and forth as often as needed (up to 10 times).
+ */
+function ReworkBox({ ws, campaign, post, open, onOpen }: { ws: ScreenProps['ws']; campaign: Campaign; post: Post; open: boolean; onOpen: (v: boolean) => void }) {
+  const [note, setNote] = useState('');
+  const [media, setMedia] = useState<'keep' | 'bil' | 'none' | string>('keep');
+  const [files, setFiles] = useState<LibraryItem[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const reworks = (Array.isArray(post.post.reworks) ? post.post.reworks : []) as Array<{ note: string; why: string; at: string }>;
+  const last = reworks[reworks.length - 1];
+  const hasMedia = typeof post.post.mediaId === 'string';
+
+  useEffect(() => {
+    if (!open || files) return;
+    listLibrary(campaign.clientId).then(
+      (f) => setFiles(f.filter((x) => !x.removedAt && x.status !== 'retired').slice(0, 24)),
+      () => setFiles([]),
+    );
+  }, [open, files, campaign.clientId]);
+
+  async function send() {
+    const t = note.trim();
+    if (t.length < 2 || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      // keep: Bil keeps the photo unless the note asks otherwise; bil: he picks; none: no media.
+      const pick = media === 'keep' || media === 'bil' ? undefined : media === 'none' ? null : media;
+      const words = media === 'bil' ? `${t} (Pick the best photo or video for it.)` : media === 'keep' && hasMedia ? `${t} (Keep the same photo or video.)` : t;
+      const r = await bil.postRework(campaign.id, post.slot, words.slice(0, 500), pick);
+      ws.patchPost(campaign.id, post.slot, { post: r.post as Post['post'], review: 'pending', reviewNote: null });
+      setNote('');
+      setMedia('keep');
+      onOpen(false);
+      void ws.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bil could not rewrite it just now.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {last && !open && (
+        <div className="bl-wash bl-rework-said">
+          <span className="bl-label accent">Bil</span>
+          <span>{last.why}</span>
+        </div>
+      )}
+      {open && (
+        <section className="bl-glass-card bl-rework" aria-label="Change this post with Bil">
+          {busy && <Working className="top" label="Bil is rewriting it" />}
+          <label className="bl-field">
+            <span className="bl-label">What should Bil change?</span>
+            <textarea className="bl-textarea" rows={3} maxLength={460} value={note} autoFocus placeholder="Warmer, shorter, lead with the bows, or a different photo" onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <span className="bl-label">Photo or video</span>
+          <div className="bl-seg bl-rework-seg" role="group" aria-label="Photo or video">
+            <button type="button" aria-pressed={media === 'keep'} onClick={() => setMedia('keep')}>
+              {hasMedia ? 'Keep this one' : 'As is'}
+            </button>
+            <button type="button" aria-pressed={media === 'bil'} onClick={() => setMedia('bil')}>
+              Bil picks
+            </button>
+            <button type="button" aria-pressed={media === 'none'} onClick={() => setMedia('none')}>
+              No media
+            </button>
+          </div>
+          {files === null ? (
+            <Working label="Loading your Media" />
+          ) : files.length > 0 ? (
+            <div className="bl-rework-files" role="group" aria-label="Or pick one from your Media">
+              {files.map((f) => (
+                <button key={f.id} type="button" className={`bl-rework-file${media === f.id ? ' on' : ''}`} aria-pressed={media === f.id} aria-label={`Use this ${f.kind}`} onClick={() => setMedia(media === f.id ? 'keep' : f.id)}>
+                  <PostMedia id={f.id} size="thumb" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {error && (
+            <p className="bl-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="bl-row-actions">
+            <button type="button" className="bl-ghost" disabled={busy} onClick={() => onOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="bl-btn" disabled={busy || note.trim().length < 2} onClick={() => void send()}>
+              {busy ? 'Rewriting' : 'Rewrite it'}
+            </button>
+          </div>
+          {reworks.length > 0 && (
+            <details className="bl-read">
+              <summary>
+                <span>Earlier changes</span>
+                <span className="bl-read-scores num">{reworks.length}</span>
+              </summary>
+              <ul className="bl-read-list">
+                {reworks.map((r, i) => (
+                  <li key={i}>
+                    <span className="bl-chip-ink">You</span>
+                    <span>
+                      {r.note.replace(/ \((Keep the same|Pick the best) photo or video( for it)?\.\)$/, '')}
+                      <br />
+                      <b>Bil:</b> {r.why}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
+      )}
+    </>
   );
 }

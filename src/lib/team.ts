@@ -280,6 +280,9 @@ export const bil = {
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),
+  /** Reworks a written post with Bil: what to change, and optionally other media (null: none). He explains what he did. */
+  postRework: (campaignId: string, slot: number, note: string, mediaId?: string | null) =>
+    call<{ campaignId: string; slot: number; post: Record<string, unknown>; why: string; spentUsd: number }>('bil', 'post_rework', { campaignId, slot, note, ...(mediaId !== undefined ? { mediaId } : {}) }),
   /** The agent bar: Bil answers and may offer one next step, which the person confirms. */
   ask: (text: string, clientId: string | null) =>
     call<{ reply: string; action: AskAction | null; costUsd: number }>('bil', 'ask', { requestId: crypto.randomUUID(), text, ...(clientId ? { clientId } : {}) }),

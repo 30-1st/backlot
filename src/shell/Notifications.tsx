@@ -83,7 +83,7 @@ function build(me: Me, ws: Workspace, focus: string | null): Item[] {
           ? `${pending.length} ${pending.length === 1 ? 'post is' : 'posts are'} ready to approve`
           : `${pending.length} ${pending.length === 1 ? 'post is' : 'posts are'} ready for your OK`,
         body: `${campaignTitle(c)}. About ${Math.max(1, Math.round(pending.length / 8))} min to review.`,
-        action: { label: 'Review posts', path: open, primary: !isTeam },
+        action: { label: 'Review posts', path: `${open}.${pending[0].slot}`, primary: !isTeam },
       });
     }
     if (isTeam && changes.length) {
@@ -417,7 +417,7 @@ function NextUp({ t, isTeam, go }: { t: Timed; isTeam: boolean; go: (p: string) 
           <span className={`bl-chip-ink${blocked ? ' bad' : ''}`}>{blocked ? 'Needs a detail' : approved ? 'Approved' : 'Waiting for OK'}</span>
           {!isTeam && !blocked && <span className="bl-chip-ink">You post it yourself</span>}
         </div>
-        <button type="button" className="bl-btn bl-wide" onClick={() => go(`campaigns.${t.campaign.id}`)}>
+        <button type="button" className="bl-btn bl-wide" onClick={() => go(`campaigns.${t.campaign.id}.${t.post.slot}`)}>
           {blocked ? 'See what is missing' : approved ? 'Open the post' : 'Review and approve'}
         </button>
       </article>

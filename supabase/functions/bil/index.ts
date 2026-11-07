@@ -78,6 +78,8 @@ import {
   ReviewPostRequest,
   FillDetailRequest,
   fillDetail,
+  PostReworkRequest,
+  postRework,
   BrandSaveRequest,
   BrandReviewRequest,
   saveBrand,
@@ -278,6 +280,8 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await reviewBrand(member, parse(BrandReviewRequest, input)));
       case 'fill_detail':
         return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
+      case 'post_rework':
+        return reply(200, await postRework(member, parse(PostReworkRequest, input)));
       default:
         return reply(400, { error: 'Unknown action. Use lookup, onboard, learn, report, desk, ask, approve_voice, estimate, campaign, resume, review_post, fill_detail, kris, brand_save, brand_review, approve_all, discard, restore or ways_copy.' });
     }

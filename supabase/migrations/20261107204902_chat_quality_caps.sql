@@ -1,0 +1,5 @@
+-- Nov 7, 2026, approved by Khma: the agents get room to think, and the month gets room for clients.
+update private.spend_limits set cap_usd = 50, note = 'All agents together, per calendar month (UTC). Raised from $20 to $50 for November 2026 at Khma''s request (Nov 7, 2026); then $25 per paying client, checked monthly.' where scope = 'month';
+update private.spend_limits set cap_usd = 0.15, note = 'One team chat turn: the planning call, the answer (a DM on the strong model reserves about 5 cents) and one rewrite if it repeated itself. Raised from $0.04 on Nov 7, 2026, when the chat was rebuilt for quality.' where scope = 'kris';
+update private.spend_limits set cap_usd = 8, note = 'Kris and the team chat, per client, per calendar month (UTC). Raised from $3 on Nov 7, 2026 with the chat rebuild (about 3 cents a turn).' where scope = 'kris_client';
+update private.spend_limits set cap_usd = 25, note = 'Kris and the team chat for all clients together, per calendar month (UTC). Raised from $10 on Nov 7, 2026.' where scope = 'kris_month';

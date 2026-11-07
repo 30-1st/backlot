@@ -412,8 +412,8 @@ function PostBody({ t, ws, go, past, busy, onApprove }: { t: Timed; ws: ScreenPr
         <div className="bl-row-actions">
           {canApprove && (
             <>
-              <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
-                Change
+              <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}.${t.post.slot}`)}>
+                Change it with Bil
               </button>
               <button type="button" className="bl-btn" disabled={busy !== null} onClick={() => onApprove(t)}>
                 {busy === k ? 'Approving' : 'Approve'}
@@ -422,7 +422,7 @@ function PostBody({ t, ws, go, past, busy, onApprove }: { t: Timed; ws: ScreenPr
           )}
           {t.post.status === 'blocked' && <DetailBox campaignId={t.campaign.id} slot={t.post.slot} post={t.post.post} onDone={ws.refresh} />}
           {!canApprove && t.post.status !== 'blocked' && (
-            <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}`)}>
+            <button type="button" className="bl-ghost" onClick={() => go(`campaigns.${t.campaign.id}.${t.post.slot}`)}>
               Open in the plan
             </button>
           )}

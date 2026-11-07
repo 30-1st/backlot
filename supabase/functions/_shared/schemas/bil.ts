@@ -135,6 +135,10 @@ export const CampaignPost = z.object({
   mediaIdea: shortText(400).optional().describe('A description only. Agents never make images of real people.'),
   mediaId: id.optional().describe('The client\'s own Library file this post uses, matched by its tags.'),
   engagementPlan: shortText(400).optional().describe('What the client does by hand after posting, e.g. reply to early comments.'),
+  /** Bil's reasons, to the client: why this angle and this photo or video (Nov 7, 2026). */
+  why: shortText(400).optional(),
+  /** Each time the client reworked this post with Bil: what they asked and what he said back. */
+  reworks: z.array(z.object({ note: shortText(500), why: shortText(600), at: z.string().max(40) })).max(12).optional(),
   algorithm: AlgorithmScore,
   voice: VoiceCheck,
   compliance: ComplianceFlags,

@@ -7,6 +7,8 @@ import type { Post } from './data';
 import type { ScreenProps } from './Shell';
 import { BlurEditor, STAGES, type Shot } from './Xev';
 import { Working } from './Working';
+import { PostMedia } from './PostMedia';
+import { campaignTitle } from './Notifications';
 
 // The team chat (approved Nov 3, 2026): one group chat per client, shared by the client,
 // their human team and all four agents. It grew out of Kris's chat and keeps its table, so
@@ -242,18 +244,20 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
                     <span className="num"> {new Date(m.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                   </span>
                   {m.kind === 'read' && m.data ? <XevCard body={m.body} data={m.data} clientId={client.id} /> : <p className="bl-gc-bub">{m.body}</p>}
+                  {m.role === 'xev' && typeof m.data?.dm === 'object' && m.data.dm !== null && <DmDraftCard dm={m.data.dm as DmDraft} onSee={typeof m.data.leadId === 'string' ? () => setDmLead(String(m.data!.leadId)) : undefined} />}
+                  {typeof m.data?.building === 'string' && <BuildCard ws={ws} campaignId={m.data.building} go={go} />}
                   {m.role === 'xev' && typeof m.data?.leadId === 'string' && (
                     <button type="button" className="bl-ghost bl-dm-open" onClick={() => setDmLead(String(m.data!.leadId))}>
                       <XMark /> See the chat
                     </button>
                   )}
-                  {m.link && (
+                  {m.link && typeof m.data?.building !== 'string' && (
                     <button type="button" className="bl-linkish" style={{ alignSelf: 'flex-start' }} onClick={() => go(m.link!)}>
                       {m.link === 'next' ? 'Open Up next' : 'Open it'}
                     </button>
                   )}
                   {m.cards?.map((c) => (
-                    <DraftCard key={`${c.campaignId}.${c.slot}`} ws={ws} campaignId={c.campaignId} slot={c.slot} />
+                    <DraftCard key={`${c.campaignId}.${c.slot}`} ws={ws} campaignId={c.campaignId} slot={c.slot} go={go} />
                   ))}
                 </div>
               </li>
@@ -554,23 +558,19 @@ function XevSheet({ clientId, onClose, onRead }: { clientId: string; onClose: ()
 }
 
 /** A draft an agent showed, with the same Approve and Change actions as the Schedule. */
-function DraftCard({ ws, campaignId, slot }: { ws: ScreenProps['ws']; campaignId: string; slot: number }) {
+function DraftCard({ ws, campaignId, slot, go }: { ws: ScreenProps['ws']; campaignId: string; slot: number; go: (p: string) => void }) {
   const post: Post | undefined = ws.data?.posts.find((p) => p.campaignId === campaignId && p.slot === slot);
-  const [asking, setAsking] = useState(false);
-  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   if (!post) return <div className="bl-kris-card bl-small">That draft is no longer here.</div>;
 
-  async function decide(decision: 'approved' | 'changes') {
+  async function approve() {
     setBusy(true);
     setError('');
     try {
-      await bil.review(campaignId, slot, decision, decision === 'changes' ? note.trim() : undefined);
-      ws.patchPost(campaignId, slot, { review: decision, reviewNote: decision === 'changes' ? note.trim() : null });
-      setAsking(false);
-      setNote('');
+      await bil.review(campaignId, slot, 'approved');
+      ws.patchPost(campaignId, slot, { review: 'approved', reviewNote: null });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save that.');
     } finally {
@@ -579,37 +579,31 @@ function DraftCard({ ws, campaignId, slot }: { ws: ScreenProps['ws']; campaignId
   }
 
   const done = post.review === 'approved' || post.review === 'posted';
+  const mediaId = typeof post.post.mediaId === 'string' ? post.post.mediaId : null;
+  const open = () => go(`campaigns.${campaignId}.${slot}`);
   return (
     <article className="bl-kris-card">
-      <span className="bl-label">Post {slot}</span>
-      <p className="bl-post-text" style={{ margin: 0 }}>
-        {String(post.post.draft ?? '')}
-      </p>
+      <button type="button" className="bl-kris-card-open" onClick={open} aria-label={`Open post ${slot}`}>
+        {mediaId && (
+          <span className="bl-kris-card-thumb" aria-hidden="true">
+            <PostMedia id={mediaId} size="thumb" />
+          </span>
+        )}
+        <span className="bl-kris-card-words">
+          <span className="bl-label">Post {slot}</span>
+          <span className="bl-post-text">{String(post.post.draft ?? '')}</span>
+        </span>
+      </button>
+      {typeof post.post.why === 'string' && post.post.why && <span className="bl-small">Why: {post.post.why}</span>}
       {done ? (
         <span className="bl-chip">{post.review === 'posted' ? 'Posted' : 'Approved'}</span>
-      ) : asking ? (
-        <div className="bl-brand-group">
-          <label className="bl-sr" htmlFor={`chg-${campaignId}-${slot}`}>
-            What should change
-          </label>
-          <textarea id={`chg-${campaignId}-${slot}`} className="bl-input" rows={2} maxLength={500} value={note} placeholder="What should change" onChange={(e) => setNote(e.target.value)} />
-          <div className="bl-row-actions">
-            <button type="button" className="bl-ghost" disabled={busy} onClick={() => setAsking(false)}>
-              Cancel
-            </button>
-            <button type="button" className="bl-btn" disabled={busy || !note.trim()} onClick={() => void decide('changes')}>
-              Ask for changes
-            </button>
-          </div>
-        </div>
       ) : (
         <div className="bl-row-actions">
-          {post.review === 'changes' && <span className="bl-small">Changes asked</span>}
-          <button type="button" className="bl-ghost" disabled={busy} onClick={() => setAsking(true)}>
-            Change
+          <button type="button" className="bl-ghost" disabled={busy} onClick={open}>
+            Change it with Bil
           </button>
-          <button type="button" className="bl-btn" disabled={busy} onClick={() => void decide('approved')}>
-            Approve
+          <button type="button" className="bl-btn" disabled={busy} onClick={() => void approve()}>
+            {busy ? 'Approving' : 'Approve'}
           </button>
         </div>
       )}
@@ -619,6 +613,98 @@ function DraftCard({ ws, campaignId, slot }: { ws: ScreenProps['ws']; campaignId
         </p>
       )}
     </article>
+  );
+}
+
+type DmDraft = { next: string; alt?: string; ifYes?: string; ifQuiet?: string };
+
+/**
+ * The DM Xev wrote, ready to send (Nov 7, 2026): the message for now, a different approach,
+ * and what to send next either way. Copy copies; Copy and open X also opens X's messages.
+ */
+function DmDraftCard({ dm, onSee }: { dm: DmDraft; onSee?: () => void }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const rows = [
+    { key: 'next', label: 'Send this now', text: dm.next },
+    { key: 'alt', label: 'Or try this instead', text: dm.alt ?? '' },
+    { key: 'ifYes', label: 'If he says yes or pays', text: dm.ifYes ?? '' },
+    { key: 'ifQuiet', label: 'If he goes quiet for a few hours', text: dm.ifQuiet ?? '' },
+  ].filter((r) => r.text.trim());
+  function copy(key: string, t: string, open: boolean) {
+    void navigator.clipboard?.writeText(t).catch(() => undefined);
+    setCopied(key);
+    window.setTimeout(() => setCopied((k) => (k === key ? null : k)), 1800);
+    // Opened in the same tap as the copy, so phones do not block the new tab.
+    if (open) window.open('https://x.com/messages', '_blank', 'noopener,noreferrer');
+  }
+  return (
+    <div className="bl-gc-bub bl-gc-read bl-dm-draft">
+      {rows.map((r, i) => (
+        <div key={r.key} className="bl-gc-move">
+          <span className="bl-label">{r.label}</span>
+          <p style={{ margin: 0 }}>{r.text}</p>
+          <span className="bl-row-actions">
+            <button type="button" className="bl-ghost bl-gc-copy" onClick={() => copy(r.key, r.text, false)}>
+              {copied === r.key ? 'Copied' : 'Copy'}
+            </button>
+            {i === 0 && (
+              <button type="button" className="bl-btn bl-gc-copy" onClick={() => copy(r.key, r.text, true)}>
+                <XMark /> Copy and open X
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+      {onSee && (
+        <button type="button" className="bl-linkish bl-start" onClick={onSee}>
+          See the chat on X
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A plan Bil is building from the chat (Nov 7, 2026): it fills in right here, post by post,
+ * so nobody misses it, and turns into the posts themselves when it is done.
+ */
+function BuildCard({ ws, campaignId, go }: { ws: ScreenProps['ws']; campaignId: string; go: (p: string) => void }) {
+  const c = ws.data?.campaigns.find((x) => x.id === campaignId);
+  const posts = (ws.data?.posts ?? []).filter((p) => p.campaignId === campaignId).sort((a, b) => a.slot - b.slot);
+  // Keep the Schedule data fresh while he writes, so the card moves without a reload.
+  const writing = !c || c.status === 'planning' || c.status === 'drafting';
+  useEffect(() => {
+    if (!writing || c?.hold) return;
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void ws.refresh();
+    }, 6000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writing, c?.hold]);
+  if (!c) return null;
+  const total = Math.max(c.postsTotal, posts.length, 1);
+  const done = Math.min(posts.length, total);
+  if (c.status === 'failed') return <div className="bl-kris-card bl-small">This plan stopped before it finished. Ask Bil to try again.</div>;
+  const waiting = posts.filter((p) => p.status === 'ok' && p.review === 'pending').length;
+  return (
+    <div className="bl-kris-card bl-build">
+      <span className="bl-label">{campaignTitle(c)}</span>
+      {writing ? (
+        <>
+          <div className="bl-build-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="Posts written">
+            <i style={{ width: `${Math.max(6, Math.round((done / total) * 100))}%` }} />
+          </div>
+          <span className="bl-small">{c.hold ? 'Paused at this month\'s AI budget.' : c.status === 'planning' ? 'Bil is planning the posts.' : `Bil is writing post ${Math.min(done + 1, total)} of ${total}.`}</span>
+        </>
+      ) : (
+        <span className="bl-small">
+          {posts.length} {posts.length === 1 ? 'post' : 'posts'} written{waiting ? `, ${waiting} waiting for your yes` : ''}.
+        </span>
+      )}
+      <button type="button" className="bl-ghost bl-start" onClick={() => go(`campaigns.${campaignId}${posts[0] ? `.${posts.find((p) => p.status === 'ok' && p.review === 'pending')?.slot ?? posts[0].slot}` : ''}`)}>
+        {writing ? 'Watch it on the Schedule' : 'Open the posts'}
+      </button>
+    </div>
   );
 }
 

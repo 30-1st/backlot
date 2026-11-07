@@ -421,6 +421,27 @@ async function readConvo(m: Member, clientId: string, leadId: string, requestId:
   return { lead, messages };
 }
 
+/**
+ * The live thread for the team chat, when Xev is writing the client's next DM to this lead:
+ * read from X just now with the client's login, handed to Xev once, and never saved.
+ * Null when it cannot be read (no connection, encrypted chat); Xev then works from her read.
+ */
+export async function liveThread(m: Member, clientId: string, leadId: string): Promise<{ transcript: string; openUrl: string } | null> {
+  try {
+    const got = await readConvo(m, clientId, leadId, crypto.randomUUID());
+    if (typeof got === 'string') return null;
+    const transcript = got.messages
+      .slice(-20)
+      .map((e) => `${e.you ? 'Client' : 'Buyer'}${e.at ? ` (${e.at.slice(0, 16).replace('T', ' ')})` : ''}: ${e.text}`)
+      .join('\n')
+      .slice(-6000);
+    return { transcript, openUrl: openUrlOf(got.lead.conversation_id) };
+  } catch (err) {
+    console.warn('x-connect: live thread for the chat failed', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export const XevLeadViewRequest = z.object({ clientId: id, leadId: id });
 
 /**
