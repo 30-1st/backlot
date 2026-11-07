@@ -6,7 +6,14 @@ import { AGENT_NAMES, banterMounted, pickLine, useBanterOn, type Moment, type Tu
 // screen readers: they already hear the status, and do not need the jokes read aloud.
 
 const GAP_MS = 1100;
-const inChat = () => /(^#|\.)(chat|kris|hq|desk|room)(\.|$)/.test(typeof location === 'undefined' ? '' : location.hash);
+/** True on a chat screen (the team chat or HQ), where the agents already talk for real: no banter there. */
+export const inChat = () => {
+  try {
+    return Boolean(document.querySelector('main.bl-gc, .bl-hq-side')) || /(^#|\.)(chat|kris|hq|desk|room)(\.|$)/.test(location.hash);
+  } catch {
+    return false;
+  }
+};
 
 export function Banter({ moment, after = 0, className, counts = true }: { moment: Moment; after?: number; className?: string; counts?: boolean }) {
   const [on] = useBanterOn();

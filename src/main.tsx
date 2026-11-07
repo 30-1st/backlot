@@ -4,6 +4,7 @@ import App from './App';
 import { ThemeProvider } from './shell/theme';
 import { Stagehand } from './shell/Stagehand';
 import { dressSplash } from './lib/splash';
+import { keepFresh } from './lib/fresh';
 import './styles.css';
 
 dressSplash();
@@ -24,3 +25,6 @@ if (import.meta.env.PROD && import.meta.env.MODE !== 'single' && import.meta.env
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   });
 }
+
+// An app left open picks up new versions on its own (lib/fresh.ts). Hosted builds only.
+if (import.meta.env.PROD && import.meta.env.MODE !== 'single' && import.meta.env.VITE_SUPABASE_URL) keepFresh();

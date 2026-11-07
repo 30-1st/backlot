@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.2 (Nov 7, 2026): stay on the newest version
+
+- An app left open (an installed app on a phone, or a tab) now notices a newer version and switches to it: when it comes back on screen, or every 5 minutes while nobody is typing. Before, a phone could keep running the code it loaded hours earlier, so tonight's chat fixes did not show on it.
+- No banter in chats, now checked by the screen itself (the team chat and HQ) instead of the address, and the waiting chip that held the banter no longer appears there either.
+
 ## v0.9.1 (Nov 7, 2026): bug sweep fixes
 
 - The quality check (eval gate) had a $0.04 cap for the whole run, so after 2 or 3 test chats the rest were refused and scored "No answer". The run cap is now $0.40, and a refusal pauses the run instead of failing an agent. The false warning was re-run.

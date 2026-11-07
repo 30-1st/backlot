@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useActive } from '../lib/activity';
 import { useBanterMounted } from '../lib/banter';
-import { Banter } from './Banter';
+import { Banter, inChat } from './Banter';
 import { useTheme } from './theme';
 
 // The stagehand works the edges of every screen:
@@ -68,7 +68,7 @@ export function Stagehand() {
   return (
     <div className="bl-stagehand" data-theme={theme}>
       {phase !== 'idle' && <div className={`bl-progress ${phase}`} role="progressbar" aria-label="Loading" aria-busy={phase === 'run'} />}
-      {talk && phase === 'run' && others === 0 && (
+      {talk && phase === 'run' && others === 0 && !inChat() && (
         <div className="bl-wait-chip">
           <Banter moment="wait" counts={false} />
         </div>
