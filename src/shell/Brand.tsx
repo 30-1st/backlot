@@ -4,6 +4,7 @@ import { DEFAULT_DIALS, DIALS, HUMOR, anchorFor, dialClashes, riskyDials, type D
 import type { ScreenProps } from './Shell';
 import { VoiceSection } from './Insights';
 import { Fold, PageHead, StepDeck } from './Present';
+import { Working } from './Working';
 
 // The brand kit: everything Bil reads about a client before he plans or writes, on one
 // page. The team's edits go straight in. A client's edits wait for the team's OK, so
@@ -151,7 +152,7 @@ export function BrandScreen({ ws, single, isTeam, go }: ScreenProps) {
     if (startFrom) setLists({ tags: startFrom.allowedHashtags.join(', '), keys: startFrom.nicheKeywords.join(', '), rivals: startFrom.competitors.join(', ') });
   }, [startFrom]);
 
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
   if (!client || !kit || !saved) {
     return (
       <main className="bl-flow">

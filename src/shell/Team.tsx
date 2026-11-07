@@ -5,6 +5,7 @@ import { Rings } from './icons';
 import type { ThemeChoice } from './theme';
 import { useBanterOn } from '../lib/banter';
 import type { ScreenProps } from './Shell';
+import { Working } from './Working';
 
 // Team and account: invites and password resets (team only), then the person's own
 // settings: night mode, password, people and chats, sign out.
@@ -315,9 +316,7 @@ function TeamPanel({ isOwner, clientStages, onStage }: { isOwner: boolean; clien
           People
         </h2>
         {!data ? (
-          <span className="bl-small" aria-busy="true">
-            Loading
-          </span>
+          <Working label="Loading" />
         ) : (
           <ul className="bl-list">
             {data.people.map((p) => (

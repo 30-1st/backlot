@@ -170,12 +170,14 @@ const historyText = (h: KrisMessage[], handle: string) =>
 
 // ---------- calls ----------
 
+// Picking who speaks needs no thinking, so it runs with none: the answer comes back faster.
 function options(cacheKey: string) {
-  return { xai: { store: false, promptCacheKey: `${cacheKey}-${KNOWLEDGE_VERSION.chat}`, reasoningEffort: 'low' as const } };
+  const effort = cacheKey === 'chat-router' ? ('none' as const) : ('low' as const);
+  return { xai: { store: false, promptCacheKey: `${cacheKey}-${KNOWLEDGE_VERSION.chat}`, reasoningEffort: effort } };
 }
 
 export async function call<T extends z.ZodTypeAny>(budget: Budget, system: string, prompt: string, schema: T, maxOut: number, cacheKey: string, fn: string): Promise<z.infer<T> | null> {
-  const estimate = grokEstimate(MODEL, system.length + prompt.length, maxOut, 800);
+  const estimate = grokEstimate(MODEL, system.length + prompt.length, maxOut, cacheKey === 'chat-router' ? 0 : 800);
   const result = await budget.charge(
     'grok',
     Math.round(estimate * 1e6) / 1e6,
@@ -274,9 +276,9 @@ export async function chatSend(m: Member, req: z.infer<typeof ChatSendRequest>) 
   requireClientAccess(m, req.clientId);
   const db = serviceClient();
   const role = isTeam(m) ? 'team' : 'client';
-  if ((await dailyCount(db, m.userId)) >= DAILY_MESSAGES) throw new BilInputError('That is a lot of messages for one day. The team will be back tomorrow.', 429);
-
-  const ctx = await context(db, req.clientId, m.workspaceId);
+  // The day's count and everything the agents read load together.
+  const [sent, ctx] = await Promise.all([dailyCount(db, m.userId), context(db, req.clientId, m.workspaceId)]);
+  if (sent >= DAILY_MESSAGES) throw new BilInputError('That is a lot of messages for one day. The team will be back tomorrow.', 429);
   const mine = await insert(db, { workspace_id: m.workspaceId, client_id: req.clientId, role, author_id: m.userId, kind: 'chat', body: req.text });
   if (!mine) throw new Error('Could not save the message.');
 

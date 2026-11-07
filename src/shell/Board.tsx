@@ -20,6 +20,7 @@ import { campaignTitle } from './Notifications';
 import type { ScreenProps } from './Shell';
 import { NetworkList } from './Network';
 import { Fold, PageHead } from './Present';
+import { Working } from './Working';
 
 // The inspiration board: X posts and screenshots the client or team want more of, or less
 // of. A short note says what about it. Bil reads the verdict and the note before he plans,
@@ -136,9 +137,7 @@ export function BoardScreen({ me, ws, single, isTeam, go }: ScreenProps) {
       )}
 
       {items === null ? (
-        <p className="bl-small" aria-busy="true">
-          Loading the board.
-        </p>
+        <Working label="Loading the board" />
       ) : kept.length === 0 ? (
         <div className="bl-glass-card">
           <b>Nothing on the board yet</b>

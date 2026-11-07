@@ -4,6 +4,7 @@ import { addFile, BASE_TAGS, listLibrary, refuse, setTags, smallCopy, type Libra
 import { PostMedia } from './PostMedia';
 import { isNextPost } from './Notifications';
 import type { ScreenProps } from './Shell';
+import { Working } from './Working';
 
 // Up next (approved Nov 6, 2026): the client, or their team, makes the next post in three
 // picks. 1) The goal it is for, from the goals they saved (editable right here). 2) The photo
@@ -99,7 +100,19 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
     return () => window.clearInterval(t);
   }, [started, done, ws]);
 
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
+  // Bil writes in the client's approved voice, so Up next opens once the voice is approved.
+  if (client && !ws.data.voices.some((v) => v.clientId === client.id && v.approved)) {
+    return (
+      <main className="bl-flow">
+        <h1 className="bl-h1 bl-rise">Up next</h1>
+        <p className="bl-p">Up next opens once {isTeam ? `@${client.handle} approves their` : 'you approve your'} voice, so every post sounds like {isTeam ? 'them' : 'you'}.</p>
+        <button type="button" className="bl-btn bl-start" onClick={() => go('today')}>
+          {isTeam ? 'Back to Today' : 'See your setup'}
+        </button>
+      </main>
+    );
+  }
 
   if (!client) {
     return (
@@ -302,9 +315,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
           </ul>
         )}
         {files === null ? (
-          <p className="bl-small" aria-busy="true">
-            Loading Media.
-          </p>
+          <Working label="Loading Media" />
         ) : (
           <ul className="bl-upn-grid" aria-label="Your Media">
             <li>
@@ -406,6 +417,7 @@ export function UpNextScreen({ me, ws, go, single, isTeam, pick }: ScreenProps &
           {error}
         </p>
       )}
+      {(busy || writingNow) && <Working label="Bil and Xev are writing it" />}
       <div className="bl-row-actions">
         <button type="button" className="bl-btn" disabled={busy || writingNow || goalIndex === null || !mediaId} onClick={() => void write()}>
           {busy ? 'Bil and Xev are writing it' : writingNow ? 'Bil is writing' : 'Write it with Bil and Xev'}

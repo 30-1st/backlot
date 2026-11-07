@@ -4,6 +4,7 @@ import { PostMedia, ShotFrame } from './PostMedia';
 import { clock, missingLinks, timedPosts, todayIn, wantsMedia, type Timed } from './timing';
 import type { ScreenProps } from './Shell';
 import { NetworkLane } from './Network';
+import { Working } from './Working';
 
 // Schedule (reworked Nov 5, 2026): live work only, as a list by day. The last 7 days fold
 // away above today; every row opens in place to the full post and its actions. A post past
@@ -80,6 +81,7 @@ export function DetailBox({ campaignId, slot, post, onDone }: { campaignId: stri
           {note}
         </p>
       )}
+      {busy && <Working label="Bil is writing" />}
       <div className="bl-row-actions">
         <button type="button" className="bl-ghost" disabled={busy} onClick={() => setOpen(false)}>
           Cancel

@@ -22,6 +22,7 @@ import type { ScreenProps } from './Shell';
 import { supabase } from '../lib/supabase';
 import { bil, team } from '../lib/team';
 import { PageHead } from './Present';
+import { Working } from './Working';
 
 // Media: a client's real photos and videos. Add them, tag them once, and Bil plans every
 // campaign around what is really here. Bil tags new files himself from a small copy made on
@@ -357,7 +358,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
       <section className="bl-glass-card bl-make-next" aria-labelledby="next-title">
         <b id="next-title">Make next</b>
         {ranked === null ? (
-          <span className="bl-small" aria-busy="true">Loading Bil&rsquo;s picks.</span>
+          <Working label="Loading Bil's picks" />
         ) : ranked.measured >= 10 && ranked.tags.length > 0 ? (
           <>
             <span className="bl-small">The 5 shot types that score best on your posted posts, by X&rsquo;s own ranking weights.</span>
@@ -382,7 +383,7 @@ export function LibraryScreen({ me, ws, single, isTeam, go }: ScreenProps) {
               Fewer than 10 posted posts with media so far ({ranked.measured}), so Bil leans on what is working in your niche. Add the posting link when you mark a post posted, and this list turns into your own.
             </span>
             {niche === null ? (
-              <span className="bl-small" aria-busy="true">Loading your niche.</span>
+              <Working label="Loading your niche" />
             ) : niche.length ? (
               <ol className="bl-next-list">
                 {niche.map((p, i) => (

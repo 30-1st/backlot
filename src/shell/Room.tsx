@@ -5,6 +5,7 @@ import { PostMedia } from './PostMedia';
 import { ARCHETYPES, type Archetype } from '../lib/archetypes';
 import type { ScreenProps } from './Shell';
 import { WaysIn, WAY_LABELS } from './WaysIn';
+import { Working } from './Working';
 
 // A client's room (K1): the page their audience opens from a bio link or an auto-reply,
 // hosted on its own site apart from Backlot. The team sets it up; the client can open
@@ -421,7 +422,7 @@ function RoomActivity({ clientId, isTeam }: { clientId: string; isTeam: boolean 
           ))}
         </dl>
       ) : (
-        <span className="bl-small" aria-busy="true">Loading.</span>
+        <Working label="Loading" />
       )}
       {counts && (
         <>

@@ -242,7 +242,8 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
   if (room === 'client' || room === 'preview') {
     const st = standingOf(ws, props.single ?? asMe.clientId);
     if (st.paused || st.owed.length) screen = <StandingGate {...props} single={st.client?.id ?? props.single} />;
-    else if (st.client?.stage === 'onboarding' && head === 'campaigns') {
+    // Posts made during setup (Up next, a plan from the chat) still need a place to be seen.
+    else if (st.client?.stage === 'onboarding' && head === 'campaigns' && !(ws.data?.campaigns ?? []).some((c) => c.clientId === st.client!.id)) {
       screen = (
         <main className="bl-flow">
           <h1 className="bl-h1 bl-rise">Campaigns open after setup</h1>
@@ -313,14 +314,14 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
 
   const showPicker = isTeam && clients.length > 0 && head !== 'hq' && head !== 'quality' && (room === 'team' || room === 'preview');
   // Screens about exactly one client pick one; there is no "All clients" there.
-  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'xev', 'products'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
+  const one = room === 'preview' || ['library', 'insights', 'brand', 'board', 'approvals', 'reports', 'desk', 'kris', 'chat', 'room', 'xev', 'products', 'next'].includes(head) || (head === 'create' && sub !== '' && sub !== 'client');
 
   return wrap(
     <>
       <div className="bl-set" aria-hidden="true" />
       <div className={`bl-app${dock ? '' : ' no-dock'}`}>
         <header className="bl-top">
-          <div className="bl-bar">
+          <div className={`bl-bar${showPicker ? ' has-picker' : ''}`}>
             <div className="bl-bar-start">
               {nested ? (
                 <a
@@ -353,7 +354,7 @@ export function Shell({ path, go, onSignOut }: { path: string; go: (p: string) =
               {showPicker && (
                 <label className="bl-ghost" style={{ position: 'relative', paddingRight: 14 }}>
                   <span className="bl-sr">Which client</span>
-                  <span>{one ? `@${clients.find((c) => c.id === single)?.handle ?? ''}` : focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
+                  <span className="bl-picker-name">{one ? `@${clients.find((c) => c.id === single)?.handle ?? ''}` : focus ? `@${clients.find((c) => c.id === focus)?.handle ?? ''}` : 'All clients'}</span>
                   <Chevron />
                   <select
                     value={one ? single ?? '' : picked}

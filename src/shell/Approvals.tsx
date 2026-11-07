@@ -4,6 +4,7 @@ import { campaignTitle } from './Notifications';
 import { LABELS } from './Brand';
 import type { ScreenProps } from './Shell';
 import { PageHead } from './Present';
+import { Working } from './Working';
 
 // The approvals log: every decision on a client's work, newest first, as a record of who
 // said yes to what and when. Only the server writes it; nobody can edit a line.
@@ -122,9 +123,7 @@ export function ApprovalsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
         </p>
       )}
       {lines === null && !error && (
-        <p className="bl-small" aria-busy="true">
-          Loading the log.
-        </p>
+        <Working label="Loading the log" />
       )}
       {lines?.length === 0 && (
         <div className="bl-glass-card">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { team, type Quality, type QualityScore } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { PageHead } from './Present';
+import { Working } from './Working';
 
 // The executive's Quality screen (approved Nov 4, 2026), opened from the gear beside the
 // executive's photo. Only the executive sees the gear, and the server refuses everyone
@@ -54,8 +55,8 @@ export function QualityScreen({ me }: ScreenProps) {
   }
 
   const gate = q?.lastGate ?? null;
-  const running = q?.runs.find((r) => r.status === 'running') ?? null;
-  const lastGateRun = gate ? q!.runs.find((r) => r.id === gate.id) ?? null : null;
+  const running = q?.runs?.find((r) => r.status === 'running') ?? null;
+  const lastGateRun = gate ? q!.runs?.find((r) => r.id === gate.id) ?? null : null;
 
   return (
     <main className="bl-flow bl-quality">
@@ -86,9 +87,7 @@ export function QualityScreen({ me }: ScreenProps) {
         </p>
       )}
       {!q && !error && (
-        <p className="bl-small" aria-busy="true">
-          Loading.
-        </p>
+        <Working label="Loading" />
       )}
 
       {q && (

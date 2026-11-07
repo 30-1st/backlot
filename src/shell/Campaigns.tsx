@@ -11,6 +11,7 @@ import { rememberLayer, setXIntent } from '../components/CampaignLayer';
 import { campaignTitle, isNextPost } from './Notifications';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
+import { Working } from './Working';
 
 // Campaigns: the list, and one campaign's posts reviewed one at a time or as a list.
 // Post statuses use four words only: Draft, Needs you, Approved, Posted by you.
@@ -37,7 +38,7 @@ export function CampaignsScreen(props: ScreenProps & { campaignId: string | null
   const { ws, go, focus, campaignId, isTeam } = props;
   const [view, setView] = useState<'week' | 'month'>('week');
   const [day, setDay] = useState<string | null>(null);
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
   const campaign = campaignId ? ws.data.campaigns.find((c) => c.id === campaignId) : null;
   if (campaignId && campaign) return <CampaignView {...props} campaign={campaign} />;
 
@@ -190,9 +191,7 @@ function History({ ws, focus, isTeam }: ScreenProps) {
     <details className="bl-discarded bl-history" onToggle={(e) => void open(e)}>
       <summary>History</summary>
       {!data && !error && (
-        <p className="bl-small" aria-busy="true">
-          Loading.
-        </p>
+        <Working label="Loading" />
       )}
       {error && (
         <p className="bl-error" role="alert">

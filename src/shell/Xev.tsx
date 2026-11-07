@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { coverBoxes, exportShot, loadShot, type Box } from '../lib/blur';
 import type { ScreenProps } from './Shell';
 import { PageHead, RuleBadge } from './Present';
+import { Working } from './Working';
 
 // Xev: show her up to 3 screenshots of one sales conversation. Blur names and photos first
 // (on this phone; the originals never leave it), and she tells you who the prospect is,
@@ -117,7 +118,7 @@ export function BlurEditor({ shot, onChange, onRemove }: { shot: Shot; onChange:
   );
 }
 
-export function XevScreen({ me, ws, single }: ScreenProps) {
+export function XevScreen({ me, ws, single, go }: ScreenProps) {
   const client = ws.data?.clients.find((c) => c.id === single) ?? null;
   const [status, setStatus] = useState<{ left: number; allowed: number; unlimited: boolean } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -130,7 +131,6 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ readId: string; threadId: string | null; answer: Answer } | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
-  const [extra, setExtra] = useState('');
   const [inbox, setInbox] = useState<XevInbox | null>(null);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState('');
@@ -290,6 +290,7 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
                   {checking ? 'Checking' : 'Check messages now'}
                 </button>
               </div>
+              {checking && <Working label="Xev is checking your messages" />}
               {checked && (
                 <p className="bl-small" role="status" style={{ margin: 0 }}>
                   {checked}
@@ -401,6 +402,7 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
         <label className="bl-check-line">
           <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> I may share this chat, and names and photos are blurred.
         </label>
+        {busy && <Working label="Xev is reading" />}
         <button type="button" className="bl-btn bl-start" disabled={!canRead} onClick={() => void read()}>
           {busy ? 'Xev is reading' : 'Read it, Xev'}
         </button>
@@ -484,31 +486,9 @@ export function XevScreen({ me, ws, single }: ScreenProps) {
       )}
 
       {me.role === 'owner' && (
-        <section className="bl-glass-card bl-xev-form" aria-labelledby="xev-grant">
-          <h2 id="xev-grant" className="bl-h2">
-            Extra reads for @{client.handle}
-          </h2>
-          <span className="bl-small">3 are free. Until payments open, you grant more here.</span>
-          <div className="bl-row-actions">
-            <label className="bl-sr" htmlFor="xev-extra">
-              Extra reads
-            </label>
-            <input id="xev-extra" className="bl-input" style={{ width: 110 }} type="number" min={0} max={1000} value={extra} placeholder="0" onChange={(e) => setExtra(e.target.value)} />
-            <button
-              type="button"
-              className="bl-btn"
-              disabled={extra === ''}
-              onClick={() =>
-                void bil.xevGrant(client.id, Math.max(0, Math.min(1000, Number(extra) || 0))).then(
-                  () => load(),
-                  (e: unknown) => setError(e instanceof Error ? e.message : 'Could not save that.'),
-                )
-              }
-            >
-              Save
-            </button>
-          </div>
-        </section>
+        <button type="button" className="bl-linkish bl-start" onClick={() => go(`clients.${client.id}`)}>
+          Change @{client.handle}&rsquo;s Xev reads in Credits, on their Overview
+        </button>
       )}
     </main>
   );

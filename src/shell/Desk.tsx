@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { PageHead } from './Present';
+import { Working } from './Working';
 
 // The engagement desk: posts worth answering or joining. Backlot never replies or likes.
 // A person opens the post on X, acts by hand through X Delegate, then marks it here.
@@ -199,7 +200,7 @@ export function DeskScreen({ ws, single, isTeam }: ScreenProps) {
         </p>
       )}
 
-      {items === null && !error && <p className="bl-small" aria-busy="true">Loading the desk.</p>}
+      {items === null && !error && <Working label="Loading the desk" />}
 
       {items && items.length > 0 && (
         <div className="bl-filters" role="group" aria-label="Show">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { bil } from '../lib/team';
 import { supabase } from '../lib/supabase';
 import type { Workspace } from './data';
+import { Working } from './Working';
 
 // Networking: the client's Network list (mutuals and viral pages in their niche) on the
 // inspiration board, and the networking lane on the Schedule. Bil reads the list only when
@@ -81,9 +82,7 @@ export function NetworkList({ clientId }: { clientId: string }) {
         </p>
       )}
       {accounts === null ? (
-        <span className="bl-small" aria-busy="true">
-          Loading.
-        </span>
+        <Working label="Loading" />
       ) : accounts.length === 0 ? (
         <span className="bl-small">No accounts yet. Up to 20.</span>
       ) : (
@@ -208,9 +207,7 @@ export function NetworkLane({ ws, clientId, go }: { ws: Workspace; clientId: str
       </section>
 
       {quotes === null ? (
-        <span className="bl-small" aria-busy="true">
-          Loading quotes.
-        </span>
+        <Working label="Loading quotes" />
       ) : (
         <ol className="bl-quote-list">
           {quotes

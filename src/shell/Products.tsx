@@ -3,6 +3,7 @@ import { bil, type Product, type ProductKind } from '../lib/team';
 import { listLibrary, type LibraryItem } from '../lib/clientMedia';
 import { PostMedia } from './PostMedia';
 import type { ScreenProps } from './Shell';
+import { Working } from './Working';
 
 // Products (approved Nov 6, 2026): what the client sells, in a shape every agent reads the
 // same way. Bil names them in posts, Xev sells from them, the public page points to them, and
@@ -40,7 +41,7 @@ export function ProductsScreen({ ws, single, isTeam }: ScreenProps) {
     if (client) listLibrary(client.id).then((f) => setFiles(f.filter((x) => !x.removedAt && x.status !== 'retired')), () => setFiles([]));
   }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
   if (!client) {
     return (
       <main className="bl-flow">
@@ -291,6 +292,7 @@ function Importer({ clientId, onBack, onAdd }: { clientId: string; onBack: () =>
               {error}
             </p>
           )}
+          {busy && <Working label="Bil is reading your list" />}
           <div className="bl-row-actions">
             <button type="button" className="bl-btn" disabled={busy || text.trim().length < 3} onClick={() => void read()}>
               {busy ? 'Bil is reading it' : 'Read it'}

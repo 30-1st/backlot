@@ -3,6 +3,7 @@ import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { ClientTrends } from './Rein';
 import { GamePlanPanel } from './GamePlan';
+import { Working } from './Working';
 
 // Game Plan: the client's plan (who they sell to, who their content appeals to, products,
 // goals) and Bil's opportunity meeting, then what performs on their own page (the 24 hour
@@ -25,7 +26,7 @@ const GAP = 452.4 - ARC;
 export function InsightsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
   const client = ws.data.clients.find((c) => c.id === single);
   const voice = ws.data.voices.find((v) => v.clientId === single);
 

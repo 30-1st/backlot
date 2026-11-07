@@ -4,6 +4,7 @@ import { TeamToday } from './Notifications';
 import { timedPosts, when } from './timing';
 import type { ScreenProps } from './Shell';
 import { bil, type Credits } from '../lib/team';
+import { Working } from './Working';
 
 // Clients (reworked Nov 5, 2026): one row per client, the ones that need you first, with
 // search once there are more than 10. A row opens the client's workspace: their overview
@@ -191,7 +192,7 @@ function ClientList({ ws, go }: ScreenProps) {
   const [q, setQ] = useState('');
   const data = ws.data;
   const clients = data?.clients ?? [];
-  if (!data) return <main className="bl-flow"><p className="bl-p bl-muted">Loading your clients.</p></main>;
+  if (!data) return <main className="bl-flow"><Working label="Loading your clients" /></main>;
   const now = Date.now();
   const timed = timedPosts(data, null);
   const rows = clients

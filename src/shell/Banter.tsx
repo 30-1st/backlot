@@ -6,6 +6,7 @@ import { AGENT_NAMES, banterMounted, pickLine, useBanterOn, type Moment, type Tu
 // screen readers: they already hear the status, and do not need the jokes read aloud.
 
 const GAP_MS = 1100;
+const inChat = () => /(^#|\.)(chat|kris|hq|desk|room)(\.|$)/.test(typeof location === 'undefined' ? '' : location.hash);
 
 export function Banter({ moment, after = 0, className, counts = true }: { moment: Moment; after?: number; className?: string; counts?: boolean }) {
   const [on] = useBanterOn();
@@ -35,7 +36,8 @@ export function Banter({ moment, after = 0, className, counts = true }: { moment
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [on, turns, after]);
 
-  if (!on || shown === 0) return null;
+  // In a chat the agents are already talking for real, so no banter there.
+  if (!on || shown === 0 || inChat()) return null;
   return (
     <div className={`bl-banter${className ? ` ${className}` : ''}`} aria-hidden="true">
       {turns.slice(0, shown).map(([who, text], i) => (

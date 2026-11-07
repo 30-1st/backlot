@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { bil } from '../lib/team';
 import { supabase } from '../lib/supabase';
 import type { Me } from '../lib/team';
+import { Working } from './Working';
 
 // Game Plan: who the client sells to, who their content appeals to, their products and goals,
 // free to edit any time. Rein reads it in every Opportunity Meeting for this client (the
@@ -59,9 +60,7 @@ export function GamePlanPanel({ clientId }: { clientId: string; me?: Me }) {
         </h2>
         <span className="bl-small">Free to change any time. Rein reads it in every Opportunity Meeting, and Bil in every campaign.</span>
         {plan === null ? (
-          <span className="bl-small" aria-busy="true">
-            Loading.
-          </span>
+          <Working label="Loading" />
         ) : (
           <form
             className="bl-gp-form"

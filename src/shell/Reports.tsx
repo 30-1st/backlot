@@ -4,6 +4,7 @@ import { bil } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { DEFAULT_DIALS, DIALS, type Dials } from '../lib/dials';
 import { PageHead } from './Present';
+import { Working } from './Working';
 
 // Monthly reports: how each month went on X, from X's own public numbers. Code works out
 // every number; Bil writes the plain-words part. The team makes them; clients read them.
@@ -170,7 +171,7 @@ export function ReportsScreen({ ws, single, isTeam }: ScreenProps) {
         </p>
       )}
 
-      {reports === null && !error && <p className="bl-small" aria-busy="true">Loading reports.</p>}
+      {reports === null && !error && <Working label="Loading reports" />}
       {reports?.length === 0 && (
         <div className="bl-glass-card">
           <b>No reports yet</b>

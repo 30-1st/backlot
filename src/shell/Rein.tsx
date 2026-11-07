@@ -7,6 +7,7 @@ import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
 import { Viral } from './ReinViral';
 import { OpportunitiesPanel } from './Opportunities';
+import { Working } from './Working';
 
 // Rein: search what is working in any niche: the posts and accounts doing best this week,
 // what they share, and the topics with real momentum. A search that reuses a check from
@@ -404,6 +405,7 @@ export function ClientTrends({ clientId, isTeam }: { clientId: string; isTeam: b
                   {busy ? 'Rein is checking' : preview.free ? 'Update, free' : 'Update'}
                 </button>
               </div>
+              {busy && !error && <Working label="Rein is checking" />}
               {busy && !error && <Banter moment="rein" after={500} />}
             </div>
           ) : (

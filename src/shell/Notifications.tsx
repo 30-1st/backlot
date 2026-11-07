@@ -9,6 +9,7 @@ import { clock, nextPost, timedPosts, todayIn, wantsMedia, when, type Timed } fr
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
 import { HqScreen } from './Hq';
+import { Working } from './Working';
 
 // Home: notifications on a signal rail, newest first, with the ones that need you on top.
 // Everything is worked out from the workspace data, so nothing here can drift out of step
@@ -441,7 +442,7 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
-  if (!ws.data) return <main aria-busy="true" />;
+  if (!ws.data) return <main className="bl-flow"><Working label="Loading" /></main>;
   if (isTeam) return <TeamToday me={me} ws={ws} go={go} focus={focus} firstSeen={firstSeen.current ?? null} />;
   const news = buildNews(me, ws.data, focus, firstSeen.current ?? null);
   const items = build(me, ws.data, focus);
@@ -461,7 +462,8 @@ export function Notifications({ me, ws, go, focus, isTeam }: ScreenProps) {
   return (
     <main className={`bl-today${setup ? "" : " bl-fit"}`}>
       <h1 className="bl-sr">Today</h1>
-      <MakeNext go={go} />
+      {/* Up next works once the client's voice is approved; before that it would only refuse. */}
+      {(isTeam || ws.data.voices.some((v) => v.clientId === me.clientId && v.approved)) && <MakeNext go={go} />}
       {setup && (
         <section className="bl-glass-card bl-in" aria-labelledby="setup-title">
           <h2 id="setup-title" className="bl-section-title" style={{ margin: 0 }}>

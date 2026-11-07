@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { bil, type DeskMessage } from '../lib/team';
 import type { ScreenProps } from './Shell';
+import { Working } from './Working';
 
 // The HQ chat (approved Nov 5, 2026): the executive's and each team member's own chat with
 // Rein, Bil, Kris and Xev. The executive's covers every client and the whole team; a team
@@ -11,7 +12,7 @@ import type { ScreenProps } from './Shell';
 // @Xev to ask one agent directly.
 
 const PAGE = 60;
-const CHIME_GAP_MS = 900;
+const CHIME_GAP_MS = 450;
 const AGENT: Record<string, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
 
 export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: boolean }) {
@@ -38,10 +39,14 @@ export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: 
     if (b) b.scrollTop = b.scrollHeight;
   }, [msgs?.length, typing]);
 
-  const merge = (add: DeskMessage[]) =>
+  // A sent message shows at once (as pending, id below zero) and is swapped for the saved one.
+  const merge = (add: DeskMessage[], drop?: number) =>
     setMsgs((prev) => {
-      const seen = new Set((prev ?? []).map((x) => x.id));
-      return [...(prev ?? []), ...add.filter((x) => !seen.has(x.id))].sort((a, b) => a.id - b.id);
+      const kept = (prev ?? []).filter((x) => x.id !== drop);
+      const seen = new Set(kept.map((x) => x.id));
+      const all = [...kept, ...add.filter((x) => !seen.has(x.id))];
+      // Saved messages in order, then any still sending, at the bottom.
+      return [...all.filter((x) => x.id >= 0).sort((a, b) => a.id - b.id), ...all.filter((x) => x.id < 0)];
     });
 
   async function chime(turn: number) {
@@ -65,12 +70,15 @@ export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: 
     setTyping(true);
     setError('');
     setText('');
+    const tempId = -Date.now();
+    merge([{ id: tempId, role: 'me', body: t, turn: null, created_at: new Date().toISOString() }]);
     try {
       const r = await bil.deskSend(t);
-      merge(r.messages);
+      merge(r.messages, tempId);
       if (r.chime) void chime(r.turn);
       else setTyping(false);
     } catch (e) {
+      merge([], tempId);
       setText(t);
       setTyping(false);
       setError(e instanceof Error ? e.message : 'The team could not answer just now.');
@@ -95,13 +103,8 @@ export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: 
         </div>
       </header>
 
-      {msgs === null && !error && (
-        <p className="bl-small" aria-busy="true">
-          Loading the chat.
-        </p>
-      )}
-
       <div className="bl-kris-box" ref={box}>
+        {(typing || msgs === null) && <Working className="top" label={msgs === null ? 'Loading the chat' : 'The team is answering'} />}
         <ol className="bl-gc-log" aria-label={owner ? 'HQ chat' : 'Your clients chat'} aria-live="polite">
           {msgs?.length === 0 && (
             <li className="bl-gc-row">
@@ -120,7 +123,7 @@ export function HqScreen({ me, ws, compact = false }: ScreenProps & { compact?: 
           )}
           {msgs?.map((m) =>
             m.role === 'me' ? (
-              <li key={m.id} className="bl-gc-me">
+              <li key={m.id} className={`bl-gc-me${m.id < 0 ? ' pending' : ''}`}>
                 <p className="bl-gc-mebub">{m.body}</p>
               </li>
             ) : (

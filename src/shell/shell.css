@@ -3213,3 +3213,14 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-credits li > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bl-credits-in { display: flex; align-items: center; gap: 6px; flex: none; }
 .bl-credits-in .bl-input { width: 84px; }
+
+/* The quiet progress line (Working.tsx): a 3px track with a sliding glow. */
+.bl-working { position: relative; height: 3px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--accent) 22%, transparent); flex: none; }
+.bl-working > i { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: bl-working 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+@keyframes bl-working { from { transform: translateX(-100%); } to { transform: translateX(270%); } }
+@media (prefers-reduced-motion: reduce) { .bl-working > i { animation: none; width: 100%; opacity: 0.5; } }
+.bl-working.top { position: sticky; top: 0; z-index: 2; margin-bottom: 6px; }
+.bl-gc-me.pending .bl-gc-mebub { opacity: 0.72; }
+/* On a phone, the client picker names where you are, so the room title steps aside. */
+@media (max-width: 520px) { .bl-bar.has-picker .bl-room-title { display: none; } }
+.bl-picker-name { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -6,6 +6,7 @@ import { coverBoxes, exportShot, loadShot, type Box } from '../lib/blur';
 import type { Post } from './data';
 import type { ScreenProps } from './Shell';
 import { BlurEditor, STAGES, type Shot } from './Xev';
+import { Working } from './Working';
 
 // The team chat (approved Nov 3, 2026): one group chat per client, shared by the client,
 // their human team and all four agents. It grew out of Kris's chat and keeps its table, so
@@ -16,7 +17,7 @@ import { BlurEditor, STAGES, type Shot } from './Xev';
 
 const PAGE = 60;
 const REFRESH_MS = 30_000;
-const CHIME_GAP_MS = 900;
+const CHIME_GAP_MS = 450;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hourName = (h: number) => new Date(2026, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
 const AGENT: Record<string, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev' };
@@ -93,10 +94,14 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
     );
   }
 
-  const merge = (add: KrisMessage[]) =>
+  // A sent message shows at once (as pending, id below zero) and is swapped for the saved one.
+  const merge = (add: KrisMessage[], drop?: number) =>
     setMsgs((prev) => {
-      const seen = new Set((prev ?? []).map((x) => x.id));
-      return [...(prev ?? []), ...add.filter((x) => !seen.has(x.id))].sort((a, b) => a.id - b.id);
+      const kept = (prev ?? []).filter((x) => x.id !== drop);
+      const seen = new Set(kept.map((x) => x.id));
+      const all = [...kept, ...add.filter((x) => !seen.has(x.id))];
+      // Saved messages in order, then any still sending, at the bottom.
+      return [...all.filter((x) => x.id >= 0).sort((a, b) => a.id - b.id), ...all.filter((x) => x.id < 0)];
     });
 
   /** Teammates chime in one at a time, a beat apart, like people typing. */
@@ -121,12 +126,15 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
     setTyping(true);
     setError('');
     setText('');
+    const tempId = -Date.now();
+    merge([{ id: tempId, role: isTeam ? 'team' : 'client', kind: 'chat', body: t, cards: null, link: null, turn: null, data: null, createdAt: new Date().toISOString() }]);
     try {
       const r = await bil.chatSend(client!.id, t);
-      merge(r.messages);
+      merge(r.messages, tempId);
       if (r.chime) void chime(r.turn);
       else setTyping(false);
     } catch (e) {
+      merge([], tempId);
       setText(t);
       setTyping(false);
       setError(e instanceof Error ? e.message : 'The team could not answer just now.');
@@ -200,13 +208,8 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
         </section>
       )}
 
-      {msgs === null && !error && (
-        <p className="bl-small" aria-busy="true">
-          Loading the chat.
-        </p>
-      )}
-
       <div className="bl-kris-box" ref={box}>
+        {(typing || msgs === null) && <Working className="top" label={msgs === null ? 'Loading the chat' : 'The team is answering'} />}
         <ol className="bl-gc-log" aria-label="Team chat" aria-live="polite">
           {msgs?.length === 0 && (
             <li className="bl-gc-row">
@@ -223,7 +226,7 @@ export function KrisScreen({ ws, single, isTeam, go }: ScreenProps) {
           )}
           {msgs?.map((m) =>
             mine(m) ? (
-              <li key={m.id} className="bl-gc-me">
+              <li key={m.id} className={`bl-gc-me${m.id < 0 ? ' pending' : ''}`}>
                 <p className="bl-gc-mebub">{m.body}</p>
               </li>
             ) : (
@@ -662,7 +665,7 @@ function DmSheet({ clientId, leadId, replies, onClose }: { clientId: string; lea
         <h2 id="gc-dm-t" className="bl-sheet-title">
           The chat on X
         </h2>
-        {!view && !error && <p className="bl-small">Reading it from X</p>}
+        {!view && !error && <Working label="Reading it from X" />}
         {error && (
           <p className="bl-error" role="alert">
             {error}
