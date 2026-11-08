@@ -17,6 +17,7 @@
 // forbidden claims) are enforced in ./bil-checks.ts. Backlot never posts anything.
 
 import { generateText, Output } from 'npm:ai@7.0.142';
+import { notify } from './push.ts';
 import { getActiveTraceId, propagateAttributes, startActiveObservation } from 'npm:@langfuse/tracing@6.0.0';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { id, isoDate, shortText, text, z } from './schemas/common.ts';
@@ -1075,6 +1076,25 @@ export async function logApproval(db: SupabaseClient, l: LogLine) {
     actor_role: role,
   });
   if (error) console.error('approval log write failed', error.message);
+  // A client approved posts or asked for changes: the team hears about it (Nov 7, 2026).
+  if (role === 'client' && (l.kind === 'post' || l.kind === 'campaign') && (l.decision === 'approved' || l.decision === 'changes')) {
+    const what = l.decision === 'approved' ? (l.kind === 'campaign' ? 'approved a whole plan' : `approved post ${l.slot ?? ''}`.trim()) : `asked for changes on post ${l.slot ?? ''}`.trim();
+    const { data: cl } = await db.from('clients').select('x_handle').eq('id', l.clientId).maybeSingle();
+    await notify(
+      {
+        clientId: l.clientId,
+        workspaceId: l.workspaceId,
+        audience: 'team',
+        kind: 'client_review',
+        title: `@${cl?.x_handle ?? 'a client'} ${what}`,
+        body: `${l.subject ? `"${l.subject.slice(0, 80)}"` : 'Their posts'}${l.note && l.decision === 'changes' ? `: ${l.note.slice(0, 120)}` : '.'}`,
+        path: l.campaignId ? `campaigns.${l.campaignId}${l.slot ? `.${l.slot}` : ''}` : 'campaigns',
+        ref: `review:${l.campaignId ?? 'x'}:${l.slot ?? 'all'}:${l.decision}:${Math.floor(Date.now() / 600_000)}`,
+        except: l.actor.userId ?? undefined,
+      },
+      db,
+    );
+  }
 }
 
 // ---------- brand kit ----------
@@ -3207,6 +3227,22 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string, 
         : `Your next post is ready for ${when}, from your latest posts and your goal "${plan.data.goal}". It's first in line on your Schedule, waiting for your yes.`,
       'campaigns',
     );
+    // Written in the background (not while they waited on Up next): tell their phone.
+    if (!fastNext && first) {
+      await notify(
+        {
+          clientId: c.client_id,
+          workspaceId: c.owner_id,
+          audience: 'client',
+          kind: first.status === 'blocked' ? 'needs_detail' : 'next_ready',
+          title: first.status === 'blocked' ? 'Bil needs one detail' : 'Your next post is ready',
+          body: first.status === 'blocked' ? `Your next post for ${when} needs one detail from you before it can go.` : `Bil wrote your next post for ${when}. It is waiting for your yes.`,
+          path: `campaigns.${c.id}.${first.slot}`,
+          ref: `next:${c.id}:${first.slot}`,
+        },
+        db,
+      );
+    }
   } else if (status !== 'failed') {
     const okCount = all.length - blocked;
     // Bil says it himself, in the chat, with the posts right there to open (Nov 7, 2026): a
@@ -3223,6 +3259,23 @@ async function finalizeCampaign(db: SupabaseClient, c: Campaign, note?: string, 
       ref: `campaign:${c.id}:done`,
     });
     if (doneErr && doneErr.code !== '23505') console.error('bil: finished note failed', doneErr.message);
+    // And on their phone, so a plan finished overnight is the first thing they see.
+    const { data: starter } = await db.from('approval_log').select('actor_id, actor_role').eq('campaign_id', c.id).eq('kind', 'campaign').eq('decision', 'saved').order('created_at').limit(1).maybeSingle();
+    const firstOk = all.find((r: any) => r.status === 'ok') as any;
+    const firstBlocked = all.find((r: any) => r.status === 'blocked') as any;
+    await notify(
+      {
+        clientId: c.client_id,
+        workspaceId: c.owner_id,
+        audience: starter?.actor_role === 'team' ? 'both' : 'client',
+        kind: okCount ? 'plan_ready' : 'needs_detail',
+        title: okCount ? `Bil finished "${plan.success ? plan.data.title.slice(0, 50) : 'your plan'}"` : 'Bil needs a detail',
+        body: `${okCount} ${okCount === 1 ? 'post is' : 'posts are'} waiting for your yes${blocked ? `, and ${blocked} need${blocked === 1 ? 's' : ''} a detail from you` : ''}.`,
+        path: `campaigns.${c.id}.${(firstOk ?? firstBlocked)?.slot ?? 1}`,
+        ref: `plan:${c.id}`,
+      },
+      db,
+    );
   }
   if (plan.success && plan.data.rolling && !plan.data.nextPost && status !== 'failed') {
     await bilSays(db, c, 'note', `wrap:${c.id}`, `That is the whole week for "${plan.data.title}" written. When the last post is out, tell me here: keep pushing these goals, or change them? I will plan the next 7 days from what this week shows.`, `campaigns.${c.id}`);

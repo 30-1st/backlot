@@ -26,6 +26,7 @@
 // Secrets: the access and refresh tokens live only in Supabase Vault (public.x_token_*,
 // service_role only). They are never logged, never returned to the app, never put in a URL.
 
+import { notify } from './push.ts';
 import { generateText, Output } from 'npm:ai@7.0.142';
 import { id, z } from './schemas/common.ts';
 import { AGENT_MODELS, grokBilled, grokCost, grokEstimate, X_PRICES } from './models.ts';
@@ -681,6 +682,22 @@ async function checkInbox(conn: Conn, token: string, o: { windowMs?: number; max
     if (note) {
       await db.from('xev_leads').update({ notified_at: now }).eq('id', lead.id);
       raised++;
+      // A buyer ready to buy or book can go cold overnight: this one comes through quiet hours.
+      const ready = item.intent === 'buying' || item.intent === 'booking';
+      await notify(
+        {
+          clientId: conn.client_id,
+          workspaceId: conn.workspace_id,
+          audience: 'both',
+          kind: 'buyer',
+          title: ready ? (item.intent === 'buying' ? 'Someone is ready to buy' : 'Someone wants to book') : 'A question in your DMs',
+          body: `Xev spotted it in your DMs${ready ? ' and has a reply ready' : ''}. Open the chat for her take.`,
+          path: 'chat',
+          ref: `lead:${lead.id}:${g.lastId}`,
+          urgent: ready,
+        },
+        db,
+      );
     }
   }
   return done(raised);

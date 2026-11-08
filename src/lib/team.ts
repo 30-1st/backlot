@@ -280,6 +280,13 @@ export const bil = {
   /** Gives a held post the detail it was waiting on; Bil rewrites that one post. */
   fillDetail: (campaignId: string, slot: number, detail: string) =>
     call<{ status: 'ok' | 'blocked'; reasons: string[]; spentUsd: number }>('bil', 'fill_detail', { campaignId, slot, detail }),
+  /** Phone notifications: the app's public key, this person's settings, and signing a device up or off. */
+  pushKey: () => call<{ publicKey: string }>('bil', 'push_key', {}),
+  pushStatus: () => call<PushStatus>('bil', 'push_status', {}),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string; timezone?: string }) => call<PushStatus>('bil', 'push_subscribe', sub),
+  pushUnsubscribe: (endpoint?: string) => call<PushStatus>('bil', 'push_unsubscribe', endpoint ? { endpoint } : {}),
+  pushPrefs: (p: { enabled?: boolean; quietFrom?: number; quietTo?: number; timezone?: string }) => call<PushStatus>('bil', 'push_prefs', p),
+  pushTest: () => call<{ sent: number }>('bil', 'push_test', {}),
   /** Reworks a written post with Bil: what to change, and optionally other media (null: none). He explains what he did. */
   postRework: (campaignId: string, slot: number, note: string, mediaId?: string | null) =>
     call<{ campaignId: string; slot: number; post: Record<string, unknown>; why: string; spentUsd: number }>('bil', 'post_rework', { campaignId, slot, note, ...(mediaId !== undefined ? { mediaId } : {}) }),
@@ -344,3 +351,5 @@ export const bil = {
     capacityPerDay?: number;
   }) => call<{ campaignId: string; status: string }>('bil', 'campaign', r),
 };
+
+export type PushStatus = { enabled: boolean; quietFrom: number; quietTo: number; timezone: string; devices: number };

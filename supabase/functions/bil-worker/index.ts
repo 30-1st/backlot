@@ -31,6 +31,7 @@ import { drainOpportunities } from '../_shared/opportunity.ts';
 import { krisPitches } from '../_shared/kris.ts';
 import { scrubStoredMedia } from '../_shared/media-scrub.ts';
 import { evalTick } from '../_shared/evals.ts';
+import { pushTick } from '../_shared/push.ts';
 import { inboxTick } from '../_shared/x-connect.ts';
 import { sameSecret, workerToken } from '../_shared/worker-token.ts';
 
@@ -76,6 +77,15 @@ Deno.serve(async (req) => {
         .catch((err) => console.error('bil-worker: eval failed', err instanceof Error ? err.message : err)),
     );
     return reply(202, { accepted: true, job: 'eval' });
+  }
+
+  if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'push') {
+    EdgeRuntime.waitUntil(
+      pushTick()
+        .then((r) => console.log(`bil-worker: push ${r}`))
+        .catch((err) => console.error('bil-worker: push failed', err instanceof Error ? err.message : err)),
+    );
+    return reply(202, { accepted: true, job: 'push' });
   }
 
   if (body && typeof body === 'object' && (body as { job?: unknown }).job === 'xev_inbox') {

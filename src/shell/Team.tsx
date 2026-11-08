@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { team, type People, type Person } from '../lib/team';
+import { bil, team, type People, type Person, type PushStatus } from '../lib/team';
 import { ChangePassword } from './ChangePassword';
 import { Rings } from './icons';
 import type { ThemeChoice } from './theme';
 import { useBanterOn } from '../lib/banter';
 import type { ScreenProps } from './Shell';
 import { Working } from './Working';
+import { Install } from './Install';
+import { currentSubscription, isIos, isStandalone, pushSupported, turnOff, turnOn } from '../lib/push';
 
 // Team and account: invites and password resets (team only), then the person's own
 // settings: night mode, password, people and chats, sign out.
@@ -21,6 +23,8 @@ export function TeamScreen({
 }: ScreenProps & { theme: { choice: ThemeChoice; setChoice: (c: ThemeChoice) => void }; onSignOut: () => void; onChanged: () => void }) {
   const [changing, setChanging] = useState(false);
   const [banter, setBanter] = useBanterOn();
+  const [guide, setGuide] = useState(false);
+  if (guide) return <Install onBack={() => setGuide(false)} />;
   if (changing) return <ChangePassword onBack={() => setChanging(false)} onDone={() => { setChanging(false); onChanged(); }} />;
 
   return (
@@ -80,6 +84,7 @@ export function TeamScreen({
           </button>
         </div>
       </section>
+      {me.role !== 'visitor' && <NotificationsCard onGuide={() => setGuide(true)} />}
       <p className="bl-small num" style={{ textAlign: 'center', margin: 0 }}>
         Backlot v{__BACKLOT_VERSION__}
       </p>
@@ -367,5 +372,125 @@ function TeamPanel({ isOwner, clientStages, onStage }: { isOwner: boolean; clien
         )}
       </section>
     </>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ h, label: `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}` }));
+
+/**
+ * Phone notifications (Nov 7, 2026): on or off for this device, quiet hours, and a test.
+ * A buyer ready to buy or book still comes through quiet hours.
+ */
+function NotificationsCard({ onGuide }: { onGuide: () => void }) {
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [here, setHere] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const supported = pushSupported();
+  const needsHome = isIos() && !isStandalone();
+  const blocked = supported && Notification.permission === 'denied';
+
+  useEffect(() => {
+    let live = true;
+    bil.pushStatus().then((s) => live && setStatus(s), () => undefined);
+    currentSubscription().then((sub) => live && setHere(Boolean(sub)), () => live && setHere(false));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function run(job: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      await job();
+      setNote(done);
+      const [s, sub] = await Promise.all([bil.pushStatus(), currentSubscription()]);
+      setStatus(s);
+      setHere(Boolean(sub));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const on = Boolean(here && status?.enabled);
+  return (
+    <section className="bl-card" aria-label="Notifications">
+      {busy && <Working className="top" label="Saving" />}
+      <h2 className="bl-h2">Notifications</h2>
+      <span className="bl-small">When Bil finishes posts, a post needs a detail or is due soon, or Xev spots a buyer. A few words only, never your posts or DMs.</span>
+      {needsHome ? (
+        <>
+          <span className="bl-small">On iPhone, notifications work once Backlot is on your Home Screen. Add it, open Backlot from the new icon, then come back here.</span>
+          <button type="button" className="bl-btn bl-start" onClick={onGuide}>
+            Show me how
+          </button>
+        </>
+      ) : !supported ? (
+        <span className="bl-small">This browser cannot show notifications. Try Backlot on your phone.</span>
+      ) : blocked ? (
+        <span className="bl-small">Notifications are blocked for Backlot. Allow them in your phone or browser settings, then reopen Backlot.</span>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {on ? (
+              <>
+                <button type="button" className="bl-ghost" disabled={busy} onClick={() => void run(() => bil.pushTest(), 'Sent. It should arrive in a few seconds.')}>
+                  Send a test
+                </button>
+                <button type="button" className="bl-ghost" disabled={busy} onClick={() => void run(turnOff, 'Off on this device.')}>
+                  Turn off on this device
+                </button>
+              </>
+            ) : (
+              <button type="button" className="bl-btn" disabled={busy || here === null} onClick={() => void run(turnOn, 'On. You will hear from the team here.')}>
+                Turn on notifications
+              </button>
+            )}
+          </div>
+          {on && status && (
+            <>
+              <span className="bl-label" style={{ marginTop: 6 }}>
+                Quiet hours
+              </span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label className="bl-sr" htmlFor="quiet-from">
+                  Quiet from
+                </label>
+                <select id="quiet-from" className="bl-input" style={{ width: 'auto' }} value={status.quietFrom} disabled={busy} onChange={(e) => void run(() => bil.pushPrefs({ quietFrom: Number(e.target.value) }), 'Saved.')}>
+                  {HOURS.map((x) => (
+                    <option key={x.h} value={x.h}>
+                      {x.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="bl-small">to</span>
+                <label className="bl-sr" htmlFor="quiet-to">
+                  Quiet until
+                </label>
+                <select id="quiet-to" className="bl-input" style={{ width: 'auto' }} value={status.quietTo} disabled={busy} onChange={(e) => void run(() => bil.pushPrefs({ quietTo: Number(e.target.value) }), 'Saved.')}>
+                  {HOURS.map((x) => (
+                    <option key={x.h} value={x.h}>
+                      {x.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="bl-small">Everything waits until morning, except a buyer ready to buy or book. At most one notification every 15 minutes; the rest are combined.</span>
+            </>
+          )}
+        </>
+      )}
+      {note && <span className="bl-small" role="status">{note}</span>}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

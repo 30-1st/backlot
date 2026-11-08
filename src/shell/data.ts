@@ -47,7 +47,7 @@ export type Post = {
   xPostId?: string | null;
 };
 
-export type OnboardingStep = 'delegate' | 'first_call' | 'contract';
+export type OnboardingStep = 'delegate' | 'first_call' | 'contract' | 'phone';
 export type StepDone = { clientId: string; step: OnboardingStep; doneAt: string };
 
 /** Something a person did that the other side may want to know about. */

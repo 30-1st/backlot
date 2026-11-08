@@ -60,3 +60,42 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// ---------- notifications (Nov 7, 2026) ----------
+// The server sends a few words and the screen to open; never post text, DMs or a buyer's details.
+
+const SAFE_PATH = /^[A-Za-z0-9._-]{0,160}$/;
+
+self.addEventListener('push', (event) => {
+  let d = {};
+  try {
+    d = event.data ? event.data.json() : {};
+  } catch {
+    d = {};
+  }
+  const title = typeof d.title === 'string' && d.title ? d.title.slice(0, 80) : 'Backlot';
+  const body = typeof d.body === 'string' ? d.body.slice(0, 240) : '';
+  const path = typeof d.path === 'string' && SAFE_PATH.test(d.path) ? d.path : 'today';
+  const tag = typeof d.tag === 'string' ? d.tag.slice(0, 40) : 'bl';
+  event.waitUntil(
+    self.registration.showNotification(title, { body, tag, renotify: true, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { path } }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const raw = event.notification.data && event.notification.data.path;
+  const path = typeof raw === 'string' && SAFE_PATH.test(raw) ? raw : 'today';
+  event.waitUntil(
+    (async () => {
+      const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const mine = open.find((c) => new URL(c.url).origin === self.location.origin);
+      if (mine) {
+        mine.postMessage({ type: 'backlot-go', path });
+        await mine.focus();
+        return;
+      }
+      await self.clients.openWindow(`/#${path}`);
+    })(),
+  );
+});

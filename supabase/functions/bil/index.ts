@@ -54,6 +54,7 @@
 //   xev_refresh    { clientId }              Check messages now: the last 30 minutes of DMs and requests, once per 2 min     team, client
 //   xev_lead_view  { clientId, leadId }      one lead's DM conversation read live from X for the chat panel, never saved   team, client
 
+import { PushPrefsRequest, PushSubscribeRequest, PushUnsubscribeRequest, pushKey, pushPrefs, pushStatus, pushSubscribe, pushTest, pushUnsubscribe } from '../_shared/push.ts';
 import {
   askBil,
   AskRequest,
@@ -280,6 +281,18 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, await reviewBrand(member, parse(BrandReviewRequest, input)));
       case 'fill_detail':
         return reply(200, await fillDetail(member, parse(FillDetailRequest, input)));
+      case 'push_key':
+        return reply(200, await pushKey());
+      case 'push_status':
+        return reply(200, await pushStatus(member));
+      case 'push_subscribe':
+        return reply(200, await pushSubscribe(member, parse(PushSubscribeRequest, input)));
+      case 'push_unsubscribe':
+        return reply(200, await pushUnsubscribe(member, parse(PushUnsubscribeRequest, input)));
+      case 'push_prefs':
+        return reply(200, await pushPrefs(member, parse(PushPrefsRequest, input)));
+      case 'push_test':
+        return reply(200, await pushTest(member));
       case 'post_rework':
         return reply(200, await postRework(member, parse(PostReworkRequest, input)));
       default:

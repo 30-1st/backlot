@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.4 (Nov 7, 2026): notifications on your phone
+
+- **Turn on notifications** in Account, on each phone or computer. On iPhone it works once Backlot is on the Home Screen; Account shows how.
+- **What pings you:**
+  - Bil finished a plan, or wrote your next post.
+  - A post needs a detail from you.
+  - A post goes up within the hour and still has no yes.
+  - Xev spotted someone in the DMs ready to buy or book, or with a question.
+  - For the team: a client approved posts or asked for changes.
+- **Calm by design:** at most one notification every 15 minutes (the rest are combined), nothing in your quiet hours (9 PM to 9 AM by default, your time) except a buyer ready to buy or book, and a few words only, never post text, DMs or a buyer's details.
+- **Tapping one** opens the exact screen: the post, the plan or the chat.
+- **New onboarding step for clients:** "Backlot on your phone", ticked by itself when they turn notifications on.
+- **How:** standard Web Push from Supabase (no new service, no cost). The sending key is made by the server and kept in Supabase Vault; device addresses are readable only by the server.
+
 ## v0.9.3 (Nov 7, 2026): agents that understand the chat, posts you can change with Bil
 
 **The team chat, rebuilt for quality** (from Khma's review of the @litax333 chat on Nov 7):

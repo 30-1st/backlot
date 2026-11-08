@@ -24,6 +24,11 @@ if (import.meta.env.PROD && import.meta.env.MODE !== 'single' && import.meta.env
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   });
+  // A tapped notification opens its screen in the app that is already open.
+  navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
+    const d = e.data as { type?: unknown; path?: unknown } | null;
+    if (d?.type === 'backlot-go' && typeof d.path === 'string' && /^[A-Za-z0-9._-]{0,160}$/.test(d.path)) window.location.hash = d.path;
+  });
 }
 
 // An app left open picks up new versions on its own (lib/fresh.ts). Hosted builds only.
