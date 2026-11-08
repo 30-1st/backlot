@@ -137,6 +137,9 @@ export const team = {
   /** The executive's Quality screen (owner only; the server refuses anyone else). */
   quality: () => call<Quality>('team', 'quality'),
   qualityRun: () => call<{ queued: boolean; reason?: string }>('team', 'quality_run'),
+  /** X's ranking code: what Bil's index holds, what X last pushed, and update it now. Executive only. */
+  algoStatus: () => call<AlgoStatus>('team', 'algo_status'),
+  algoRefresh: () => call<{ started: boolean }>('team', 'algo_refresh'),
   me: () => call<Me>('team', 'me'),
   people: () => call<People>('team', 'people'),
   invite: (role: 'team' | 'client', clientId?: string) =>
@@ -301,7 +304,12 @@ export const bil = {
     call<{ id: string; costUsd: number }>('bil', 'report', { requestId: crypto.randomUUID(), clientId, month }),
   learn: (clientId: string) =>
     call<Record<string, unknown>>('bil', 'learn', { requestId: crypto.randomUUID(), clientId }),
-  approveVoice: (clientId: string) => call<Record<string, unknown>>('bil', 'approve_voice', { clientId }),
+  approveVoice: (clientId: string, edits?: { summary?: string; wordsTheyUse?: string[]; wordsTheyAvoid?: string[]; offLimits?: string[] }) =>
+    call<Record<string, unknown>>('bil', 'approve_voice', { clientId, ...(edits ? { edits } : {}) }),
+  /** Bil reads their page again and rewrites the voice, from their latest posts and what they say is off. */
+  voiceRedo: (clientId: string, note?: string) =>
+    call<{ observations: string; postsRead: number; spentUsd: number }>('bil', 'voice_redo', { requestId: crypto.randomUUID(), clientId, ...(note?.trim() ? { note: note.trim() } : {}) }),
+  voiceUndo: (clientId: string) => call<Record<string, unknown>>('bil', 'voice_undo', { clientId }),
   gamePlanSave: (clientId: string, plan: { sellsTo: string; appealsTo: string; products: { name: string; note: string }[]; goals: string }) =>
     call<{ saved: boolean }>('bil', 'game_plan_save', { clientId, ...plan }),
   xevStatus: (clientId: string) => call<{ used: number; allowed: number; left: number; unlimited: boolean }>('bil', 'xev_status', { clientId }),
@@ -353,3 +361,12 @@ export const bil = {
 };
 
 export type PushStatus = { enabled: boolean; quietFrom: number; quietTo: number; timezone: string; devices: number };
+
+export type AlgoStatus = {
+  indexed: { commit: string; date: string; files: number; chunks: number; searchOk: boolean; lastRun: string | null; lastStatus: string | null; note: string | null } | null;
+  latest: { commit: string; date: string; message: string } | null;
+  upToDate: boolean;
+  running: boolean;
+  canRefresh: boolean;
+  changes: Array<{ name: string; from: string | null; to: string; at: string }>;
+};

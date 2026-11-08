@@ -145,10 +145,10 @@ export const BatchDraft = z.object({
         media: z.string().optional().describe('Open slots, or slots with no media yet: the ref of one fresh file (like "m3") whose tags fit. Never invent a ref.'),
         mediaIdea: z.string().optional().describe('A description only. Never images of real people. Under 400 characters.'),
         engagementPlan: z.string().optional().describe('What the client does by hand after posting. Under 400 characters.'),
-        why: z.string().optional().describe('To the client, as their strategist, in 1 or 2 plain sentences: why this angle, and why this photo or video (or the shot you describe). Under 300 characters.'),
+        why: z.string().optional().describe('To the client, as their strategist, in 1 or 2 plain sentences: why this angle, and why this photo or video (or the shot you describe). Plain words: no scores, weights or "per 1,000". Under 300 characters.'),
         algorithmScore: z.number().int().describe('0 to 100: how well this fits X\'s ranking, from the settings given. A guide, not a promise.'),
         signals: z
-          .array(z.object({ action: XAction, effect: z.enum(['raises', 'lowers']), why: str('Under 240 characters.') }))
+          .array(z.object({ action: XAction, effect: z.enum(['raises', 'lowers']), why: str('Plain words for the client, no setting names or numbers. Under 240 characters.') }))
           .max(6),
         voiceMatch: z.number().int().describe('0 to 100 against the voice card.'),
         drift: z.array(z.string()).max(5).describe('Where it slipped toward a generic tone. Empty if none.'),

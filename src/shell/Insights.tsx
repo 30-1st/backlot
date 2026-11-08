@@ -248,52 +248,165 @@ export function InsightsScreen({ me, ws, single, isTeam, go }: ScreenProps) {
   );
 }
 
-/** The voice Bil writes in, and the client's approval of it. Shown on Brand. */
+/**
+ * The voice Bil writes in, and the client's approval of it. Shown on Brand. Since Nov 8, 2026
+ * the client can change it by hand, or have Bil read their page again (and go back if the
+ * new one is worse).
+ */
 export function VoiceSection({ ws, clientId, isTeam }: { ws: ScreenProps['ws']; clientId: string; isTeam: boolean }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'approve' | 'save' | 'redo' | 'undo'>('');
   const [error, setError] = useState('');
+  const [said, setSaid] = useState('');
+  const [mode, setMode] = useState<'view' | 'edit' | 'redo'>('view');
   const voice = ws.data?.voices.find((v) => v.clientId === clientId);
+  const card = (voice?.card ?? {}) as { summary?: string; wordsTheyUse?: string[]; wordsTheyAvoid?: string[]; offLimits?: string[] };
+  const [summary, setSummary] = useState(String(card.summary ?? ''));
+  const [use, setUse] = useState((card.wordsTheyUse ?? []).join(', '));
+  const [avoid, setAvoid] = useState((card.wordsTheyAvoid ?? []).join(', '));
+  const [off, setOff] = useState((card.offLimits ?? []).join('; '));
+  const [note, setNote] = useState('');
   if (!voice) return null;
-  const card = voice.card;
-  async function approve() {
-    setBusy(true);
+
+  async function run(kind: 'approve' | 'save' | 'redo' | 'undo', job: () => Promise<string | void>) {
+    setBusy(kind);
     setError('');
+    setSaid('');
     try {
-      await bil.approveVoice(clientId);
+      const msg = await job();
       await ws.refresh();
+      if (msg) setSaid(msg);
+      setMode('view');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not approve.');
+      setError(e instanceof Error ? e.message : 'That did not work. Try again.');
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   }
+  const list = (t: string, sep: RegExp, max: number, len: number) => [...new Set(t.split(sep).map((x) => x.trim()).filter(Boolean))].slice(0, max).map((x) => x.slice(0, len));
+  const startEdit = () => {
+    setSummary(String(card.summary ?? ''));
+    setUse((card.wordsTheyUse ?? []).join(', '));
+    setAvoid((card.wordsTheyAvoid ?? []).join(', '));
+    setOff((card.offLimits ?? []).join('; '));
+    setMode('edit');
+  };
+
   return (
-    <section className="bl-card" style={{ marginTop: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h2 className="bl-h2">The voice Bil writes in</h2>
-          <span className={`bl-chip ${voice.approved ? 'approved' : 'needs'}`}>{voice.approved ? 'Approved' : 'Needs you'}</span>
-        </div>
-        {card.summary && <p className="bl-p">{String(card.summary)}</p>}
-        {Array.isArray(card.wordsTheyUse) && card.wordsTheyUse.length > 0 && (
-          <span className="bl-small">
-            <b>Words used:</b> {card.wordsTheyUse.slice(0, 12).join(', ')}
-          </span>
-        )}
-        {Array.isArray(card.offLimits) && card.offLimits.length > 0 && (
-          <span className="bl-small">
-            <b>Off limits:</b> {card.offLimits.slice(0, 8).join('; ')}
-          </span>
-        )}
-        {!voice.approved && (
-          <button type="button" className="bl-btn bl-start" disabled={busy} onClick={() => void approve()}>
-            {isTeam ? 'Approve for the client' : 'This sounds like me'}
-          </button>
-        )}
-        {error && (
-          <p className="bl-error" role="alert">
-            {error}
-          </p>
-        )}
-      </section>
+    <section className="bl-card" style={{ marginTop: 8, position: 'relative' }}>
+      {busy && <Working className="top" label={busy === 'redo' ? 'Bil is reading your page' : 'Saving'} />}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 className="bl-h2">The voice Bil writes in</h2>
+        <span className={`bl-chip ${voice.approved ? 'approved' : 'needs'}`}>{voice.approved ? 'Approved' : 'Needs you'}</span>
+      </div>
+
+      {mode === 'edit' ? (
+        <>
+          <label className="bl-field">
+            <span className="bl-label">How you sound</span>
+            <textarea className="bl-textarea" rows={4} maxLength={600} value={summary} onChange={(e) => setSummary(e.target.value)} />
+          </label>
+          <label className="bl-field">
+            <span className="bl-label">Words and phrases you use (commas between)</span>
+            <textarea className="bl-textarea" rows={2} value={use} onChange={(e) => setUse(e.target.value)} />
+          </label>
+          <label className="bl-field">
+            <span className="bl-label">Words that do not sound like you</span>
+            <textarea className="bl-textarea" rows={2} value={avoid} onChange={(e) => setAvoid(e.target.value)} />
+          </label>
+          <label className="bl-field">
+            <span className="bl-label">Never post about (semicolons between)</span>
+            <textarea className="bl-textarea" rows={2} value={off} onChange={(e) => setOff(e.target.value)} />
+          </label>
+          <div className="bl-row-actions">
+            <button type="button" className="bl-ghost" disabled={!!busy} onClick={() => setMode('view')}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="bl-btn"
+              disabled={!!busy || summary.trim().length < 10}
+              onClick={() =>
+                void run('save', async () => {
+                  await bil.approveVoice(clientId, { summary: summary.trim().slice(0, 600), wordsTheyUse: list(use, /,|\n/, 40, 60), wordsTheyAvoid: list(avoid, /,|\n/, 40, 60), offLimits: list(off, /;|\n/, 20, 200) });
+                  return 'Saved. Bil writes in this voice from now on.';
+                })
+              }
+            >
+              Save the voice
+            </button>
+          </div>
+        </>
+      ) : mode === 'redo' ? (
+        <>
+          <span className="bl-small">Bil reads your latest posts and rewrites the voice. Tell him what feels off, or leave it blank and he goes by your posts. You can go back to the old voice after.</span>
+          <label className="bl-field">
+            <span className="bl-label">What feels off (optional)</span>
+            <textarea className="bl-textarea" rows={3} maxLength={480} value={note} placeholder="More playful, less formal, I swear more now" onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <div className="bl-row-actions">
+            <button type="button" className="bl-ghost" disabled={!!busy} onClick={() => setMode('view')}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="bl-btn"
+              disabled={!!busy}
+              onClick={() =>
+                void run('redo', async () => {
+                  const r = await bil.voiceRedo(clientId, note);
+                  setNote('');
+                  return r.observations || `Done. Bil read ${r.postsRead} posts and updated the voice.`;
+                })
+              }
+            >
+              {busy === 'redo' ? 'Reading, about a minute' : 'Read my page again'}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {card.summary && <p className="bl-p">{String(card.summary)}</p>}
+          {Array.isArray(card.wordsTheyUse) && card.wordsTheyUse.length > 0 && (
+            <span className="bl-small">
+              <b>Words used:</b> {card.wordsTheyUse.slice(0, 12).join(', ')}
+            </span>
+          )}
+          {Array.isArray(card.offLimits) && card.offLimits.length > 0 && (
+            <span className="bl-small">
+              <b>Off limits:</b> {card.offLimits.slice(0, 8).join('; ')}
+            </span>
+          )}
+          {said && (
+            <div className="bl-wash bl-rework-said" role="status">
+              <span className="bl-label accent">Bil</span>
+              <span>{said}</span>
+            </div>
+          )}
+          <div className="bl-row-actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+            {!voice.approved && (
+              <button type="button" className="bl-btn" disabled={!!busy} onClick={() => void run('approve', () => bil.approveVoice(clientId).then(() => undefined))}>
+                {isTeam ? 'Approve for the client' : 'This sounds like me'}
+              </button>
+            )}
+            <button type="button" className="bl-ghost" disabled={!!busy} onClick={startEdit}>
+              Change it
+            </button>
+            <button type="button" className="bl-ghost" disabled={!!busy} onClick={() => setMode('redo')}>
+              Bil, read my page again
+            </button>
+            {voice.hasPrevious && (
+              <button type="button" className="bl-linkish" disabled={!!busy} onClick={() => void run('undo', async () => { await bil.voiceUndo(clientId); return 'Back to the voice from before.'; })}>
+                Go back to the old voice
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

@@ -621,7 +621,7 @@ function CampaignView({ ws, go, isTeam, campaign, startSlot = null }: ScreenProp
 function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post: Post; copied: boolean; onCopy: () => void }) {
   const s = statusOf(post);
   const signals: { why?: string }[] = Array.isArray(post.post.algorithm?.signals) ? post.post.algorithm.signals : [];
-  const why = signals.find((x) => x.why)?.why;
+  const why = plainWhy(signals.find((x) => x.why)?.why);
   return (
     <article className="bl-post">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -656,7 +656,7 @@ function PostCard({ campaign, post, copied, onCopy }: { campaign: Campaign; post
           <span className="bl-label accent" style={{ paddingTop: 2 }}>
             Why
           </span>
-          <span>{typeof post.post.why === 'string' && post.post.why ? post.post.why : why}</span>
+          <span>{typeof post.post.why === 'string' && post.post.why ? plainWhy(post.post.why) : why}</span>
         </div>
       ) : null}
       <BilsRead post={post.post} />
@@ -731,7 +731,7 @@ function BilsRead({ post }: { post: Record<string, any> }) {
               <span className={`bl-chip-ink${(s.effect === 'lowers') !== NEGATIVE.has(String(s.action)) ? ' bad' : ''}`}>
                 {s.effect === 'lowers' ? 'Lowers' : 'Raises'} {word(s)}
               </span>
-              <span>{s.why}</span>
+              <span>{plainWhy(s.why)}</span>
             </li>
           ))}
         </ul>
@@ -892,4 +892,15 @@ function ReworkBox({ ws, campaign, post, open, onOpen }: { ws: ScreenProps['ws']
       )}
     </>
   );
+}
+
+/** Older posts carried setting names and scores ("ReplyWeight 5.0", "scores 21.4"); clients read plain words only. */
+function plainWhy(t?: string): string | undefined {
+  if (!t) return t;
+  const out = t
+    .replace(/\s*\b[A-Z][A-Za-z]*Weight\s*-?\d+(?:\.\d+)?\.?/g, '')
+    .replace(/,?\s*(?:that )?(?:already )?scores? (?:about |near )?\d+(?:\.\d+)?(?: per 1,?000(?: views)?)?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return out || undefined;
 }

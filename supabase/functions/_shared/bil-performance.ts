@@ -73,7 +73,10 @@ export type Performance = {
     postsMeasured: number;
     medianImpressions: number | null;
     medianScorePer1k: number | null;
-    groups: Array<{ label: string; posts: number; medianScorePer1k: number | null }>;
+    /** Views of a good post (the top quarter) and of their best one, so reach can be said in views. */
+    topQuarterViews?: number | null;
+    bestViews?: number | null;
+    groups: Array<{ label: string; posts: number; medianScorePer1k: number | null; medianViews?: number | null }>;
   };
   topPostIds: string[];
   weights: Weights;
@@ -89,7 +92,8 @@ export async function measure(posts: MeasuredPost[], timeZone: string): Promise<
     return { ...p, weighted, score, hour: localHour(p.createdAt, timeZone) };
   });
   const scored = measured.filter((p) => p.score !== null);
-  const group = (label: string, list: Measured[]) => ({ label, posts: list.length, medianScorePer1k: median(list.map((p) => p.score!)) });
+  const group = (label: string, list: Measured[]) => ({ label, posts: list.length, medianScorePer1k: median(list.map((p) => p.score!)), medianViews: median(list.map((p) => p.metrics!.impressions)) });
+  const views = scored.map((p) => p.metrics!.impressions).sort((a, b) => a - b);
   const groups = [
     ...WINDOWS.map((w) => group(`posted in the ${w.label}`, scored.filter((p) => p.hour >= w.from && p.hour < w.to))),
     group('with a photo or video', scored.filter((p) => p.hasMedia)),
@@ -105,6 +109,8 @@ export async function measure(posts: MeasuredPost[], timeZone: string): Promise<
       postsMeasured: scored.length,
       medianImpressions: median(scored.map((p) => p.metrics!.impressions)),
       medianScorePer1k: median(scored.map((p) => p.score!)),
+      topQuarterViews: views.length >= 4 ? views[Math.floor(views.length * 0.75)] : null,
+      bestViews: views.length ? views[views.length - 1] : null,
       groups,
     },
     topPostIds: ranked.slice(0, 5).map((p) => p.postId),
@@ -130,4 +136,45 @@ export function statsText(perf: Performance): string {
     `Posts with numbers: ${s.postsMeasured}. Median views: ${s.medianImpressions ?? 'n/a'}. Median score: ${s.medianScorePer1k ?? 'n/a'}.`,
     ...s.groups.map((g) => `- ${g.label}: ${g.posts} posts, median score ${g.medianScorePer1k ?? 'n/a'}`),
   ].join('\n');
+}
+
+const round = (n: number) => (n >= 10_000 ? Math.round(n / 1000) * 1000 : n >= 1000 ? Math.round(n / 100) * 100 : Math.round(n / 10) * 10);
+const fmt = (n: number) => round(n).toLocaleString('en-US');
+
+type StoredStats = Performance['stats'];
+
+/**
+ * Their reach in plain words, built by code from their own numbers (Nov 8, 2026): how many
+ * people a post usually reaches, a good one, their best, and what earns more. The agents say
+ * this, never the score itself, and never promise more than their own history shows.
+ */
+export function reachText(stats: StoredStats | null | undefined, followers?: number | null): string {
+  if (!stats || !stats.postsMeasured || stats.medianImpressions == null) return '';
+  const lines: string[] = [];
+  const t = stats.medianImpressions;
+  const good = stats.topQuarterViews ?? null;
+  const best = stats.bestViews ?? null;
+  lines.push(`- From their last ${stats.postsMeasured} posts: a typical post reaches about ${fmt(t)} views${good && good > t ? `, a good one about ${fmt(good)}` : ''}${best && best > (good ?? t) ? `, and their best so far ${fmt(best)}` : ''}.`);
+  // Against their followers: past their follower count means X showed it to people who do not follow them.
+  if (followers && followers >= 50) {
+    const share = t / followers;
+    const bestX = best ? best / followers : 0;
+    lines.push(`- They have about ${fmt(followers)} followers. A typical post gets views equal to ${share >= 1 ? `about ${share.toFixed(1)} times their follower count, so X already shows their posts beyond their followers` : `about ${Math.max(1, Math.round(share * 100))}% of their follower count`}${bestX >= 1.5 ? `; their best got about ${bestX.toFixed(1)} times their follower count, which means X pushed it into For You for people who do not follow them` : ''}.`);
+  }
+  const g = (needle: string) => stats.groups.find((x) => x.label.includes(needle) && x.posts >= 3 && x.medianScorePer1k !== null);
+  const media = g('photo or video');
+  const text = g('text only');
+  if (media && text && text.medianScorePer1k! > 0) {
+    const x = media.medianScorePer1k! / text.medianScorePer1k!;
+    if (x >= 1.5) lines.push(`- Posts with a photo or video get about ${Math.round(x)} times the replies, reposts and likes per view of their text-only posts${media.medianViews && text.medianViews ? ` (typical views: about ${fmt(media.medianViews)} against ${fmt(text.medianViews)})` : ''}. On X, that response is what gets a post shown to people who do not follow them yet.`);
+    else if (1 / x >= 1.5) lines.push(`- Their text-only posts earn about ${Math.round(1 / x)} times the response per view of their media posts.`);
+  } else if (media && text && text.medianScorePer1k === 0 && media.medianScorePer1k! > 0) {
+    lines.push('- Their text-only posts get almost no replies or reposts; their photo and video posts carry the account.');
+  }
+  const times = stats.groups.filter((x) => x.label.startsWith('posted in the') && x.posts >= 3 && x.medianScorePer1k !== null).sort((a, b) => b.medianScorePer1k! - a.medianScorePer1k!);
+  if (times.length >= 2 && times[1].medianScorePer1k! > 0 && times[0].medianScorePer1k! / times[1].medianScorePer1k! >= 1.3) {
+    lines.push(`- Their strongest time is the ${times[0].label.replace('posted in the ', '').replace(/ \(.*\)/, '')}${times[times.length - 1].medianScorePer1k! * 2 <= times[0].medianScorePer1k! ? `; the ${times[times.length - 1].label.replace('posted in the ', '').replace(/ \(.*\)/, '')} does least` : ''}.`);
+  }
+  lines.push(`- Expect a new post in their best format to land ${good && good > t ? 'between typical and good' : 'around typical or a little above'}. Beating their best is possible when a post earns quick replies and shares in its first hour, but never promise it.`);
+  return `# How far their posts reach (built from their own numbers; say it in these words: views to expect and what earns more. Never say a score or "per 1,000")\n${lines.join('\n')}`;
 }

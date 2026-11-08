@@ -41,6 +41,8 @@ import { krisNote } from '../_shared/kris-notes.ts';
 import { previewUrl } from '../_shared/rooms.ts';
 import { opportunityAllowance, OpportunityInputError, OpportunityStartRequest, opportunityStart } from '../_shared/opportunity.ts';
 import { qualityData, requestGate } from '../_shared/evals.ts';
+import { algoRefresh, algoStatus } from '../_shared/algo-update.ts';
+import { BilInputError as AlgoInputError } from '../_shared/bil.ts';
 
 const LOGIN_DOMAIN = 'login.backlot.invalid';
 
@@ -208,6 +210,15 @@ async function handle(req: Request): Promise<Response> {
       case 'quality_run': {
         if (member.role !== 'owner') return reply(403, { error: 'Only the executive sees this.' });
         return reply(200, await requestGate());
+      }
+      // The X ranking code card on Quality: what is indexed, what X last pushed, update now.
+      case 'algo_status': {
+        if (member.role !== 'owner') return reply(403, { error: 'Only the executive sees this.' });
+        return reply(200, await algoStatus());
+      }
+      case 'algo_refresh': {
+        if (member.role !== 'owner') return reply(403, { error: 'Only the executive sees this.' });
+        return reply(200, await algoRefresh());
       }
       case 'me': {
         const [{ data: me }, client] = await Promise.all([
@@ -530,6 +541,7 @@ async function handle(req: Request): Promise<Response> {
   } catch (err) {
     if (err instanceof AccessError) return reply(err.status, { error: err.message });
     if (err instanceof InputError) return reply(err.status, { error: err.message });
+    if (err instanceof AlgoInputError) return reply(err.status, { error: err.message });
     if (err instanceof OpportunityInputError) return reply(err.status, { error: err.message, ...(err.pay ? { pay: true } : {}) });
     console.error(`team: ${action} failed`, err instanceof Error ? err.message : err);
     return reply(500, { error: 'Something went wrong. Try again.' });

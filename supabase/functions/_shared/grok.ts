@@ -24,11 +24,11 @@ export type Reasoning = 'none' | 'low' | 'medium' | 'high';
 /** Knowledge pack versions. Bump one when that agent's instructions or knowledge change. */
 export const KNOWLEDGE_VERSION = {
   rein: 'k2',
-  bil: 'k3',
+  bil: 'k4',
   check: 'k1',
   kris: 'k6',
   dials: 'k1',
-  xev: 'k2',
+  xev: 'k3',
   /** Xev hosting visitors on a client's public page (knowledge/xev-host.ts). */
   xev_host: 'h1',
   /** Rein's Opportunity Meeting knowledge pack (knowledge/rein.ts). */

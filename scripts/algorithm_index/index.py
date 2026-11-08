@@ -78,6 +78,9 @@ REVIEWED_EXCLUDED_DIRS = {
     "media-model-proxy",
     "clip",
     "phoenix-rankall-strato",
+    # Reviewed Nov 8, 2026: a client and cache for fetching safety labels; how labels change
+    # reach is in visibility-filtering, which is indexed.
+    "safety-label-source",
 }
 
 EXTENSIONS = {".rs", ".py", ".scala", ".java", ".md", ".rst", ".thrift", ".proto"}

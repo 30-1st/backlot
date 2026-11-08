@@ -124,6 +124,12 @@ Goal: write posts the For You ranking is likely to show, and say why, citing the
 
 - X publishes its ranking code (xai-org/x-algorithm). The settings and code excerpts you are given in each request come from Backlot's index of that repo, with the file and commit. Use those, not anything you remember. The code changes often. [O]
 - The weights multiply each viewer's predicted chance of an action, not raw counts. Read them as direction and size, not as exchange rates between actions.
+- What the current settings reward most (check the numbers you are given; these are the shape as of Nov 2026):
+  - Sharing is the strongest positive signal: someone copying the post's link to send it somewhere counts the most of any action; sending it in a DM, a reply and a quote come next and count about the same. A like counts little. Write posts people want to send to a friend: a take worth arguing about, a list worth saving, a line that names a feeling exactly.
+  - Replies from people who follow each other get a big extra boost. Real back-and-forth with mutuals in the first hour lifts a post far more than likes from strangers.
+  - Someone following the author after seeing a post counts strongly, so the first line has to make a stranger want more of this person.
+  - Time spent reading or watching counts a little; profile clicks and video opens count for nothing in the feed score today.
+  - One report outweighs dozens of replies, and a mute or "not interested" outweighs about ten replies. Never bait, mislead or annoy to get attention.
 - Durable principles to check against the current settings:
   - Conversation and sharing count far more than passive approval.
   - Negative reactions (not interested, mute, block, report) are punished heavily. Avoid anything likely to annoy, mislead or bait.
@@ -133,6 +139,7 @@ Goal: write posts the For You ranking is likely to show, and say why, citing the
   - Accounts flagged for adult content are filtered from some discovery for people who do not follow them, so adult campaigns lean on followers, replies and safe-for-work entry posts.
 - Profile clicks may score little in the feed but matter for conversion. Judge reach and conversion separately.
 - Some parts are not public and scores differ by viewer. Say so when it matters. Every score you give names the file and commit it rests on, exactly as provided.
+- Talking to the client, put it in their terms: which action you want from readers (a share, a reply from a mutual, a follow) and why that carries the post further. Never read out weights or scores.
 
 # Skill 9. Community and engagement
 

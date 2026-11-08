@@ -19,7 +19,7 @@ export type Client = {
   stage: 'onboarding' | 'active' | 'paused';
   stageNote: string | null;
 };
-export type Voice = { clientId: string; card: Json; approved: boolean; updatedAt: string };
+export type Voice = { clientId: string; card: Json; approved: boolean; updatedAt: string; hasPrevious?: boolean };
 export type Campaign = {
   id: string;
   clientId: string;
@@ -119,7 +119,7 @@ async function load(): Promise<Workspace> {
   const liveFrom = new Date(Date.now() - LIVE_DAYS * 86_400_000).toISOString();
   const [c, v, k, s, m, lg, md, bd, sn, dn] = await Promise.all([
     supabase.from('clients').select('id, x_handle, profile, profile_pending, profile_pending_at, stage, stage_note').order('created_at'),
-    supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at'),
+    supabase.from('voice_cards').select('client_id, card, approved_by_client, updated_at, prev:previous_card->version'),
     supabase.from('campaigns').select(CAMPAIGN_COLUMNS).is('discarded_at', null).gt('created_at', liveFrom).order('created_at', { ascending: false }).limit(50),
     supabase.from('onboarding_steps').select('client_id, step, done_at'),
     supabase.from('library_items').select('client_id').is('removed_at', null).limit(5000),
@@ -143,7 +143,7 @@ async function load(): Promise<Workspace> {
   const campaigns: Campaign[] = (k.data ?? []).map(toCampaign);
   return {
     clients: (c.data ?? []).map((r: Json) => ({ id: r.id, handle: r.x_handle, profile: r.profile ?? {}, pending: r.profile_pending ?? null, pendingAt: r.profile_pending_at ?? null, stage: r.stage ?? 'active', stageNote: r.stage_note ?? null })),
-    voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at })),
+    voices: (v.data ?? []).map((r: Json) => ({ clientId: r.client_id, card: r.card ?? {}, approved: r.approved_by_client, updatedAt: r.updated_at, hasPrevious: r.prev != null })),
     campaigns,
     steps: (s.data ?? []).map((r: Json) => ({ clientId: r.client_id, step: r.step, doneAt: r.done_at })),
     activity: [

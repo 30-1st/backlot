@@ -241,13 +241,15 @@ export const WhatWorks = z
     stats: z.object({
       postsMeasured: z.number().int().min(0).max(48),
       medianImpressions: z.number().min(0).nullable(),
+      topQuarterViews: z.number().min(0).nullable().optional(),
+      bestViews: z.number().min(0).nullable().optional(),
       medianScorePer1k: z
         .number()
         .min(0)
         .nullable()
         .describe('Engagement weighted by X\'s ranking weights (replies and quotes count most), per 1,000 impressions.'),
       groups: z
-        .array(z.object({ label: shortText(60), posts: z.number().int().min(0), medianScorePer1k: z.number().min(0).nullable() }))
+        .array(z.object({ label: shortText(60), posts: z.number().int().min(0), medianScorePer1k: z.number().min(0).nullable(), medianViews: z.number().min(0).nullable().optional() }))
         .max(12)
         .describe('The same score split by time of day, media and length.'),
     }),

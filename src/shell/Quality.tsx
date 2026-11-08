@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { team, type Quality, type QualityScore } from '../lib/team';
+import { team, type AlgoStatus, type Quality, type QualityScore } from '../lib/team';
 import type { ScreenProps } from './Shell';
 import { PageHead } from './Present';
 import { Working } from './Working';
@@ -201,6 +201,8 @@ export function QualityScreen({ me }: ScreenProps) {
             </p>
           </section>
 
+          <AlgoCard />
+
           <section className="bl-glass-card" aria-labelledby="q-runs">
             <h2 id="q-runs" className="bl-section-title">
               Recent runs
@@ -258,5 +260,110 @@ function ScoreList({ scores }: { scores: QualityScore[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+const short = (sha?: string | null) => (sha ? sha.slice(0, 7) : 'none');
+
+/**
+ * X's ranking code (Nov 8, 2026): the version of xai-org/x-algorithm Bil is trained on, what
+ * X last pushed, and a button to pull it in now. It also updates on its own every morning.
+ */
+function AlgoCard() {
+  const [a, setA] = useState<AlgoStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const load = useCallback(async () => {
+    try {
+      setA(await team.algoStatus());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not check the ranking code.');
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (!a?.running) return;
+    const t = window.setInterval(() => void load(), 20_000);
+    return () => window.clearInterval(t);
+  }, [a?.running, load]);
+
+  async function refresh() {
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      await team.algoRefresh();
+      setNote('Started. It takes about 5 minutes; this card updates on its own.');
+      window.setTimeout(() => void load(), 8000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start the update.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bl-glass-card" aria-labelledby="q-algo" style={{ position: 'relative' }}>
+      {(busy || a?.running) && <Working className="top" label="Updating the ranking code" />}
+      <h2 id="q-algo" className="bl-section-title">
+        X's ranking code
+      </h2>
+      {!a ? (
+        <Working label="Checking" />
+      ) : (
+        <>
+          <p className="bl-small">
+            Bil is trained on <b>{short(a.indexed?.commit)}</b>
+            {a.indexed?.date ? `, pushed by X ${when(a.indexed.date)}` : ''}. {a.indexed ? `${a.indexed.files.toLocaleString()} files, ${a.indexed.chunks.toLocaleString()} searchable pieces.` : ''}
+          </p>
+          <p className="bl-small">
+            X's latest push: <b>{short(a.latest?.commit)}</b>
+            {a.latest ? `, ${when(a.latest.date)}` : ' (GitHub did not answer)'}.{' '}
+            {a.running ? 'Updating now.' : a.upToDate ? 'Bil is up to date.' : a.latest ? 'There is a newer version.' : ''}
+          </p>
+          {a.indexed?.lastRun && (
+            <p className="bl-small">
+              Last update {when(a.indexed.lastRun)}: {a.indexed.lastStatus === 'ok' ? 'worked' : a.indexed.lastStatus ?? 'unknown'}. It also runs on its own every morning.
+            </p>
+          )}
+          {a.canRefresh ? (
+            <button type="button" className={a.upToDate ? 'bl-ghost bl-start' : 'bl-btn bl-start'} disabled={busy || a.running} onClick={() => void refresh()}>
+              {a.running ? 'Updating' : 'Get the latest now'}
+            </button>
+          ) : (
+            <p className="bl-small">
+              To use the update button, add a GitHub token named <b>GITHUB_ACTIONS_TOKEN</b> in Supabase, under Edge Functions, Secrets. Until then it updates every morning by itself.
+            </p>
+          )}
+          {a.changes.length > 0 && (
+            <details className="bl-read">
+              <summary>
+                <span>Latest setting changes from X</span>
+                <span className="bl-read-scores num">{a.changes.length}</span>
+              </summary>
+              <ul className="bl-read-list">
+                {a.changes.map((c, i) => (
+                  <li key={i}>
+                    <span className="bl-chip-ink num">{when(c.at)}</span>
+                    <span>
+                      <b>{c.name}</b>: {c.from == null ? 'new' : c.from.slice(0, 40)} to {c.to.slice(0, 40)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+      {note && <p className="bl-small" role="status">{note}</p>}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

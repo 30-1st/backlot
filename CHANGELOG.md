@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.5 (Nov 8, 2026): numbers in plain words, voice changes, fresher X knowledge
+
+- **Bil says what the numbers mean.** No more "21.4 per 1,000". Every agent now reads a short reach summary built from the client's own posts: views a typical, good and best post gets, how that compares with their follower count (past it means X pushed the post into For You), how many times better one kind of post does, and their strongest time. Kept conservative: a new post is expected between typical and good, and beating their best is never promised. Post reasons on the Schedule are written the same way, and older posts' setting names and scores are cleaned out on screen.
+- **Change the voice.** On Brand, "Change it" edits how they sound, words they use and avoid, and what is off limits. "Bil, read my page again" has Bil reread their latest posts (plus anything they say feels off) and rewrite the voice and what performs; "Go back to the old voice" undoes it. Twice a day, about 30 cents.
+- **Bil's X algorithm knowledge refreshed** from the current settings: sharing (especially copying the link) counts most, replies from mutuals get a big boost, a follow counts strongly, profile clicks and video opens count for nothing today, and one report outweighs dozens of replies. He explains this to clients as the action he wants from readers, never as weights.
+- **X's ranking code card on Quality** (executive only): which version of xai-org/x-algorithm Bil is trained on, X's latest push, recent setting changes, and "Get the latest now" (needs a GitHub token once; it also updates every morning).
+- **Xev** never promises a clip or extra the client has not offered, even when a buyer haggles.
+- The new safety-label-source folder in X's repo was reviewed and left out (it fetches labels; how labels change reach is already indexed).
+
 ## v0.9.4 (Nov 7, 2026): notifications on your phone
 
 - **Turn on notifications** in Account, on each phone or computer. On iPhone it works once Backlot is on the Home Screen; Account shows how.

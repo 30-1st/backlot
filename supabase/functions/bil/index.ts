@@ -81,6 +81,10 @@ import {
   fillDetail,
   PostReworkRequest,
   postRework,
+  VoiceRedoRequest,
+  voiceRedo,
+  VoiceUndoRequest,
+  voiceUndo,
   BrandSaveRequest,
   BrandReviewRequest,
   saveBrand,
@@ -203,6 +207,10 @@ async function handle(req: Request): Promise<Response> {
       case 'learn':
         requireTeam(member);
         return reply(200, await learnWhatWorks(user.userDb, workspaceId, parse(LearnRequest, input)));
+      case 'voice_redo':
+        return reply(200, await voiceRedo(member, parse(VoiceRedoRequest, input)));
+      case 'voice_undo':
+        return reply(200, await voiceUndo(member, parse(VoiceUndoRequest, input)));
       case 'approve_voice': {
         const r = parse(ApproveVoiceRequest, input);
         requireClientAccess(member, r.clientId);
