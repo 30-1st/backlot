@@ -74,7 +74,7 @@ How you talk to the client:
 - Do the thing. If they asked for it, give it now; never answer with "want me to...?".
 - Answer what they asked. Asked for opportunities, give opportunities. Asked for several messages, give several.
 - Never answer a goal with a verdict that it is unlikely or out of reach. Give the path: what gets them closer, and what it takes.
-- Numbers in plain words: views a post can expect (typical, good, best) and how many times better one kind of post does. Never say a score or "per 1,000"; nobody knows what that means. Say a number once, only when it settles the question.
+- Numbers in plain words: views a post can expect (typical, good, best) and how many times better one kind of post does. Never say a score, a ranking weight, a setting name or "per 1,000"; nobody knows what those mean. Say a number once, only when it settles the question.
 - Use their words for what they sell ("him paying for your nails"). Never bring in niche jargon such as tribute, tithe, initial, sub or pay pig unless the client or the buyer used it first or it is in their Offers.
 - Never repeat yourself or a teammate. If it was said, add something new or keep it to a line.
 
@@ -333,7 +333,7 @@ export async function ground(m: Member | null, ctx: Context, plan: TurnPlan): Pr
     jobs.push(
       algorithmSearch(plan.ranking.trim().slice(0, 120), 3)
         .then((r) => {
-          g.ranking = `# From X's open-source ranking code (${r.repo} at ${String(r.repoCommit).slice(0, 7)}; published defaults, not live numbers)\n${r.hits.map((h: any) => `## ${h.source.label}\n${String(h.excerpt).slice(0, 900)}`).join('\n')}`;
+          g.ranking = `# From X's open-source ranking code (${r.repo} at ${String(r.repoCommit).slice(0, 7)}; published defaults, not live numbers. For your reasoning only: tell the client which reader action carries a post further, never the weights or setting names)\n${r.hits.map((h: any) => `## ${h.source.label}\n${String(h.excerpt).slice(0, 900)}`).join('\n')}`;
         })
         .catch((err) => console.warn('chat: ranking search failed', err instanceof Error ? err.message : err)),
     );

@@ -20,6 +20,7 @@ import { grokBilled, grokCost, grokEstimate, MODELS } from './models.ts';
 import { KNOWLEDGE_VERSION, privateTelemetry, xaiClient } from './grok.ts';
 import { Budget, serviceClient, SpendLimitError } from './spend.ts';
 import { AGENTS, type Agent, answerTurn, type Context, context } from './team-chat.ts';
+import { snapshotText } from './bil.ts';
 
 const NAME: Record<string, string> = { rein: 'Rein', bil: 'Bil', kris: 'Kris', xev: 'Xev', plan: "Bil's plan" };
 const JUDGE_MODEL = MODELS.light;
@@ -59,9 +60,11 @@ export function chatRules(agent: string, text: string, earlier: string[], data: 
   for (const w of ['tribute', 'tithe', 'pay pig', 'paypig']) if (new RegExp(`\\b${w}\\b`, 'i').test(t) && !new RegExp(`\\b${w}\\b`, 'i').test(data)) fails.push(`Said "${w}" when nobody else had`);
   if (t.split(/[.!?]+(?:\s|$)/).filter((x) => x.trim()).length > 5) fails.push('Too long for a chat line');
   const before = new Set(earlier.flatMap(numbersIn));
+  // "1,100" in the data and "1100" in the reply are the same number.
+  const flat = data.replace(/(\d),(?=\d{3})/g, '$1');
   for (const n of numbersIn(t)) {
     if (before.has(n)) fails.push(`Repeated the number ${n} already said in the turn`);
-    else if (!data.includes(n)) fails.push(`Used ${n}, which is not in its data`);
+    else if (!flat.includes(n)) fails.push(`Used ${n}, which is not in its data`);
   }
   return [...new Set(fails)].slice(0, 8);
 }
@@ -245,7 +248,7 @@ async function gate(db: SupabaseClient, run: Run, budget: Budget, deadline: numb
     const dm = turn?.spoken?.dm;
     const body = turn?.spoken ? `${turn.spoken.body}${dm ? `\nThe DM to send: ${dm.next}${dm.alt ? `\nOr: ${dm.alt}` : ''}` : ''}` : '';
     const wrongLane = c.input.expectLead && c.input.expectLead !== lead ? [`${NAME[lead]} answered; this was ${NAME[c.input.expectLead] ?? c.input.expectLead}'s job`] : [];
-    const rules = body ? [...wrongLane, ...chatRules(lead, turn!.spoken!.body, [], JSON.stringify(ctx) + text + (turn!.read ?? ''))] : ['No answer'];
+    const rules = body ? [...wrongLane, ...chatRules(lead, turn!.spoken!.body, [], JSON.stringify(ctx) + text + (turn!.read ?? '') + snapshotText(ctx.kit))] : ['No answer'];
     const verdict = body ? await judge(budget, lead, briefOf(ctx), text, body, typeof c.input.expect === 'string' ? c.input.expect : undefined) : null;
     await saveScore(db, { run_id: run.id, case_id: c.id, agent: lead, label: `@${ctx.kit.xHandle}, ${NAME[lead]}: "${text.slice(0, 80)}"`, rule_fails: rules, judge_score: verdict?.score ?? null, judge_why: verdict?.why ?? null, output: body });
     done.add(c.id);
