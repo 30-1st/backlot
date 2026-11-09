@@ -502,6 +502,56 @@ async function handle(req: Request): Promise<Response> {
         return reply(200, { latest: { ...(await forApp(db, brief)), savedAt: saved.created_at, region: r.region, source: 'update' }, clientFollowers: followers, reused: wasReused });
       }
 
+      // Rein's past searches (Nov 8, 2026): every search she ran for this workspace and every
+      // trend update saved to a client, kept because they were paid for. The executive sees
+      // all of them, a team member their own and their granted clients', a client their own
+      // and the updates saved to them. Never visitors. Account details inside a brief still
+      // clear after 24 hours, as always; topics, patterns and post links stay.
+      case 'rein_past': {
+        if (member.role === 'visitor') return reply(403, { error: 'Past searches are for clients and their team.' });
+        const owner = member.role === 'owner';
+        let sq = db.from('rein_searches').select('id, user_id, niche, region, brief_id, created_at').eq('workspace_id', member.workspaceId).not('brief_id', 'is', null).order('created_at', { ascending: false }).limit(200);
+        if (!owner) sq = sq.eq('user_id', userId);
+        let cq = db.from('client_briefs').select('id, client_id, brief_id, region, source, created_at').eq('workspace_id', member.workspaceId).order('created_at', { ascending: false }).limit(200);
+        if (member.role === 'client') cq = cq.eq('client_id', member.clientId ?? '00000000-0000-0000-0000-000000000000');
+        const [{ data: mine, error: e1 }, { data: saved, error: e2 }, { data: clients }] = await Promise.all([sq, cq, db.from('clients').select('id, x_handle').eq('owner_id', member.workspaceId)]);
+        if (e1 || e2) throw new Error(`Could not read Rein's searches: ${(e1 ?? e2)!.message}`);
+        const handle = new Map((clients ?? []).map((c: any) => [c.id, c.x_handle]));
+        const briefIds = [...new Set([...(mine ?? []).map((r: any) => r.brief_id), ...(saved ?? []).filter((r: any) => seesClient(member, r.client_id)).map((r: any) => r.brief_id)])];
+        const { data: nbs } = briefIds.length ? await db.from('niche_briefs').select('id, niche_key, brief, created_at').in('id', briefIds) : { data: [] };
+        const nb = new Map((nbs ?? []).map((b: any) => [b.id, b]));
+        const rows = [
+          ...(mine ?? []).map((r: any) => ({ briefId: r.brief_id, niche: r.niche, region: r.region, at: r.created_at, by: r.user_id === userId ? 'you' : 'team', client: null as string | null })),
+          ...(saved ?? []).filter((r: any) => seesClient(member, r.client_id)).map((r: any) => ({ briefId: r.brief_id, niche: String(nb.get(r.brief_id)?.brief?.niche ?? nb.get(r.brief_id)?.niche_key ?? 'Niche'), region: r.region, at: r.created_at, by: r.source ?? 'update', client: handle.get(r.client_id) ?? null })),
+        ].filter((r) => nb.has(r.briefId));
+        // One line per search: the same brief can be saved to a client and searched by hand.
+        const seen = new Set<string>();
+        const list = rows
+          .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+          .filter((r) => (seen.has(`${r.briefId}:${r.client ?? ''}`) ? false : (seen.add(`${r.briefId}:${r.client ?? ''}`), true)))
+          .map((r) => {
+            const b = nb.get(r.briefId)?.brief ?? {};
+            return { ...r, checkedAt: nb.get(r.briefId)?.created_at ?? r.at, topics: Array.isArray(b.trends) ? b.trends.length : 0, headline: String(b.trends?.[0]?.topic ?? '').slice(0, 100) };
+          });
+        return reply(200, { searches: list });
+      }
+      case 'rein_past_brief': {
+        if (member.role === 'visitor') return reply(403, { error: 'Past searches are for clients and their team.' });
+        const r = parse(z.object({ briefId: id }), input);
+        // Only a brief this person could see in their list.
+        const [{ data: s1 }, { data: c1 }] = await Promise.all([
+          member.role === 'owner'
+            ? db.from('rein_searches').select('id').eq('workspace_id', member.workspaceId).eq('brief_id', r.briefId).limit(1)
+            : db.from('rein_searches').select('id').eq('workspace_id', member.workspaceId).eq('user_id', userId).eq('brief_id', r.briefId).limit(1),
+          db.from('client_briefs').select('client_id').eq('workspace_id', member.workspaceId).eq('brief_id', r.briefId),
+        ]);
+        const ok = (s1 ?? []).length > 0 || (c1 ?? []).some((x: any) => seesClient(member, x.client_id));
+        if (!ok) return reply(404, { error: 'That search is not in your list.' });
+        const { data: nbRow } = await db.from('niche_briefs').select('brief').eq('id', r.briefId).maybeSingle();
+        if (!nbRow) return reply(404, { error: 'That search is no longer kept.' });
+        return reply(200, { brief: await forApp(db, nbRow.brief) });
+      }
+
       case 'rein_history': {
         const { data: rows, error } = await db
           .from('rein_searches')

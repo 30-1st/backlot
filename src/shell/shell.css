@@ -3245,3 +3245,10 @@ html[data-vt='back']::view-transition-new(root) {
 .bl-dm-draft { display: flex; flex-direction: column; gap: 8px; }
 .bl-dm-draft .bl-row-actions { justify-content: flex-start; }
 .bl-dm-draft .bl-btn.bl-gc-copy { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Rein's past searches (Nov 8, 2026) */
+.bl-past-group { display: flex; flex-direction: column; gap: 8px; }
+.bl-past-row { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.bl-past-open { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.bl-past-open:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 6px; }
+.bl-past-head { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.6 (Nov 8, 2026): Rein's past searches
+
+- **Past searches** is a new tab in Rein for clients, their team and the executive (never Playground visitors). Every search she ran and every trend update saved to a client stays there, grouped by niche, and any one opens to what she found then. The executive sees all of them; a team member sees their own and their clients'; a client sees theirs. Account names inside a search still clear after 24 hours; topics, patterns and post links stay.
+
 ## v0.9.5 (Nov 8, 2026): numbers in plain words, voice changes, fresher X knowledge
 
 - **Bil says what the numbers mean.** No more "21.4 per 1,000". Every agent now reads a short reach summary built from the client's own posts: views a typical, good and best post gets, how that compares with their follower count (past it means X pushed the post into For You), how many times better one kind of post does, and their strongest time. Kept conservative: a new post is expected between typical and good, and beating their best is never promised. Post reasons on the Schedule are written the same way, and older posts' setting names and scores are cleaned out on screen.

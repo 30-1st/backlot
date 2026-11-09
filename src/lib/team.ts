@@ -159,6 +159,9 @@ export const team = {
   /** Starts a meeting; it runs in the background and its row shows Rein's steps as she works. */
   opportunityStart: (r: { market?: string; region: MeetingRegion; clientId?: string }) =>
     call<{ meetingId: string; status: string; already: boolean }>('team', 'opportunity_start', { requestId: crypto.randomUUID(), ...r }),
+  /** Every Rein search kept for this workspace (clients, their team and the executive). */
+  reinPast: () => call<{ searches: ReinPast[] }>('team', 'rein_past'),
+  reinPastBrief: (briefId: string) => call<{ brief: ReinBrief }>('team', 'rein_past_brief', { briefId }),
   reinHistory: () => call<{ freeLeft: number | null; searches: { niche: string; region: string; at: string }[]; last: ReinBrief | null }>('team', 'rein_history'),
   setPassword: (password: string, currentPassword?: string) =>
     call<{ ok: true }>('team', 'password_set', { password, currentPassword }),
@@ -370,3 +373,5 @@ export type AlgoStatus = {
   canRefresh: boolean;
   changes: Array<{ name: string; from: string | null; to: string; at: string }>;
 };
+
+export type ReinPast = { briefId: string; niche: string; region: string; at: string; checkedAt: string; by: string; client: string | null; topics: number; headline: string };

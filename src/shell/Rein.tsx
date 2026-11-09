@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { DoorError, team, type ClientBrief, type ReinBrief, type ReinRegion } from '../lib/team';
+import { DoorError, team, type ClientBrief, type ReinBrief, type ReinPast, type ReinRegion } from '../lib/team';
 import { Radar } from './icons';
 import type { ScreenProps } from './Shell';
 import { Banter } from './Banter';
@@ -133,17 +133,35 @@ export function ReinScreen(props: ScreenProps & { view?: 'trends' | 'opportuniti
   const { me, ws, single, go } = props;
   // The team has Trends only; Opportunities is for everyone else (decided Nov 2, 2026).
   const withOpps = me.role !== 'team';
-  const view = withOpps && props.view === 'opportunities' ? 'opportunities' : 'trends';
-  const tabs = withOpps && (
+  // Past searches: clients, their team and the executive, never Playground visitors (Nov 8, 2026).
+  const withPast = me.role !== 'visitor';
+  const [past, setPast] = useState(false);
+  const view = past && withPast ? 'past' : withOpps && props.view === 'opportunities' ? 'opportunities' : 'trends';
+  const tabs = (withOpps || withPast) && (
     <div className="bl-seg bl-rein-seg" role="group" aria-label="Rein">
-      <button type="button" aria-pressed={view === 'trends'} onClick={() => go('rein')}>
+      <button type="button" aria-pressed={view === 'trends'} onClick={() => (setPast(false), go('rein'))}>
         Trends
       </button>
-      <button type="button" aria-pressed={view === 'opportunities'} onClick={() => go('opportunities')}>
-        Opportunities
-      </button>
+      {withOpps && (
+        <button type="button" aria-pressed={view === 'opportunities'} onClick={() => (setPast(false), go('opportunities'))}>
+          Opportunities
+        </button>
+      )}
+      {withPast && (
+        <button type="button" aria-pressed={view === 'past'} onClick={() => setPast(true)}>
+          Past searches
+        </button>
+      )}
     </div>
   );
+  if (view === 'past') {
+    return (
+      <main className="bl-flow">
+        {tabs}
+        <PastSearches isOwner={me.role === 'owner'} isTeam={props.isTeam} />
+      </main>
+    );
+  }
   if (view === 'opportunities') {
     return (
       <main className="bl-flow">
@@ -561,5 +579,109 @@ function TikTokNotes({ clientId, niche }: { clientId: string; niche: string | nu
         </ul>
       )}
     </details>
+  );
+}
+
+/**
+ * Every search Rein ran for this workspace, kept because each one was paid for (Nov 8, 2026).
+ * Grouped by niche; open any one to see what she found then. Names and excerpts of the
+ * accounts in a search clear after 24 hours, as always; topics, patterns and links stay.
+ */
+function PastSearches({ isOwner, isTeam }: { isOwner: boolean; isTeam: boolean }) {
+  const [list, setList] = useState<ReinPast[] | null>(null);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const [brief, setBrief] = useState<ReinBrief | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    team.reinPast().then(
+      (r) => setList(r.searches),
+      (e: Error) => (setError(e.message), setList([])),
+    );
+  }, []);
+
+  async function show(id: string, briefId: string) {
+    if (open === id) {
+      setOpen(null);
+      setBrief(null);
+      return;
+    }
+    setOpen(id);
+    setBrief(null);
+    setLoading(true);
+    try {
+      setBrief((await team.reinPastBrief(briefId)).brief);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open that search.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const f = filter.trim().toLowerCase();
+  const shown = (list ?? []).filter((r) => !f || r.niche.toLowerCase().includes(f) || (r.client ?? '').toLowerCase().includes(f));
+  const groups = new Map<string, ReinPast[]>();
+  for (const r of shown) {
+    const k = r.niche.trim().toLowerCase();
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const regionWord = (r: string) => REGIONS.find(([v]) => v === r)?.[1] ?? r;
+
+  return (
+    <section aria-labelledby="past-t" className="bl-flow-step">
+      <h2 id="past-t" className="bl-section-title">
+        Past searches
+        {list && <span className="num">{list.length}</span>}
+      </h2>
+      <p className="bl-small" style={{ margin: 0 }}>
+        {isOwner ? 'Every search Rein ran for Backlot and every trend update saved to a client.' : isTeam ? 'Your searches and the trend updates saved to your clients.' : 'Your searches and the trend updates your team saved for you.'} Account names in a search clear after 24 hours; topics, patterns and links stay.
+      </p>
+      {list && list.length > 6 && (
+        <input className="bl-input" type="search" placeholder="Filter by niche or client" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter past searches" />
+      )}
+      {!list ? (
+        <Working label="Loading Rein's searches" />
+      ) : list.length === 0 ? (
+        <p className="bl-small">No searches yet. Run one under Trends and it stays here.</p>
+      ) : (
+        [...groups.entries()].map(([k, rows]) => (
+          <div key={k} className="bl-card bl-past-group">
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+              <h3 className="bl-h2" style={{ fontSize: 17 }}>
+                {rows[0].niche}
+              </h3>
+              <span className="bl-small num">
+                {rows.length} {rows.length === 1 ? 'search' : 'searches'}
+              </span>
+            </div>
+            {rows.map((r) => {
+              const id = `${r.briefId}:${r.client ?? ''}:${r.at}`;
+              return (
+                <div key={id} className="bl-past-row">
+                  <button type="button" className="bl-past-open" aria-expanded={open === id} onClick={() => void show(id, r.briefId)}>
+                    <span className="num">{when(r.checkedAt)}</span>
+                    <span className="bl-small">
+                      {regionWord(r.region)}
+                      {r.client ? ` · for @${r.client}` : ''}
+                      {r.topics ? ` · ${r.topics} topics` : ''}
+                    </span>
+                    {r.headline && <span className="bl-small bl-past-head">{r.headline}</span>}
+                  </button>
+                  {open === id && (loading ? <Working label="Opening" /> : brief && <Results brief={brief} />)}
+                </div>
+              );
+            })}
+          </div>
+        ))
+      )}
+      {error && (
+        <p className="bl-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
